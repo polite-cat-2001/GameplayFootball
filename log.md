@@ -309,3 +309,21 @@ launcher из чистой распаковки — меню работает, �
 Загружен `gh release upload v0.3.1 dist/GameplayFootball-v0.3.1-macos-arm64.zip`
 (23 772 063 байт), `gh release view` — ассет на месте (macOS артефакт v0.3.1 стал доступен,
 Windows x86/x64 и Linux были уже загружены). Код не менялся — вики не затронута.
+
+## [2026-08-29] session | Конвейер данных из Transfermarkt: схема, API-фиксы, вики
+Спроектирован конвейер данных для обеих игр (GF + football_collection): единый канон-JSON на
+TM-id, конвертеры в GF SQLite и Flutter-assets. Схема и решения — docs/wiki/данные-из-transfermarkt.md,
+экосистема — docs/wiki/смежные-проекты.md.
+
+- В transfermarkt-api починены 500 у эндпоинтов тренеров и состава сборных (extract_from_url резал
+  домен, re.match → None), исправлен возраст в составе сборной (брался игровой номер) и добавлено
+  поле shirtNumber. Коммит e53ff69.
+- Стратегия сбора: состав клуба (clubs/{id}/players) — 1 запрос на команду вместо профиля на
+  игрока; национальная принадлежность игрока — только из состава сборной; coach_id — только через
+  /mitarbeiter/ (в API его нет); weight в TM отсутствует.
+- GF: ветка develop — дом изменений поверх master (README-заметка в master, 8b9df5c), рабочая
+  ветка squads-update. Добавлены вики-страницы и глоссарий.
+- Во всех трёх проектах данных (football_collection, transfermarkt-api, transfermarkt_scrapper)
+  инициализирован контур вики/AGENTS.md/хуков/плагина opencode.
+- Скрейпер: только дизайн (переписывание на базе ветки fix: лимит 2 rps, resume-кэш, curl_cffi,
+  идемпотентность) — docs/wiki/конвейер.md в скрейпере.
