@@ -17,7 +17,7 @@ transfermarkt.com
    │  (HTML + внутренние JSON-API)
    ▼
 transfermarkt-api  (локальный FastAPI, :8000)
-   │  ≤2 запроса/сек, resume-кэш, curl_cffi
+   │  HTML 1.5 rps / CDN 10 rps (probe 2026-08-29), resume-кэш, curl_cffi
    ▼
 скрейпер (transfermarkt_scrapper)
    │
@@ -105,8 +105,8 @@ data/
 
 ## Ловушки
 
-- **Лимит запросов**: не более 2/сек к TM; даже так за длинный краул бана не гарантирует.
-  Resume-кэш обязателен.
+- **Лимит запросов**: HTML 1.5 rps к TM (безопасное значение по probe 2026-08-29: чисто на 2.0 rps
+  sustained, 3.0 rps burst; CDN-картинки не ограничены — 10 rps). Resume-кэш обязателен.
 - **`extract_from_url`** в transfermarkt-api должен срезать домен (`https://www...`) и ловить
   `AttributeError` — иначе канонические URL ломают парсинг (починено в форке).
 - **Возраст в составе сборной** брать со второго `td.zentriert` (`[2]`), не с первого (номер).
