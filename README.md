@@ -36,6 +36,17 @@ updated the libraries, but threw away everything (menus, audio, HUD) that was no
   references live in `tools/determinism/`.
 - Project documentation lives in the wiki: `docs/wiki/index.md`.
 
+## Branches
+
+- `master` — the baseline fork: upstream GameplayFootball plus the build/modernization work described
+  above (CMake, SDL3, OpenGL core profile, determinism tooling).
+- `develop` — **the home for all personal game changes** on top of `master`: new gameplay modes,
+  the Transfermarkt data pipeline, updated rosters, and anything that is not part of the upstream
+  baseline.
+- Feature branches (e.g. `squads-update`) are cut from `develop` and merged back into it.
+- Remote branches (`google_brain`, `windows`, etc.) are upstream/experimental lines — do not merge
+  them wholesale into `master` or `develop`.
+
 ## Building from source
 
 ### Linux
