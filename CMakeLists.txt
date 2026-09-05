@@ -293,10 +293,14 @@ option(GAMEPLAYFOOTBALL_WINDOWS_SUBSYSTEM "Build gameplayfootball as a Windows G
 
 # The game resolves all asset/database paths relative to the working directory,
 # so copy data/ next to the binary automatically (no manual xcopy/cp needed).
+# Player photos (databases/default/faces) are not used yet and are excluded.
 function(copy_data_post_build target)
   add_custom_command(TARGET ${target} POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/data"
-                  "$<TARGET_FILE_DIR:${target}>")
+          COMMAND ${CMAKE_COMMAND}
+                  "-DSRC=${PROJECT_SOURCE_DIR}/data"
+                  "-DDST=$<TARGET_FILE_DIR:${target}>"
+                  -P "${PROJECT_SOURCE_DIR}/tools/copy_data.cmake"
+          COMMENT "Copying game data (excluding unused player photos)")
 endfunction()
 
 add_executable(gameplayfootball

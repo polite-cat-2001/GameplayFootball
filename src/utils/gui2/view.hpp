@@ -61,6 +61,7 @@ namespace blunted {
 
       virtual bool IsVisible() { if (isVisible) { if (parent) return parent->IsVisible(); else return true; } else return false; }
       virtual bool IsSelectable() { return isSelectable; }
+      virtual void SetSelectable(bool onOff) { isSelectable = onOff; }
       virtual bool IsOverlay() { return isOverlay; }
 
       virtual void Show();

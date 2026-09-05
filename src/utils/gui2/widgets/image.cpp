@@ -36,6 +36,10 @@ Gui2Image::Gui2Image(Gui2WindowManager *windowManager, const std::string &name,
 
   void Gui2Image::LoadImage(const std::string &filename) {
     SDL_Surface *imageSurfTmp = IMG_Load(filename.c_str());
+    if (!imageSurfTmp) {
+      Log(e_Warning, "Gui2Image", "LoadImage", "Could not load image '" + filename + "': " + SDL_GetError());
+      return;
+    }
     imageSource = windowManager->CreateImage2D(name + "source", imageSurfTmp->w, imageSurfTmp->h, false);
 
     boost::intrusive_ptr < Resource<Surface> > surfaceRes = imageSource->GetImage();

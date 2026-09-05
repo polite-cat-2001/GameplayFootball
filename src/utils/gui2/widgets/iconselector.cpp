@@ -94,6 +94,7 @@ namespace blunted {
         // only resize internals, for speed (no texture recreate)
         entries.at(i).icon->SetPosition(xpos - 8.0 * 0.5, height_percent * 0.5 - 10.0 * 0.5);
         entries.at(i).icon->SetZoom(size, size);
+        entries.at(i).icon->Show();
       } else {
         entries.at(i).icon->SetPosition(100, 100);
       }
@@ -104,6 +105,13 @@ namespace blunted {
         selectedCaption->SetCaption(entries.at(selectedEntry).caption);
       }
     } else selectedCaption->SetCaption("None selected");
+  }
+
+  void Gui2IconSelector::SetSelectedEntry(int index) {
+    if (entries.size() == 0) return;
+    selectedEntry = clamp(index, 0, (signed int)entries.size() - 1);
+    visibleSelectedEntry = (float)selectedEntry;
+    Redraw();
   }
 
   void Gui2IconSelector::ClearEntries() {
@@ -127,10 +135,10 @@ namespace blunted {
     entry.icon = new Gui2Image(windowManager, name + "_entry_" + id, 0, 0, 8, 10);
     entry.icon->LoadImage(imageFile);
     AddView(entry.icon);
-    entry.icon->Show();
+    // keep offscreen and hidden until Redraw() positions and shows it, so
+    // re-populating a large selector does not flash icons in the corner
+    entry.icon->SetPosition(100, 100);
     entries.push_back(entry);
-
-    Redraw();
   }
 
   void Gui2IconSelector::ProcessWindowingEvent(WindowingEvent *event) {

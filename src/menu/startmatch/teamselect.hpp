@@ -25,11 +25,14 @@ class TeamSelectPage : public Gui2Page {
     TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData);
     virtual ~TeamSelectPage();
 
+    void FocusCompetitionSelect1();
     void FocusTeamSelect1();
     void FocusStart1();
     void FocusCompetitionSelect2();
     void FocusTeamSelect2();
     void FocusStart2();
+    void SetupCompetitionSelect1();
+    void SetupCompetitionSelect2();
     void SetupTeamSelect1();
     void SetupTeamSelect2();
     void GoOptionsMenu();
@@ -47,6 +50,10 @@ class TeamSelectPage : public Gui2Page {
     Gui2IconSelector *teamSelect2;
     Gui2IconSelector *competitionSelect1;
     Gui2IconSelector *competitionSelect2;
+    Gui2IconSelector *countrySelect1;
+    Gui2IconSelector *countrySelect2;
+
+    bool team2Initialized;
 
 };
 

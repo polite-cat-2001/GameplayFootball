@@ -34,6 +34,7 @@ namespace blunted {
       virtual void Redraw();
 
       std::string GetSelectedEntryID() { if (entries.size() > 0) return entries.at(selectedEntry).id; else return ""; }
+      void SetSelectedEntry(int index);
       void ClearEntries();
       void AddEntry(const std::string &id, const std::string &caption, const std::string &imageFile);
 

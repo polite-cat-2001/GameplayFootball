@@ -12,17 +12,39 @@
 
 using namespace blunted;
 
-void AddCompetitions(Gui2IconSelector *selector) {
-  /*
-  selector->AddEntry("1", "National teams", "databases/default/images_competitions/nationalteams.png");
-  selector->AddEntry("2", "Premier league", "databases/default/images_competitions/premierleague.png");
-  selector->AddEntry("3", "Eredivisie", "databases/default/images_competitions/eredivisie.png");
-  selector->AddEntry("4", "Bundesliga", "databases/default/images_competitions/bundesliga.png");
-  selector->AddEntry("5", "LFP", "databases/default/images_competitions/lfp.png");
-  selector->AddEntry("6", "Serie A", "databases/default/images_competitions/serie_a.png");
-  selector->AddEntry("7", "Ligue 1", "databases/default/images_competitions/ligue1.png");
-  */
-  DatabaseResult *result = GetDB()->Query("select id, name, logo_url from leagues");
+std::string GetNationalTeamsLeagueID() {
+  DatabaseResult *result = GetDB()->Query("select id from leagues where name = 'National Teams' limit 1");
+  std::string id;
+  if (result->data.size() > 0) id = result->data.at(0).at(0); else id = "0";
+  delete result;
+  return id;
+}
+
+void AddCountries(Gui2IconSelector *selector) {
+  // "National Teams" is a special first-stage option; national teams are picked
+  // directly (no league stage) via the "national" entry id.
+  selector->AddEntry("national", "National Teams", "databases/default/images_competitions/nationalteams.png");
+
+  DatabaseResult *result = GetDB()->Query("select id, name from countries order by name");
+
+  for (unsigned int r = 0; r < result->data.size(); r++) {
+    int id = atoi(result->data.at(r).at(0).c_str());
+    std::string name = result->data.at(r).at(1).c_str();
+
+    std::string flagPath = "databases/default/images_countries/" + int_to_str(id) + ".png";
+    if (!boost::filesystem::exists(flagPath)) flagPath = "media/textures/orange.jpg";
+    selector->AddEntry(int_to_str(id), name, flagPath);
+  }
+
+  delete result;
+  selector->Redraw();
+  selector->Show();
+}
+
+void AddLeagues(Gui2IconSelector *selector, const std::string &country_id) {
+  selector->ClearEntries();
+
+  DatabaseResult *result = GetDB()->Query("select id, name, logo_url from leagues where country_id = " + country_id + " order by name");
 
   for (unsigned int r = 0; r < result->data.size(); r++) {
     int id = atoi(result->data.at(r).at(0).c_str());
@@ -35,11 +57,16 @@ void AddCompetitions(Gui2IconSelector *selector) {
   }
 
   delete result;
+  selector->Redraw();
+  selector->Show();
 }
 
 void AddTeams(Gui2IconSelector *selector, const std::string &competition_id) {
+  selector->ClearEntries();
 
-  DatabaseResult *result = GetDB()->Query("select id, name, logo_url, kit_url from teams where league_id = " + competition_id + " order by name");
+  // only list teams that can field a full starting XI (11 players); fewer makes the match freeze
+  DatabaseResult *result = GetDB()->Query("select id, name, logo_url, kit_url from teams t where league_id = " + competition_id +
+                                          " and (select count(*) from players p where p.team_id = t.id or p.nationalteam_id = t.id) >= 11 order by name");
 
   for (unsigned int r = 0; r < result->data.size(); r++) {
     int id = atoi(result->data.at(r).at(0).c_str());
@@ -53,10 +80,12 @@ void AddTeams(Gui2IconSelector *selector, const std::string &competition_id) {
 
   delete result;
 
+  selector->Redraw();
   selector->Show();
 }
 
 TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
+  team2Initialized = false;
 
   Gui2Image *bg1 = new Gui2Image(windowManager, "teamselect_image_bg1", 19, 24, 30, 42);
   this->AddView(bg1);
@@ -79,6 +108,8 @@ TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   Gui2Grid *grid1 = new Gui2Grid(windowManager, "teamselect_grid_team1", 19, 24, 30, 41);
   grid2 = new Gui2Grid(windowManager, "teamselect_grid_team2", 51, 24, 30, 41);
 
+  countrySelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_country1", 0, 0, 29, 18, "Country select");
+  countrySelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_country2", 0, 0, 29, 18, "Country select");
   competitionSelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition1", 0, 0, 29, 18, "Competition select");
   competitionSelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition2", 0, 0, 29, 18, "Competition select");
   teamSelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_team1", 0, 0, 29, 18, "Team select");
@@ -86,39 +117,45 @@ TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   buttonStart1 = new Gui2Button(windowManager, "teamselect_button_start1", 0, 0, 29, 3, "Ready");
   buttonStart2 = new Gui2Button(windowManager, "teamselect_button_start2", 0, 0, 29, 3, "Ready");
 
+  countrySelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect1, this));
   competitionSelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusTeamSelect1, this));
   teamSelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusStart1, this));
   buttonStart1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect2, this));
+  countrySelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect2, this));
   competitionSelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusTeamSelect2, this));
   teamSelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusStart2, this));
   buttonStart2->sig_OnClick.connect(boost::bind(&TeamSelectPage::GoOptionsMenu, this));
 
+  countrySelect1->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupCompetitionSelect1, this));
   competitionSelect1->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupTeamSelect1, this));
+  countrySelect2->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupCompetitionSelect2, this));
   competitionSelect2->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupTeamSelect2, this));
 
   this->AddView(p1);
   p1->Show();
   this->AddView(grid1);
-  grid1->AddView(competitionSelect1, 0, 0);
-  grid1->AddView(teamSelect1, 1, 0);
-  grid1->AddView(buttonStart1, 2, 0);
+  grid1->AddView(countrySelect1, 0, 0);
+  grid1->AddView(competitionSelect1, 1, 0);
+  grid1->AddView(teamSelect1, 2, 0);
+  grid1->AddView(buttonStart1, 3, 0);
   grid1->UpdateLayout(0.5);
   grid1->Show();
 
-  AddCompetitions(competitionSelect1);
-  AddTeams(teamSelect1, "1");
+  AddCountries(countrySelect1);
+  countrySelect1->SetSelectedEntry(1); // skip "National Teams", start at first country
+  SetupCompetitionSelect1();
 
   this->AddView(p2);
   this->AddView(grid2);
-  grid2->AddView(competitionSelect2, 0, 0);
-  grid2->AddView(teamSelect2, 1, 0);
-  grid2->AddView(buttonStart2, 2, 0);
+  grid2->AddView(countrySelect2, 0, 0);
+  grid2->AddView(competitionSelect2, 1, 0);
+  grid2->AddView(teamSelect2, 2, 0);
+  grid2->AddView(buttonStart2, 3, 0);
   grid2->UpdateLayout(0.5);
+  // team 2 selectors are populated lazily in FocusCompetitionSelect2 to keep
+  // page creation fast
 
-  AddCompetitions(competitionSelect2);
-  AddTeams(teamSelect2, "1");
-
-  competitionSelect1->SetFocus();
+  countrySelect1->SetFocus();
 
   SetActiveController(-1, true);
 
@@ -134,6 +171,12 @@ TeamSelectPage::~TeamSelectPage() {
   GetMenuTask()->EnableKeyboard();
 }
 
+void TeamSelectPage::FocusCompetitionSelect1() {
+  // national teams skip the league stage
+  if (countrySelect1->GetSelectedEntryID() == "national") teamSelect1->SetFocus();
+  else competitionSelect1->SetFocus();
+}
+
 void TeamSelectPage::FocusTeamSelect1() {
   teamSelect1->SetFocus();
 }
@@ -143,11 +186,20 @@ void TeamSelectPage::FocusStart1() {
 }
 
 void TeamSelectPage::FocusCompetitionSelect2() {
+  if (!team2Initialized) {
+    team2Initialized = true;
+    AddCountries(countrySelect2);
+    countrySelect2->SetSelectedEntry(1); // skip "National Teams", start at first country
+    SetupCompetitionSelect2();
+  }
+
   p2->Show();
   grid2->Show();
   bg2->Show();
 
-  competitionSelect2->SetFocus();
+  // national teams skip the league stage
+  if (countrySelect2->GetSelectedEntryID() == "national") teamSelect2->SetFocus();
+  else competitionSelect2->SetFocus();
 
   SetActiveController(1, true);
 }
@@ -160,6 +212,34 @@ void TeamSelectPage::FocusStart2() {
   buttonStart2->SetFocus();
 }
 
+void TeamSelectPage::SetupCompetitionSelect1() {
+  if (countrySelect1->GetSelectedEntryID() == "national") {
+    competitionSelect1->ClearEntries();
+    competitionSelect1->SetSelectable(false);
+    teamSelect1->ClearEntries();
+    AddTeams(teamSelect1, GetNationalTeamsLeagueID());
+  } else {
+    competitionSelect1->SetSelectable(true);
+    AddLeagues(competitionSelect1, countrySelect1->GetSelectedEntryID());
+    teamSelect1->ClearEntries();
+    AddTeams(teamSelect1, competitionSelect1->GetSelectedEntryID());
+  }
+}
+
+void TeamSelectPage::SetupCompetitionSelect2() {
+  if (countrySelect2->GetSelectedEntryID() == "national") {
+    competitionSelect2->ClearEntries();
+    competitionSelect2->SetSelectable(false);
+    teamSelect2->ClearEntries();
+    AddTeams(teamSelect2, GetNationalTeamsLeagueID());
+  } else {
+    competitionSelect2->SetSelectable(true);
+    AddLeagues(competitionSelect2, countrySelect2->GetSelectedEntryID());
+    teamSelect2->ClearEntries();
+    AddTeams(teamSelect2, competitionSelect2->GetSelectedEntryID());
+  }
+}
+
 void TeamSelectPage::SetupTeamSelect1() {
   teamSelect1->ClearEntries();
   AddTeams(teamSelect1, competitionSelect1->GetSelectedEntryID());
@@ -168,15 +248,6 @@ void TeamSelectPage::SetupTeamSelect1() {
 void TeamSelectPage::SetupTeamSelect2() {
   teamSelect2->ClearEntries();
   AddTeams(teamSelect2, competitionSelect2->GetSelectedEntryID());
-
-  // hax lol, well doesn't seem to work :(
-  /*
-  teamSelect2->Process();
-  WindowingEvent *right = new WindowingEvent();
-  right->SetDirection(Vector3(1, 0, 0));
-  teamSelect2->ProcessWindowingEvent(right);
-  delete right;
-  */
 }
 
 void TeamSelectPage::GoOptionsMenu() {
@@ -193,13 +264,16 @@ void TeamSelectPage::GoOptionsMenu() {
 
 void TeamSelectPage::ProcessWindowingEvent(WindowingEvent *event) {
   if (event->IsEscape()) {
-    if (windowManager->GetFocus() == competitionSelect1) {
+    if (windowManager->GetFocus() == countrySelect1) {
       Gui2Page::ProcessWindowingEvent(event);
+    } else if (windowManager->GetFocus() == competitionSelect1) {
+      windowManager->SetFocus(countrySelect1);
     } else if (windowManager->GetFocus() == teamSelect1) {
-      windowManager->SetFocus(competitionSelect1);
+      if (countrySelect1->GetSelectedEntryID() == "national") windowManager->SetFocus(countrySelect1);
+      else windowManager->SetFocus(competitionSelect1);
     } else if (windowManager->GetFocus() == buttonStart1) {
       windowManager->SetFocus(teamSelect1);
-    } else if (windowManager->GetFocus() == competitionSelect2) {
+    } else if (windowManager->GetFocus() == countrySelect2) {
       windowManager->SetFocus(buttonStart1);
 
       p2->Hide();
@@ -208,8 +282,11 @@ void TeamSelectPage::ProcessWindowingEvent(WindowingEvent *event) {
 
       SetActiveController(-1, true);
 
+    } else if (windowManager->GetFocus() == competitionSelect2) {
+      windowManager->SetFocus(countrySelect2);
     } else if (windowManager->GetFocus() == teamSelect2) {
-      windowManager->SetFocus(competitionSelect2);
+      if (countrySelect2->GetSelectedEntryID() == "national") windowManager->SetFocus(countrySelect2);
+      else windowManager->SetFocus(competitionSelect2);
     } else if (windowManager->GetFocus() == buttonStart2) {
       windowManager->SetFocus(teamSelect2);
     }
