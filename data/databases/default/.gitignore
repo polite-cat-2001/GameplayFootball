@@ -1,0 +1,9 @@
+# Local, machine-specific data assets (imported from the Transfermarkt pipeline).
+# The game resolves these relative to its working directory; they are regenerated
+# by the data pipeline and should not live in git.
+faces/
+database.sqlite
+images_competitions/
+images_teams/
+images_countries/
+eredivisie.png
