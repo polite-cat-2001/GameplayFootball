@@ -39,6 +39,13 @@ namespace blunted {
   SDL_Surface *CreateSDLSurface(int width, int height);
   void sdl_putpixel(SDL_Surface *surface, int x, int y, Uint32 pixel);
   Uint32 sdl_getpixel(const SDL_Surface *surface, int x, int y);
+  // pads the canvas by `radius` px on all sides, then grows a colored outline of
+  // `radius` px around the non-transparent region of a 32-bit surface, following
+  // the shape. the padding guarantees full-bleed logos and their outline are not
+  // clipped at the source edges. returns a NEW surface (caller replaces the old
+  // one; the old surface is not freed here). returns `surface` unchanged when the
+  // input is not a 32-bit surface or radius < 1
+  SDL_Surface *sdl_addoutline(SDL_Surface *surface, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
   void sdl_line(SDL_Surface *surface, int x1, int y1, int x2, int y2, Uint32 color);
   void sdl_triangle_filled(SDL_Surface *surface, const Triangle &triangle, Uint8 r, Uint8 g, Uint8 b);
   void sdl_rectangle_filled(SDL_Surface *surface, int x, int y, int width, int height, Uint32 color);

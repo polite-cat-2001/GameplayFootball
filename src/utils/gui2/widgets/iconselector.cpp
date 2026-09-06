@@ -145,6 +145,7 @@ namespace blunted {
     const int poolSize = 9;
     for (int p = 0; p < poolSize; p++) {
       Gui2Image *icon = new Gui2Image(windowManager, name + "_icon_" + std::to_string(p), 0, 0, 8, 10);
+      icon->SetDrawOutline(drawOutline);
       AddView(icon);
       icon->SetPosition(100, 100);
       iconPool.push_back(icon);

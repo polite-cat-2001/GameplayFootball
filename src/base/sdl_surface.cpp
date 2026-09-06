@@ -84,6 +84,65 @@ namespace blunted {
     return result;
   }
 
+  SDL_Surface *sdl_addoutline(SDL_Surface *surface, int radius, Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+    if (!surface) return surface;
+    const SDL_PixelFormatDetails *details = SDL_GetPixelFormatDetails(surface->format);
+    int bpp = details->bytes_per_pixel;
+    if (bpp != 4 || radius < 1) return surface; // only 32-bit surfaces, alpha lives in byte 3
+
+    // pad the canvas by `radius` on all sides so the outline is not clipped at
+    // the source edges, even for full-bleed logos (pre-existing "logo does not
+    // fit" clipping for those is fixed here too)
+    SDL_Surface *padded = CreateSDLSurface(surface->w + radius * 2, surface->h + radius * 2);
+    if (!padded) return surface;
+    SDL_FillSurfaceRect(padded, NULL, 0); // transparent
+    SDL_Rect dstRect;
+    dstRect.x = radius;
+    dstRect.y = radius;
+    dstRect.w = surface->w;
+    dstRect.h = surface->h;
+    SDL_BlitSurface(surface, NULL, padded, &dstRect);
+
+    int w = padded->w;
+    int h = padded->h;
+    SDL_Surface *copy = SDL_DuplicateSurface(padded);
+    if (!copy) { SDL_DestroySurface(padded); return surface; }
+
+    SDL_LockSurface(padded);
+    SDL_LockSurface(copy);
+
+    const Uint8 alphaThreshold = 32; // below this alpha a pixel counts as background
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        Uint8 *sp = (Uint8 *)copy->pixels + y * copy->pitch + x * bpp;
+        if (sp[3] >= alphaThreshold) continue; // part of the logo, keep as is
+
+        bool edge = false;
+        int ymin = y - radius; if (ymin < 0) ymin = 0;
+        int ymax = y + radius; if (ymax >= h) ymax = h - 1;
+        int xmin = x - radius; if (xmin < 0) xmin = 0;
+        int xmax = x + radius; if (xmax >= w) xmax = w - 1;
+        for (int ny = ymin; ny <= ymax && !edge; ny++) {
+          for (int nx = xmin; nx <= xmax; nx++) {
+            Uint8 *np = (Uint8 *)copy->pixels + ny * copy->pitch + nx * bpp;
+            if (np[3] >= alphaThreshold) { edge = true; break; }
+          }
+        }
+
+        if (edge) {
+          Uint8 *dp = (Uint8 *)padded->pixels + y * padded->pitch + x * bpp;
+          dp[0] = r; dp[1] = g; dp[2] = b; dp[3] = a;
+        }
+      }
+    }
+
+    SDL_UnlockSurface(copy);
+    SDL_UnlockSurface(padded);
+    SDL_DestroySurface(copy);
+
+    return padded; // caller owns the new surface and replaces the old one
+  }
+
   void sdl_line(SDL_Surface *surface, int x1, int y1, int x2, int y2, Uint32 color) {
 // VK: TODO: Use SDL2 functions or remove
 //    sge_Line(surface, x1, y1, x2, y2, color);

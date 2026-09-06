@@ -47,6 +47,17 @@ Gui2Image::Gui2Image(Gui2WindowManager *windowManager, const std::string &name,
     surfaceRes->GetResource()->SetData(imageSurfTmp);
     surfaceRes->resourceMutex.unlock();
 
+    if (drawOutline) {
+      surfaceRes->resourceMutex.lock();
+      SDL_Surface *surf = surfaceRes->GetResource()->GetData();
+      if (surf) {
+        int radius = clamp(int(std::max(surf->w, surf->h) / 25), 2, 10);
+        SDL_Surface *outlined = sdl_addoutline(surf, radius, 255, 255, 255, 255);
+        if (outlined != surf) surfaceRes->GetResource()->SetData(outlined); // SetData frees the old surface
+      }
+      surfaceRes->resourceMutex.unlock();
+    }
+
     Redraw();
   }
 

@@ -38,6 +38,9 @@ namespace blunted {
       void ClearEntries();
       void AddEntry(const std::string &id, const std::string &caption, const std::string &imageFile);
 
+      // pool icons get a white outline around the logo shape (for dark logos)
+      void SetDrawOutline(bool drawOutline) { this->drawOutline = drawOutline; }
+
       virtual void ProcessWindowingEvent(WindowingEvent *event);
 
       virtual void OnGainFocus();
@@ -68,6 +71,8 @@ namespace blunted {
 
       int fadeOut_ms;
       int fadeOutTime_ms;
+
+      bool drawOutline = false;
 
   };
 

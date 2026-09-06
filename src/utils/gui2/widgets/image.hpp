@@ -22,6 +22,11 @@ namespace blunted {
       void LoadImage(const std::string &filename);
       virtual void Redraw();
 
+      // when set, LoadImage adds a white outline around the non-transparent
+      // pixels of the source image, following the shape (for dark logos on
+      // dark backgrounds in the team select carousel)
+      void SetDrawOutline(bool drawOutline) { this->drawOutline = drawOutline; }
+
       virtual void SetSize(float new_width_percent, float new_height_percent);
       virtual void SetZoom(float zoomx, float zoomy);
 
@@ -30,6 +35,8 @@ namespace blunted {
     protected:
       boost::intrusive_ptr<Image2D> image;
       boost::intrusive_ptr<Image2D> imageSource;
+
+      bool drawOutline = false;
 
   };
 

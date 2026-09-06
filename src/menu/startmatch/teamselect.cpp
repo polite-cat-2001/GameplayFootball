@@ -129,6 +129,13 @@ TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   competitionSelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition2", 0, 0, 29, 18, "Competition select");
   teamSelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_team1", 0, 0, 29, 18, "Team select");
   teamSelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_team2", 0, 0, 29, 18, "Team select");
+
+  // many league/team logos are mostly dark and blend into the dark selector
+  // background; a white outline around the logo shape keeps them visible
+  competitionSelect1->SetDrawOutline(true);
+  competitionSelect2->SetDrawOutline(true);
+  teamSelect1->SetDrawOutline(true);
+  teamSelect2->SetDrawOutline(true);
   buttonStart1 = new Gui2Button(windowManager, "teamselect_button_start1", 0, 0, 29, 3, "Ready");
   buttonStart2 = new Gui2Button(windowManager, "teamselect_button_start2", 0, 0, 29, 3, "Ready");
 
