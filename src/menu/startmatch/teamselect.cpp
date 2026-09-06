@@ -25,7 +25,10 @@ void AddCountries(Gui2IconSelector *selector) {
   // directly (no league stage) via the "national" entry id.
   selector->AddEntry("national", "National Teams", "databases/default/images_competitions/nationalteams.png");
 
-  DatabaseResult *result = GetDB()->Query("select id, name from countries order by name");
+  // only list countries that actually have leagues: the "International"
+  // pseudo-country (and any future league-less country) would leave the league
+  // stage empty and crash the team query
+  DatabaseResult *result = GetDB()->Query("select distinct c.id, c.name from countries c join leagues l on l.country_id = c.id order by c.name");
 
   for (unsigned int r = 0; r < result->data.size(); r++) {
     int id = atoi(result->data.at(r).at(0).c_str());
@@ -43,6 +46,12 @@ void AddCountries(Gui2IconSelector *selector) {
 
 void AddLeagues(Gui2IconSelector *selector, const std::string &country_id) {
   selector->ClearEntries();
+
+  if (country_id.empty() || country_id == "0") {
+    selector->Redraw();
+    selector->Show();
+    return;
+  }
 
   DatabaseResult *result = GetDB()->Query("select id, name, logo_url from leagues where country_id = " + country_id + " order by name");
 
@@ -63,6 +72,12 @@ void AddLeagues(Gui2IconSelector *selector, const std::string &country_id) {
 
 void AddTeams(Gui2IconSelector *selector, const std::string &competition_id) {
   selector->ClearEntries();
+
+  if (competition_id.empty() || competition_id == "0") {
+    selector->Redraw();
+    selector->Show();
+    return;
+  }
 
   // only list teams that can field a full starting XI (11 players); fewer makes the match freeze
   DatabaseResult *result = GetDB()->Query("select id, name, logo_url, kit_url from teams t where league_id = " + competition_id +

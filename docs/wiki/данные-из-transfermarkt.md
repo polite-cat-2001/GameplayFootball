@@ -191,12 +191,20 @@ GF `CalculateStat`).
    лига → команда. Первый пункт списка стран — «National Teams» (id `national`): выбирается
    сборная сразу, без ступени лиги (лига 280 `National Teams`, `country_id = NULL`).
    Дефолт — первая по алфавиту страна; «National Teams» — на индексе 0.
+   **Страны без лиг отфильтрованы** (`countries join leagues`): артефакт-страна
+   «International» (id 1) оставалась бы тупиком — пустой выбор лиги и SQL-краш
+   `near "and"` в `AddTeams` (`where league_id =  and ...`). В `AddLeagues`/`AddTeams`
+   добавлен гард на пустой id.
 5. **Фото игроков не копируются в сборку**: `faces/` (67 тыс. файлов) в игре не используется,
    `copy_data_post_build` исключает его (`tools/copy_data.cmake`, `PATTERN faces EXCLUDE`).
 6. **Защита от битых картинок**: `Gui2Image::LoadImage` проверяет `IMG_Load` на NULL — раньше
    0-байтовый PNG (как `nationalteams.png` после импорта) ронял игру сегфолтом на
    `imageSurfTmp->w`. В `Gui2IconSelector::AddEntry` убран per-entry `Redraw()` (O(n²) при
    больших списках); добавлены `SetSelectedEntry` и `SetSelectable`.
+   **Виртуализация иконок**: `AddEntry` больше не создаёт `Gui2Image` на запись — записи стали
+   лёгкими (id/caption/путь), а селектор держит пул из 9 иконок и назначает их только записям в
+   видимой зоне карусели, загружая картинку при первом появлении. Сотни флагов/логотипов (107
+   стран, 246 сборных, 280 лиг) больше не аллоцируют текстуру каждая.
 7. **Данные матча**: `formation_xml`/`tactics_xml` у всех команд были NULL — без них матч
    не расставляет состав и зависал после розыгрыша. Залит дефолт 4-2-3-1 и дефолтные тактики
    (из `mainmenu.cpp`); `formationorder` (клубы) и `nationalteamformationorder` (сборные)

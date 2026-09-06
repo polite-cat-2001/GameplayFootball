@@ -19,7 +19,7 @@ namespace blunted {
   struct Gui2IconSelectorEntry {
     std::string caption;
     std::string id;
-    Gui2Image *icon;
+    std::string imageFile;
   };
 
   class Gui2IconSelector : public Gui2View {
@@ -53,6 +53,15 @@ namespace blunted {
 
       std::vector<Gui2IconSelectorEntry> entries;
       Gui2Caption *selectedCaption;
+
+      // small pool of icon widgets reused for the few entries currently inside
+      // the visible carousel range, so populating a large selector (hundreds of
+      // team/country icons) does not allocate a texture per entry
+      std::vector<Gui2Image*> iconPool;
+      std::vector<int> iconEntryIndex; // entry index each pool icon shows (-1 = free)
+
+      void EnsureIconPool();
+      void DeleteIconPool();
 
       int selectedEntry;
       float visibleSelectedEntry;

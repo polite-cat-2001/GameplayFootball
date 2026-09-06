@@ -37,7 +37,13 @@ PlayerData::PlayerData(int playerDatabaseID) : databaseID(playerDatabaseID) {
     if (result->header.at(c).compare("skincolor") == 0) skinColor = atoi(result->data.at(0).at(c).c_str());
     if (result->header.at(c).compare("hairstyle") == 0) hairStyle = result->data.at(0).at(c);
     if (result->header.at(c).compare("haircolor") == 0) hairColor = result->data.at(0).at(c);
-    if (result->header.at(c).compare("height") == 0) height = atof(result->data.at(0).at(c).c_str());
+    if (result->header.at(c).compare("height") == 0) {
+      float parsedHeight = atof(result->data.at(0).at(c).c_str());
+      // NULL/empty or implausible values (scraper artifacts) would give
+      // zMultiplier == 0 and collapse the fullbody model: invisible body with
+      // the hairstyle lying flat on the pitch. Keep the default instead.
+      if (parsedHeight >= 1.4f && parsedHeight <= 2.3f) height = parsedHeight;
+    }
   }
 
   delete result;

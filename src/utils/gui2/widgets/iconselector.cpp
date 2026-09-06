@@ -83,20 +83,46 @@ namespace blunted {
     image->OnChange();
 
     // calculate sizes and positions for each entry
+    EnsureIconPool();
+    std::vector<bool> poolUsed(iconPool.size(), false);
     for (int i = 0; i < (signed int)entries.size(); i++) {
       float position = i - visibleSelectedEntry;
       float xpos = width_percent * 0.5;
       if (position > 0.5 * -pi && position < 0.5 * pi) {
+        // assign a pool icon to this entry; load its image only the first time
+        // the entry becomes visible
+        int slot = -1;
+        for (int p = 0; p < (signed int)iconPool.size(); p++) {
+          if (iconEntryIndex.at(p) == i) { slot = p; break; }
+        }
+        if (slot == -1) {
+          for (int p = 0; p < (signed int)iconPool.size(); p++) {
+            if (iconEntryIndex.at(p) == -1) { slot = p; break; }
+          }
+        }
+        if (slot == -1) slot = 0; // all pool icons busy: reuse the first
+        poolUsed.at(slot) = true;
+        if (iconEntryIndex.at(slot) != i) {
+          iconEntryIndex.at(slot) = i;
+          if (!entries.at(i).imageFile.empty()) iconPool.at(slot)->LoadImage(entries.at(i).imageFile);
+        }
         float size = fabs(cos(position));
         float width = 8.0 * size;
         float height = 10.0 * size;
         xpos += sin(position) * width_percent * 0.4;
         // only resize internals, for speed (no texture recreate)
-        entries.at(i).icon->SetPosition(xpos - 8.0 * 0.5, height_percent * 0.5 - 10.0 * 0.5);
-        entries.at(i).icon->SetZoom(size, size);
-        entries.at(i).icon->Show();
-      } else {
-        entries.at(i).icon->SetPosition(100, 100);
+        iconPool.at(slot)->SetPosition(xpos - 8.0 * 0.5, height_percent * 0.5 - 10.0 * 0.5);
+        iconPool.at(slot)->SetZoom(size, size);
+        iconPool.at(slot)->Show();
+      }
+    }
+
+    // release pool icons that are no longer visible
+    for (int p = 0; p < (signed int)iconPool.size(); p++) {
+      if (!poolUsed.at(p)) {
+        iconPool.at(p)->Hide();
+        iconPool.at(p)->SetPosition(100, 100);
+        iconEntryIndex.at(p) = -1;
       }
     }
 
@@ -114,11 +140,29 @@ namespace blunted {
     Redraw();
   }
 
-  void Gui2IconSelector::ClearEntries() {
-    for (int i = 0; i < (signed int)entries.size(); i++) {
-      entries.at(i).icon->Exit();
-      delete entries.at(i).icon;
+  void Gui2IconSelector::EnsureIconPool() {
+    if (iconPool.size() != 0) return;
+    const int poolSize = 9;
+    for (int p = 0; p < poolSize; p++) {
+      Gui2Image *icon = new Gui2Image(windowManager, name + "_icon_" + std::to_string(p), 0, 0, 8, 10);
+      AddView(icon);
+      icon->SetPosition(100, 100);
+      iconPool.push_back(icon);
+      iconEntryIndex.push_back(-1);
     }
+  }
+
+  void Gui2IconSelector::DeleteIconPool() {
+    for (int p = 0; p < (signed int)iconPool.size(); p++) {
+      iconPool.at(p)->Exit();
+      delete iconPool.at(p);
+    }
+    iconPool.clear();
+    iconEntryIndex.clear();
+  }
+
+  void Gui2IconSelector::ClearEntries() {
+    DeleteIconPool();
 
     entries.clear();
 
@@ -132,12 +176,7 @@ namespace blunted {
     Gui2IconSelectorEntry entry;
     entry.caption = caption;
     entry.id = id;
-    entry.icon = new Gui2Image(windowManager, name + "_entry_" + id, 0, 0, 8, 10);
-    entry.icon->LoadImage(imageFile);
-    AddView(entry.icon);
-    // keep offscreen and hidden until Redraw() positions and shows it, so
-    // re-populating a large selector does not flash icons in the corner
-    entry.icon->SetPosition(100, 100);
+    entry.imageFile = imageFile;
     entries.push_back(entry);
   }
 
