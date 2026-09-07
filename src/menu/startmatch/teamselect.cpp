@@ -53,7 +53,7 @@ void AddLeagues(Gui2IconSelector *selector, const std::string &country_id) {
     return;
   }
 
-  DatabaseResult *result = GetDB()->Query("select id, name, logo_url from leagues where country_id = " + country_id + " order by name");
+  DatabaseResult *result = GetDB()->Query("select id, name, logo_url from leagues where country_id = " + country_id + " order by coalesce(tier, 99999), name");
 
   for (unsigned int r = 0; r < result->data.size(); r++) {
     int id = atoi(result->data.at(r).at(0).c_str());

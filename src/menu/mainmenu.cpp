@@ -350,9 +350,10 @@ bool MainMenuPage::GoImportDB() {
   delete result;
 
   result = GetDB()->Query("CREATE TABLE leagues(id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                                               "country_id INTEGER, "
-                                               "name VARCHAR(64), "
-                                               "logo_url VARCHAR(512));");
+                                                "country_id INTEGER, "
+                                                "name VARCHAR(64), "
+                                                "logo_url VARCHAR(512), "
+                                                "tier INTEGER);");
   delete result;
 
   result = GetDB()->Query("CREATE TABLE teams(id INTEGER PRIMARY KEY AUTOINCREMENT, "
