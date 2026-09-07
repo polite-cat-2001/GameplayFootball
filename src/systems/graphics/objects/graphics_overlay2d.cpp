@@ -94,7 +94,7 @@ namespace blunted {
       caller->size[0] = image->w;
       caller->size[1] = image->h;
       caller->texture->GetResource()->ResizeTexture(
-        image, e_InternalPixelFormat_RGBA8,
+        caller->texture, image, e_InternalPixelFormat_RGBA8,
         alpha ? e_PixelFormat_RGBA : e_PixelFormat_RGB, alpha, false);
     } else {
       // no resize, just update

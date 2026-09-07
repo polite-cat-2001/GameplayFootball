@@ -121,7 +121,7 @@ namespace blunted {
   class Renderer3DMessage_ResizeTexture : public Command {
 
     public:
-      Renderer3DMessage_ResizeTexture(int textureID, SDL_Surface *source, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, bool alpha = false, bool mipmaps = true) : Command("r3dmsg_ResizeTexture"), textureID(textureID), internalPixelFormat(internalPixelFormat), pixelFormat(pixelFormat), alpha(alpha), mipmaps(mipmaps) {
+      Renderer3DMessage_ResizeTexture(boost::intrusive_ptr<Resource<Texture> > texture, SDL_Surface *source, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, bool alpha = false, bool mipmaps = true) : Command("r3dmsg_ResizeTexture"), texture(texture), internalPixelFormat(internalPixelFormat), pixelFormat(pixelFormat), alpha(alpha), mipmaps(mipmaps) {
         // copy image so caller doesn't have to wait for update to complete
         // DAMN YOU SDL! this function won't actually copy right surface, just make a shallow copy instead. that explains a crash i got. fuuufuuuuuu
         //this->source = SDL_CreateRGBSurfaceFrom(source->pixels, source->w, source->h, 0, source->pitch, 0, 0, 0, 0);
@@ -132,14 +132,18 @@ namespace blunted {
 
     protected:
       virtual bool Execute(void *caller = NULL) {
-        static_cast<Renderer3D*>(caller)->ResizeTexture(textureID, source, internalPixelFormat, pixelFormat, alpha, mipmaps);
+        // resolve the GL id here, on the renderer thread, by which time the async
+        // create message (Renderer3DMessage_CreateTexture, no Wait) has already run
+        // (same queue, FIFO order) — otherwise ResizeTexture(-1) would silently fail
+        int textureID = texture->GetResource()->GetID();
+        if (textureID != -1) static_cast<Renderer3D*>(caller)->ResizeTexture(textureID, source, internalPixelFormat, pixelFormat, alpha, mipmaps);
 
         SDL_DestroySurface(source);
 
         return true;
       }
 
-      int textureID;
+      boost::intrusive_ptr<Resource<Texture> > texture;
       SDL_Surface *source;
       e_InternalPixelFormat internalPixelFormat;
       e_PixelFormat pixelFormat;

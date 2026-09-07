@@ -20,7 +20,9 @@ class PlayerData {
     virtual ~PlayerData();
 
     std::string GetFirstName() const { return firstName; }
-    std::string GetLastName() const { return lastName; }
+    // Some players (Transfermarkt data) have no surname and are known by a single
+    // name; fall back to it so captions/menus never show an empty string.
+    std::string GetLastName() const { return lastName.empty() ? firstName : lastName; }
     int GetDatabaseID() const { return databaseID; }
     const std::vector<e_PlayerRole> &GetRoles() const;
 

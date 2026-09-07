@@ -122,7 +122,14 @@ namespace blunted {
     if (adaptedCaption.compare("") == 0) adaptedCaption = " ";
     if (caption.compare(adaptedCaption) != 0) {
       caption = adaptedCaption;
-      std::transform(caption.begin(), caption.end(), caption.begin(), ::toupper);
+      // Uppercase ASCII only: applying ::toupper byte-wise to UTF-8 names with
+      // accented characters (í, á, é, ...) corrupts the multi-byte sequences and
+      // SDL_ttf then fails to render the caption (blank name over the player).
+      std::transform(caption.begin(), caption.end(), caption.begin(),
+                     [](char c) {
+                       unsigned char uc = static_cast<unsigned char>(c);
+                       return (uc < 128) ? static_cast<char>(::toupper(uc)) : c;
+                     });
       Redraw();
     }
   }
