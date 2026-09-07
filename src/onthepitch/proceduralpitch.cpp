@@ -361,21 +361,21 @@ void CreateChunk(int i, int resX, int resY, int resSpecularX, int resSpecularY, 
   pitchDiffuseTex->resourceMutex.lock();
   pitchDiffuseTex->GetResource()->DeleteTexture();
   pitchDiffuseTex->GetResource()->CreateTexture(e_InternalPixelFormat_SRGB8, e_PixelFormat_RGB, resX, resY, false, true, true, true);
-  pitchDiffuseTex->GetResource()->UpdateTexture(pitchDiffuseSurf, false, true);
+  pitchDiffuseTex->GetResource()->UpdateTexture(pitchDiffuseTex, pitchDiffuseSurf, false, true);
   pitchDiffuseTex->resourceMutex.unlock();
   SDL_DestroySurface(pitchDiffuseSurf);
 
   pitchSpecularTex->resourceMutex.lock();
   pitchSpecularTex->GetResource()->DeleteTexture();
   pitchSpecularTex->GetResource()->CreateTexture(e_InternalPixelFormat_RGB8, e_PixelFormat_RGB, resSpecularX, resSpecularY, false, true, true, true);
-  pitchSpecularTex->GetResource()->UpdateTexture(pitchSpecularSurf, false, true);
+  pitchSpecularTex->GetResource()->UpdateTexture(pitchSpecularTex, pitchSpecularSurf, false, true);
   pitchSpecularTex->resourceMutex.unlock();
   SDL_DestroySurface(pitchSpecularSurf);
 
   pitchNormalTex->resourceMutex.lock();
   pitchNormalTex->GetResource()->DeleteTexture();
   pitchNormalTex->GetResource()->CreateTexture(e_InternalPixelFormat_RGB8, e_PixelFormat_RGB, resNormalX, resNormalY, false, true, true, true);
-  pitchNormalTex->GetResource()->UpdateTexture(pitchNormalSurf, false, true);
+  pitchNormalTex->GetResource()->UpdateTexture(pitchNormalTex, pitchNormalSurf, false, true);
   pitchNormalTex->resourceMutex.unlock();
   SDL_DestroySurface(pitchNormalSurf);
 

@@ -9,6 +9,10 @@
 
 #include "managers/environmentmanager.hpp"
 
+#include "types/resource.hpp"
+
+#include "systems/graphics/resources/texture.hpp"
+
 namespace blunted {
 
   // 'camera' view
@@ -67,13 +71,19 @@ namespace blunted {
   class Renderer3DMessage_CreateTexture : public Command {
 
     public:
-      Renderer3DMessage_CreateTexture(e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, int width, int height, bool alpha = false, bool repeat = true, bool mipmaps = true, bool filter = true, bool compareDepth = false) : Command("r3dmsg_CreateTexture"), internalPixelFormat(internalPixelFormat), pixelFormat(pixelFormat), width(width), height(height), alpha(alpha), repeat(repeat), mipmaps(mipmaps), filter(filter), compareDepth(compareDepth) {};
+      Renderer3DMessage_CreateTexture(e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, int width, int height, bool alpha = false, bool repeat = true, bool mipmaps = true, bool filter = true, bool compareDepth = false, SDL_Surface *source = NULL, boost::intrusive_ptr<Resource<Texture> > texture = boost::intrusive_ptr<Resource<Texture> >()) : Command("r3dmsg_CreateTexture"), internalPixelFormat(internalPixelFormat), pixelFormat(pixelFormat), width(width), height(height), alpha(alpha), repeat(repeat), mipmaps(mipmaps), filter(filter), compareDepth(compareDepth), source(0), texture(texture) {
+        if (source) this->source = SDL_ConvertSurfaceAndColorspace(source, source->format, NULL, SDL_COLORSPACE_SRGB, 0);
+      };
 
       int textureID;
 
     protected:
       virtual bool Execute(void *caller = NULL) {
-        textureID = static_cast<Renderer3D*>(caller)->CreateTexture(internalPixelFormat, pixelFormat, width, height, alpha, repeat, mipmaps, filter, false, compareDepth); // false == multisample
+        Renderer3D *renderer = static_cast<Renderer3D*>(caller);
+        textureID = renderer->CreateTexture(internalPixelFormat, pixelFormat, width, height, alpha, repeat, mipmaps, filter, false, compareDepth); // false == multisample
+        if (source) renderer->UpdateTexture(textureID, source, alpha, mipmaps);
+        if (texture != boost::intrusive_ptr<Resource<Texture> >()) texture->GetResource()->SetID(textureID);
+        if (source) { SDL_DestroySurface(source); source = 0; }
 
         return true;
       }
@@ -87,6 +97,8 @@ namespace blunted {
       bool mipmaps;
       bool filter;
       bool compareDepth;
+      SDL_Surface *source;
+      boost::intrusive_ptr<Resource<Texture> > texture;
 
   };
 
@@ -138,7 +150,7 @@ namespace blunted {
   class Renderer3DMessage_UpdateTexture : public Command {
 
     public:
-      Renderer3DMessage_UpdateTexture(int textureID, SDL_Surface *source, bool alpha = false, bool mipmaps = true) : Command("r3dmsg_UpdateTexture"), textureID(textureID), alpha(alpha), mipmaps(mipmaps) {
+      Renderer3DMessage_UpdateTexture(boost::intrusive_ptr<Resource<Texture> > texture, SDL_Surface *source, bool alpha = false, bool mipmaps = true) : Command("r3dmsg_UpdateTexture"), texture(texture), alpha(alpha), mipmaps(mipmaps) {
         // copy image so caller doesn't have to wait for update to complete
         // DAMN YOU SDL! this function won't actually copy right surface, just make a shallow copy instead. that explains a crash i got. fuuufuuuuuu
         //this->source = SDL_CreateRGBSurfaceFrom(source->pixels, source->w, source->h, 0, source->pitch, 0, 0, 0, 0);
@@ -149,14 +161,19 @@ namespace blunted {
 
     protected:
       virtual bool Execute(void *caller = NULL) {
-        static_cast<Renderer3D*>(caller)->UpdateTexture(textureID, source, alpha, mipmaps);
+        // the texture may have been created asynchronously (Renderer3DMessage_CreateTexture
+        // without a Wait), so resolve the GL id here, on the renderer thread, by which
+        // time the create message has already run (same queue, FIFO order)
+        int textureID = texture->GetResource()->GetID();
+        if (textureID != -1) static_cast<Renderer3D*>(caller)->UpdateTexture(textureID, source, alpha, mipmaps);
 
         SDL_DestroySurface(this->source);
+        this->source = 0;
 
         return true;
       }
 
-      int textureID;
+      boost::intrusive_ptr<Resource<Texture> > texture;
       SDL_Surface *source;
       bool alpha, mipmaps;
 

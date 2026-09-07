@@ -11,6 +11,8 @@
 
 #include "systems/graphics/rendering/interface_renderer3d.hpp"
 
+#include "types/resource.hpp"
+
 namespace blunted {
 
   class Renderer3D;
@@ -25,8 +27,11 @@ namespace blunted {
 
       void DeleteTexture();
       int CreateTexture(e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, int width, int height, bool alpha, bool repeat, bool mipmaps, bool filter, bool compareDepth = false);
+      // fire-and-forget variant: creates the GL texture (and uploads `source` if given) on the
+      // renderer thread without blocking the caller; the id is written back to the resource there
+      void CreateTextureAsync(boost::intrusive_ptr<Resource<Texture> > resource, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, int width, int height, bool alpha, bool repeat, bool mipmaps, bool filter, SDL_Surface *source = NULL);
       void ResizeTexture(SDL_Surface *image, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, bool alpha, bool mipmaps);
-      void UpdateTexture(SDL_Surface *image, bool alpha, bool mipmaps);
+      void UpdateTexture(boost::intrusive_ptr<Resource<Texture> > resource, SDL_Surface *image, bool alpha, bool mipmaps);
 
       void SetID(int value);
       int GetID();

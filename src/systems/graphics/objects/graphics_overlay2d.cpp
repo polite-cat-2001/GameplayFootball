@@ -58,11 +58,13 @@ namespace blunted {
 
       caller->texture->GetResource()->SetRenderer3D(renderer3D);
     bool alpha = SDL_ISPIXELFORMAT_ALPHA(image->format);
-    caller->texture->GetResource()->CreateTexture(
+    // async: no round-trip to the renderer thread per 2D image, which would otherwise
+    // stall the game thread for ~one render frame per texture during menu page loads
+    caller->texture->GetResource()->CreateTextureAsync(
+        caller->texture,
         e_InternalPixelFormat_RGBA8,
         alpha ? e_PixelFormat_RGBA : e_PixelFormat_RGB, image->w, image->h,
-        alpha, false, false, false);
-    caller->texture->GetResource()->UpdateTexture(image, alpha, false);
+        alpha, false, false, false, image);
       caller->position[0] = 0;
       caller->position[1] = 0;
       caller->size[0] = image->w;
@@ -96,7 +98,7 @@ namespace blunted {
         alpha ? e_PixelFormat_RGBA : e_PixelFormat_RGB, alpha, false);
     } else {
       // no resize, just update
-      caller->texture->GetResource()->UpdateTexture(image, alpha, false);
+      caller->texture->GetResource()->UpdateTexture(caller->texture, image, alpha, false);
     }
   }
 

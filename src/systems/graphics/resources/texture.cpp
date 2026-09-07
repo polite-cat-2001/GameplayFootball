@@ -66,6 +66,18 @@ namespace blunted {
     return textureID;
   }
 
+  void Texture::CreateTextureAsync(boost::intrusive_ptr<Resource<Texture> > resource, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, int width, int height, bool alpha, bool repeat, bool mipmaps, bool filter, SDL_Surface *source) {
+    assert(renderer3D);
+
+    boost::intrusive_ptr<Renderer3DMessage_CreateTexture> createTexture(new Renderer3DMessage_CreateTexture(internalPixelFormat, pixelFormat, width, height, alpha, repeat, mipmaps, filter, false, source, resource)); // false == multisample
+    renderer3D->messageQueue.PushMessage(createTexture);
+    // no Wait(): the id is written back to the resource on the renderer thread, and any
+    // follow-up UpdateTexture messages are processed after this one (same queue, FIFO)
+
+    this->width = width;
+    this->height = height;
+  }
+
   void Texture::ResizeTexture(SDL_Surface *image, e_InternalPixelFormat internalPixelFormat, e_PixelFormat pixelFormat, bool alpha, bool mipmaps) {
     assert(renderer3D);
     assert(textureID != -1);
@@ -76,12 +88,11 @@ namespace blunted {
     //resizeTexture->Wait();
   }
 
-  void Texture::UpdateTexture(SDL_Surface *image, bool alpha, bool mipmaps) {
+  void Texture::UpdateTexture(boost::intrusive_ptr<Resource<Texture> > resource, SDL_Surface *image, bool alpha, bool mipmaps) {
     assert(renderer3D);
-    assert(textureID != -1);
 
     bool _alpha = SDL_ISPIXELFORMAT_ALPHA(image->format);
-    boost::intrusive_ptr<Renderer3DMessage_UpdateTexture> updateTexture(new Renderer3DMessage_UpdateTexture(textureID, image, _alpha, mipmaps));
+    boost::intrusive_ptr<Renderer3DMessage_UpdateTexture> updateTexture(new Renderer3DMessage_UpdateTexture(resource, image, _alpha, mipmaps));
     renderer3D->messageQueue.PushMessage(updateTexture);
     //updateTexture->Wait();
   }

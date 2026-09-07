@@ -87,7 +87,7 @@ namespace blunted {
         bool bilinear = true;
         bool alpha = SDL_ISPIXELFORMAT_ALPHA(image->format);
         diffuseTexture->GetResource()->CreateTexture(alpha ? e_InternalPixelFormat_SRGBA8 : e_InternalPixelFormat_SRGB8, alpha ? e_PixelFormat_RGBA : e_PixelFormat_RGB, image->w, image->h, alpha, repeat, mipmaps, bilinear);
-        diffuseTexture->GetResource()->UpdateTexture(image, alpha, true);
+        diffuseTexture->GetResource()->UpdateTexture(diffuseTexture, image, alpha, true);
         surface->resourceMutex.unlock();
       }
     }
@@ -105,7 +105,7 @@ namespace blunted {
         SDL_Surface *image = surface->GetResource()->GetData();
         normalTexture->GetResource()->SetRenderer3D(renderer3D);
         normalTexture->GetResource()->CreateTexture(e_InternalPixelFormat_RGB8, e_PixelFormat_RGB, image->w, image->h, false, true, true, true);
-        normalTexture->GetResource()->UpdateTexture(image, false, true);
+        normalTexture->GetResource()->UpdateTexture(normalTexture, image, false, true);
         surface->resourceMutex.unlock();
       }
     }
@@ -123,7 +123,7 @@ namespace blunted {
         SDL_Surface *image = surface->GetResource()->GetData();
         specularTexture->GetResource()->SetRenderer3D(renderer3D);
         specularTexture->GetResource()->CreateTexture(e_InternalPixelFormat_RGB8, e_PixelFormat_RGB, image->w, image->h, false, true, true, true);
-        specularTexture->GetResource()->UpdateTexture(image, false, true);
+        specularTexture->GetResource()->UpdateTexture(specularTexture, image, false, true);
         surface->resourceMutex.unlock();
       }
     }
@@ -141,7 +141,7 @@ namespace blunted {
         SDL_Surface *image = surface->GetResource()->GetData();
         illuminationTexture->GetResource()->SetRenderer3D(renderer3D);
         illuminationTexture->GetResource()->CreateTexture(e_InternalPixelFormat_RGB8, e_PixelFormat_RGB, image->w, image->h, false, true, true, true);
-        illuminationTexture->GetResource()->UpdateTexture(image, false, true);
+        illuminationTexture->GetResource()->UpdateTexture(illuminationTexture, image, false, true);
         surface->resourceMutex.unlock();
       }
     }
