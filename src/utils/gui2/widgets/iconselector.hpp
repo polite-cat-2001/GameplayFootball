@@ -69,6 +69,12 @@ namespace blunted {
       int selectedEntry;
       float visibleSelectedEntry;
 
+      // single step animates ~300ms (exponential ease toward the target);
+      // hold-to-repeat advances a step every scrollRepeatDelay_ms
+      float scrollAnimTime_ms = 300.0f;
+      int scrollRepeatDelay_ms = 60;
+      int scrollRepeatAccum_ms = 60;
+
       int fadeOut_ms;
       int fadeOutTime_ms;
 

@@ -18,6 +18,7 @@
 #include "guitask.hpp"
 
 #include "managers/usereventmanager.hpp"
+#include "managers/environmentmanager.hpp"
 
 namespace blunted {
 
@@ -81,6 +82,8 @@ namespace blunted {
 
     auto currentKeyState = UserEventManager::GetInstance().GetKeyboardState();
 
+    unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
+
     for (auto keyState : currentKeyState) {
       auto pressedKey = keyState.first;
 
@@ -90,8 +93,27 @@ namespace blunted {
 
       needsKeyboardEvent = true;
 
+      // deterministic auto-repeat: remember when the key went down, and emit a
+      // repeat every keyRepeatInterval_ms once it has been held for
+      // keyRepeatDelay_ms. SDL3 also delivers OS-level key repeat events, but
+      // those would re-arm the old "diff > 250" check repeatedly, so we drive
+      // repeats from our own clock instead.
+      bool firstPress = prevKeyState.count(pressedKey) == 0;
+      bool repeat = false;
+      if (firstPress) {
+        keyDownSince_ms[pressedKey] = now_ms;
+        keyLastRepeat_ms[pressedKey] = now_ms;
+      } else {
+        unsigned long downFor_ms = now_ms - keyDownSince_ms[pressedKey];
+        unsigned long sinceRepeat_ms = now_ms - keyLastRepeat_ms[pressedKey];
+        if (downFor_ms >= keyRepeatDelay_ms && sinceRepeat_ms >= keyRepeatInterval_ms) {
+          repeat = true;
+          keyLastRepeat_ms[pressedKey] = now_ms;
+        }
+      }
+
       // only when pressed first time
-      if (prevKeyState.count(pressedKey) == 0) {
+      if (firstPress) {
         event->SetKeyOnce(pressedKey);
 
         if (keyboard) {
@@ -106,8 +128,8 @@ namespace blunted {
         }
       }
 
-      // when pressed first time, or when held for longer than some threshold
-      if (prevKeyState.count(pressedKey) == 0 || UserEventManager::GetInstance().GetLastKeyPressDiff_ms(pressedKey) > 250) {
+      // first press or (held long enough and repeat interval elapsed)
+      if (firstPress || repeat) {
         event->SetKeyRepeated(pressedKey);
 
         if (keyboard) {
@@ -126,6 +148,14 @@ namespace blunted {
           }
         }
       }
+    }
+
+    // forget keys that were released
+    for (auto it = keyDownSince_ms.begin(); it != keyDownSince_ms.end();) {
+      if (currentKeyState.count(it->first) == 0) it = keyDownSince_ms.erase(it); else ++it;
+    }
+    for (auto it = keyLastRepeat_ms.begin(); it != keyLastRepeat_ms.end();) {
+      if (currentKeyState.count(it->first) == 0) it = keyLastRepeat_ms.erase(it); else ++it;
     }
 
     prevKeyState = currentKeyState;

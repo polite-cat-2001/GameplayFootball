@@ -43,8 +43,6 @@ namespace blunted {
   void Gui2IconSelector::Process() {
     //printf("processing %s\n", GetName().c_str());
 
-    float scrollSpeedFactor = 0.5f;
-
     bool redraw = false;
 
     if (fadeOut_ms <= fadeOutTime_ms) {
@@ -54,13 +52,24 @@ namespace blunted {
       }
     }
 
+    // time-based ease toward the target: a single step settles in ~scrollAnimTime_ms
+    // (exponential with tau = scrollAnimTime_ms/3 reaches ~95% of the step in one
+    // scrollAnimTime_ms). Input always moves the target immediately (no settle
+    // gate), so pressing again mid-animation just extends the chase to the new target.
     if (visibleSelectedEntry != (float)selectedEntry) redraw = true;
-    if (fabs(visibleSelectedEntry - (float)selectedEntry) <= 0.08f * scrollSpeedFactor) {
+    float diff = (float)selectedEntry - visibleSelectedEntry;
+    float dt = (float)windowManager->GetTimeStep_ms();
+    float ease = 1.0f - expf(-dt / (scrollAnimTime_ms / 3.0f));
+    if (fabs(diff) <= 0.02f) {
       visibleSelectedEntry = (float)selectedEntry;
     } else {
-      if (visibleSelectedEntry > (float)selectedEntry) visibleSelectedEntry -= 0.08f * scrollSpeedFactor;
-      else if (visibleSelectedEntry < (float)selectedEntry) visibleSelectedEntry += 0.08f * scrollSpeedFactor;
+      visibleSelectedEntry += diff * ease;
+      if (fabs((float)selectedEntry - visibleSelectedEntry) <= 0.02f) visibleSelectedEntry = (float)selectedEntry;
     }
+
+    // hold-to-repeat accumulator (capped)
+    scrollRepeatAccum_ms += windowManager->GetTimeStep_ms();
+    if (scrollRepeatAccum_ms > scrollRepeatDelay_ms) scrollRepeatAccum_ms = scrollRepeatDelay_ms;
 
     if (redraw) Redraw();
 
@@ -184,18 +193,24 @@ namespace blunted {
   void Gui2IconSelector::ProcessWindowingEvent(WindowingEvent *event) {
     event->Ignore();
 
-    if (visibleSelectedEntry == (float)selectedEntry) {
-      Vector3 direction = event->GetDirection();
-      int xoffset = 0;
-      if (direction.coords[0] < -0.75) xoffset = -1;
-      if (direction.coords[0] > 0.75) xoffset = 1;
-      if (xoffset != 0) event->Accept();
+    Vector3 direction = event->GetDirection();
+    int xoffset = 0;
+    if (direction.coords[0] < -0.75) xoffset = -1;
+    if (direction.coords[0] > 0.75) xoffset = 1;
 
-      int prevSelectedEntry = selectedEntry;
-      selectedEntry += xoffset;
-      if (selectedEntry > (signed int)entries.size() - 1) selectedEntry = (signed int)entries.size() - 1;
-      if (selectedEntry < 0) selectedEntry = 0;
-      if (selectedEntry != prevSelectedEntry) sig_OnChange();
+    if (xoffset != 0) {
+      // accept immediately: the target moves now, the chase animation follows.
+      // Holding fires a direction event every frame (keyboard repeat / stick),
+      // so throttle repeat to one step per scrollRepeatDelay_ms.
+      event->Accept();
+      if (scrollRepeatAccum_ms >= scrollRepeatDelay_ms) {
+        scrollRepeatAccum_ms = 0;
+        int prevSelectedEntry = selectedEntry;
+        selectedEntry += xoffset;
+        if (selectedEntry > (signed int)entries.size() - 1) selectedEntry = (signed int)entries.size() - 1;
+        if (selectedEntry < 0) selectedEntry = 0;
+        if (selectedEntry != prevSelectedEntry) sig_OnChange();
+      }
     }
 
     if (event->IsActivate()) {

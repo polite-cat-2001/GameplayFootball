@@ -59,6 +59,12 @@ namespace blunted {
       Gui2WindowManager *windowManager;
 
       std::map<SDL_Keycode, TimedKeyPress> prevKeyState;
+      // deterministic auto-repeat: independent of SDL3 OS-level repeat events,
+      // which would reset pressTime and stall the old "diff > 250" check
+      std::map<SDL_Keycode, unsigned long> keyDownSince_ms;
+      std::map<SDL_Keycode, unsigned long> keyLastRepeat_ms;
+      unsigned long keyRepeatDelay_ms = 250;
+      unsigned long keyRepeatInterval_ms = 40;
       bool prevButtonState[_JOYSTICK_MAX][_JOYSTICK_MAXBUTTONS];
       bool prevAxisState[_JOYSTICK_MAX][_JOYSTICK_MAXAXES];
 
