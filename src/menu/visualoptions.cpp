@@ -27,8 +27,12 @@ VisualOptionsPage::VisualOptionsPage(Gui2WindowManager *windowManager, const Gui
 
   kitSelectionPulldown[0]->AddEntry("Kit 01", "team1kit01");
   kitSelectionPulldown[0]->AddEntry("Kit 02", "team1kit02");
+  kitSelectionPulldown[0]->AddEntry("Kit 03", "team1kit03");
+  kitSelectionPulldown[0]->AddEntry("Kit 04", "team1kit04");
   kitSelectionPulldown[1]->AddEntry("Kit 01", "team2kit01");
   kitSelectionPulldown[1]->AddEntry("Kit 02", "team2kit02");
+  kitSelectionPulldown[1]->AddEntry("Kit 03", "team2kit03");
+  kitSelectionPulldown[1]->AddEntry("Kit 04", "team2kit04");
   kitSelectionPulldown[1]->SetSelected(1);
   kitSelectionPulldown[0]->sig_OnChange.connect(boost::bind(&VisualOptionsPage::OnChangeKit, this, kitSelectionPulldown[0]));
   kitSelectionPulldown[1]->sig_OnChange.connect(boost::bind(&VisualOptionsPage::OnChangeKit, this, kitSelectionPulldown[1]));
