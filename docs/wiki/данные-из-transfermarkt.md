@@ -88,6 +88,8 @@ data/
 | `teams.kit_url` | `images_teams/<лига>/<клуб>` + генератор китов по `template_kit.png` |
 | `teams.logo_url` | скачивание с TM + ресайз 128×128 |
 | `leagues`, `countries`, `regions` | из `competitions.json` + страны |
+| `leagues.tier` | `clubs.json` `tier` лиги → число важности (`tier_to_int` в `mapping.py`): `First Tier`=1 … `Sixth Tier`=6, `Reserve league`=90, `Youth league`=100. Используется для сортировки лиг страны в выборе команды (высший дивизион первым). |
+| `leagues.logo_url` | `images_competitions/<TM-ид лиги>.png` — файл именуется **по уникальному TM-id**, а не по имени лиги (иначе одинаково названные лиги разных стран, напр. две «Bundesliga» или несколько «Premier League», писались бы в один файл и показывали чужой логотип). |
 
 ### Киты
 
@@ -198,6 +200,10 @@ GF `CalculateStat`).
    лига → команда. Первый пункт списка стран — «National Teams» (id `national`): выбирается
    сборная сразу, без ступени лиги (лига 280 `National Teams`, `country_id = NULL`).
    Дефолт — первая по алфавиту страна; «National Teams» — на индексе 0.
+   **Лиги страны сортируются по важности** (`order by coalesce(tier, 99999), name`): высший
+   дивизион первым, затем ниже по пирамиде, резервные/молодёжные — в конце. Источник — колонка
+   `leagues.tier` (см. маппинг выше; для Англии: PL → Championship → League One → League Two →
+   National League → North/South → PL2).
    **Страны без лиг отфильтрованы** (`countries join leagues`): артефакт-страна
    «International» (id 1) оставалась бы тупиком — пустой выбор лиги и SQL-краш
    `near "and"` в `AddTeams` (`where league_id =  and ...`). В `AddLeagues`/`AddTeams`
