@@ -69,11 +69,19 @@ namespace blunted {
       int selectedEntry;
       float visibleSelectedEntry;
 
-      // single step animates ~300ms (exponential ease toward the target);
-      // hold-to-repeat advances a step every scrollRepeatDelay_ms
+      // single step animates ~300ms (exponential ease toward the target).
+      // Auto-repeat: a tap steps once immediately; holding must last
+      // scrollHoldDelay_ms before it starts repeating, then steps every
+      // scrollRepeatDelay_ms while held. The repeat timer only counts while a
+      // direction is continuously held, so a noisy analog stick near the
+      // deadzone can't bunch up steps into skips.
       float scrollAnimTime_ms = 300.0f;
+      int scrollHoldDelay_ms = 250;
       int scrollRepeatDelay_ms = 60;
-      int scrollRepeatAccum_ms = 60;
+      int scrollRepeatAccum_ms = 250;
+      bool scrollHeld = false;
+      int scrollHeldX = 0;
+      bool scrollDirEventThisFrame = false;
 
       int fadeOut_ms;
       int fadeOutTime_ms;

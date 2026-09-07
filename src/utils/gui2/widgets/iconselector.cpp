@@ -67,9 +67,32 @@ namespace blunted {
       if (fabs((float)selectedEntry - visibleSelectedEntry) <= 0.02f) visibleSelectedEntry = (float)selectedEntry;
     }
 
-    // hold-to-repeat accumulator (capped)
-    scrollRepeatAccum_ms += windowManager->GetTimeStep_ms();
-    if (scrollRepeatAccum_ms > scrollRepeatDelay_ms) scrollRepeatAccum_ms = scrollRepeatDelay_ms;
+    // Auto-repeat: while a direction is held continuously, count down
+    // scrollRepeatAccum_ms toward the next step. A fresh press sets it to
+    // scrollHoldDelay_ms (so a tap steps once and holding must last that long
+    // before repeating); after that each step re-arms it to scrollRepeatDelay_ms.
+    // The timer only counts while held, so a jittery analog stick near the
+    // deadzone (which clears scrollHeld between frames) can't stack up steps.
+    if (scrollHeld) {
+      scrollRepeatAccum_ms -= windowManager->GetTimeStep_ms();
+      if (scrollRepeatAccum_ms <= 0) {
+        scrollRepeatAccum_ms = scrollRepeatDelay_ms;
+        int prevSelectedEntry = selectedEntry;
+        selectedEntry += scrollHeldX;
+        if (selectedEntry > (signed int)entries.size() - 1) selectedEntry = (signed int)entries.size() - 1;
+        if (selectedEntry < 0) selectedEntry = 0;
+        if (selectedEntry != prevSelectedEntry) sig_OnChange();
+      }
+    }
+
+    // a direction is only "held" while a direction event arrives each frame
+    // (keyboard/joystick repeat). If no direction event came in this frame the
+    // input was released, so clear the hold state.
+    if (!scrollDirEventThisFrame) {
+      scrollHeld = false;
+      scrollHeldX = 0;
+    }
+    scrollDirEventThisFrame = false;
 
     if (redraw) Redraw();
 
@@ -200,17 +223,23 @@ namespace blunted {
 
     if (xoffset != 0) {
       // accept immediately: the target moves now, the chase animation follows.
-      // Holding fires a direction event every frame (keyboard repeat / stick),
-      // so throttle repeat to one step per scrollRepeatDelay_ms.
       event->Accept();
-      if (scrollRepeatAccum_ms >= scrollRepeatDelay_ms) {
-        scrollRepeatAccum_ms = 0;
+      scrollDirEventThisFrame = true;
+      // a fresh press (direction went from released to held) steps once right
+      // away and arms the auto-repeat at scrollHoldDelay_ms; the repeat then
+      // continues every scrollRepeatDelay_ms in Process() while held.
+      if (!scrollHeld || scrollHeldX != xoffset) {
+        scrollHeld = true;
+        scrollHeldX = xoffset;
+        scrollRepeatAccum_ms = scrollHoldDelay_ms;
         int prevSelectedEntry = selectedEntry;
         selectedEntry += xoffset;
         if (selectedEntry > (signed int)entries.size() - 1) selectedEntry = (signed int)entries.size() - 1;
         if (selectedEntry < 0) selectedEntry = 0;
         if (selectedEntry != prevSelectedEntry) sig_OnChange();
       }
+    } else {
+      scrollDirEventThisFrame = true;
     }
 
     if (event->IsActivate()) {
