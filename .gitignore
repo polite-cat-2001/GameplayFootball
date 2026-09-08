@@ -8,6 +8,9 @@ vcpkg_installed/
 # Visual Studio output / intermediate dirs
 out/
 .vs/
+
+# Transfermarkt data cache (downloaded, regenerable)
+tm_cache.sqlite3
 Release/
 Debug/
 x64/
