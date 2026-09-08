@@ -5,10 +5,17 @@
 Конвейер поставки актуальных футбольных данных (составы, клубы, сборные, стоимости) из
 Transfermarkt в две игры: GameplayFootball и football_collection. Источник — форк
 [transfermarkt-api](https://github.com/packee-dev/transfermarkt-api) (FastAPI-обёртка над
-скрейпингом transfermarkt.com, дополнена сборными и тренерами). Единый **канонический JSON на
-TM-id** — источник истины; конвертеры производят из него GF SQLite и Flutter-assets.
+скрейпингом transfermarkt.com, дополнена сборными и тренерами). Источник истины — **канон**:
+прод-формат сейчас — вложенный срез `data/full/*.json` (см. [[пайплайн-данных]]), целевой
+(data v2) — плоский JSON на TM-id; конвертеры производят из канона GF SQLite и Flutter-assets.
 
-Ветка разработки: `develop` (фичи — из `squads-update`). См. также [[база-данных]].
+Ветка разработки (данные и правки кода GF под них): `squads-update`. См. также [[база-данных]].
+Сводный договор конвейера (звенья, границы форматов, порядок прогона, версионирование) —
+[[пайплайн-данных]].
+
+> **Текущий прод-формат — вложенный `data/full/*.json`** (страны→лиги→клубы→игроки) +
+> `data/images/`, см. [[пайплайн-данных]]. Плоский канон на TM-id, описанный в разделе
+> «Канонический формат», — **целевой формат data v2**, в проде не используется.
 
 ## Схема конвейера
 
@@ -16,21 +23,34 @@ TM-id** — источник истины; конвертеры производ
 transfermarkt.com
    │  (HTML + внутренние JSON-API)
    ▼
-transfermarkt-api  (локальный FastAPI, :8000)
-   │  HTML 1.5 rps / CDN 10 rps (probe 2026-08-29), resume-кэш, curl_cffi
+transfermarkt-api             локальный FastAPI; скрейпер по умолчанию ждёт его на
+                              http://127.0.0.1:8001 (дефолт API_BASE в config.py)
+   │  HTTP + CDN-картинки (дефолты config.py скрейпера: HTML 2.0 rps / CDN 15 rps),
+   │  resume-кэш, curl_cffi
    ▼
-скрейпер (transfermarkt_scrapper)
+transfermarkt_scrapper        краул → resume-кэш → срезы
    │
    ▼
-канон-JSON на TM-id  (единый источник истины)
-   ├──► конвертер 1 → GF SQLite (teams/players/leagues + киты, логотипы)
-   └──► конвертер 2 → Flutter assets (prepared_tm_*.json) для football_collection
+data/full/*.json (вложенный) + data/images/*     ← прод-формат канона «v1»
+   ├──► ratings-generator ────────┐
+   ├──► kit-generator ────────────┼──► спеки/PNG по TM-id (параллельны, см. [[пайплайн-данных]])
+   └──► tm-gf-face-generator ─────┘
+   ▼
+tm-gf-import                   конвертер «канон → игровой каталог данных» (БД + медиа)
+   ▼
+GameplayFootball/data/databases/default         ← потребляет игра
 ```
 
 Скрейпер ходит **не на transfermarkt напрямую**, а на локальный transfermarkt-api, который уже
 скрейпит TM. Лимит ≤2 запроса/сек к TM обязателен — при частых запросах TM банит IP надолго.
+football_collection — второй потребитель тех же данных (bundled `prepared_tm_*.json`, см.
+[[смежные-проекты]]); её конвертер вне этой ленты.
 
 ## Канонический формат
+
+> Раздел описывает **плоский канон** (`build_canon.py` + `canon_schema.json` в скрейпере) —
+> целевой формат data v2. В проде сейчас вложенный `data/full/*.json`; генераторы и импорт
+> читают его, а не плоский канон.
 
 Ключ всех сущностей — строковый **TM-id**. Никакой GF-специфики в каноне: `base_stat`,
 `profile_xml`, формации, цвета в формате GF считает конвертер.
@@ -74,15 +94,15 @@ data/
 
 | GF-поле | Источник / логика |
 |---|---|
-| `players.role` | маппинг TM-позиции → GF-токен: Centre-Forward→ST, Left Winger→AM L, Defensive Midfield→DM, Left-Back→D/WB L…; `position.other` — доп. позиции через `/` |
-| `players.base_stat` | формула из `market_value` (лог → 0..1), возрастной корректир делает `CalculateStat` в игре |
+| `players.role` | маппинг TM-позиции → GF-токен: Centre-Forward→ST, Left Winger→AM L, Defensive Midfield→DM, Left-Back→D/WB L…; `position.other` — доп. позиции через `/`. **Сборные**: роль из точного `position` (страница состава сборной, поле `position` API — те же семантики, что у клубных записей; покрытие 100%). Грубые категории (`Defender`/`Midfield`/`Attack`) и клубная роль игрока как фолбэк **убраны**. В `POSITION_MAP` добавлены обобщённые значения страницы состава: `Midfielder`→CM, `Striker`→ST, `Defender`→CB |
+| `players.base_stat` | формула из `market_value` (лог → 0..1), возрастной корректир делает `CalculateStat` в игре. **Игроки сборных без клубной записи** (NT-only, напр. сборная КНДР) тоже оценены: ratings-generator гоняет их с нейтральной экономикой лиги (eco=1.0, `league=""` → нулевые группы калибровки) |
 | `players.profile_xml` | 22 стата по роли, тот же алгоритм, что в GF (`GetDefaultProfile`, `src/utils.cpp`); исследование-прототип с калибровкой по FIFA — см. «Калибровка 22 статов по FIFA» на этой странице |
 | `players.height` | см → м (1.87) |
 | `players.weight` | эвристика (рост + позиция), TM вес не даёт |
-| `players.formationorder` | стартовые 11 (лучшие по `base_stat` + роль), слот формации `p(i+1)` ↔ игрок `[i]` |
-| `players.nationalteam_id` | из состава сборной; `nationalteamformationorder` — аналогично |
-| `teams.formation_xml` | шаблон из схем (4-2-3-1 / 4-3-3…), дефолт GF в `mainmenu.cpp:492` |
-| `teams.tactics_xml` | дефолт GF или случайные стили (possession/counter/…) |
+| `players.formationorder` | **слот расстановки XI** (`tm-gf-import/builders/lineup.py`): игра ставит игрока с индексом i в слот `p(i+1)` формирования, поэтому порядок кодирует расстановку (GK→LB→CB→CB→RB→CM→CM→LM→AM→RM→CF), а не рейтинг; XI выбирается по `base_stat` в пределах роли слота, бенч 11+ |
+| `players.nationalteam_id` | из состава сборной; `nationalteamformationorder` — аналогично (слоты той же расстановки) |
+| `teams.formation_xml` | дефолт игры 4-2-3-1 — байт-в-байт `defaultFormation` из `mainmenu.cpp:492` (`DEFAULT_FORMATION` в `tm-gf-import/schema.py`; пишет `builders/teams.py`) |
+| `teams.tactics_xml` | дефолт `defaultTactics` из `mainmenu.cpp:551` (`DEFAULT_TACTICS` в `tm-gf-import/schema.py`; стили possession/counter… в импорте не реализованы) |
 | `teams.color1/color2` | `clubs.colors` HEX → «R, G, B» |
 | `teams.shortname` | первые 3 буквы (или ручной маппинг топ-клубов) |
 | `teams.kit_url` | `images_teams/<лига>/<клуб>` + генератор китов по `template_kit.png` |
@@ -186,15 +206,19 @@ data/
 ### Масштаб
 
 Статы во вьювере — **шкала FIFA 0-99**, а GF хранит статы как 0-1 (множители в `match.cpp`,
-`GetDefaultProfile`). При переносе в `profile_xml` нужна нормализация (÷100 или через
-GF `CalculateStat`).
+`GetDefaultProfile`). Нормализация при переносе в `profile_xml` реализована в импорте
+(`tm-gf-import/builders/players.py`: статы ÷100, `base_stat = overall/100`).
 
 ## Изменения в коде GF
 
-1. `teams.national INTEGER` — колонка; добавить `teams.national` в SELECT в `teamdata.cpp:61`
-   (сейчас проверка `national` на строке 74 никогда не срабатывает).
-2. Сборные — строки в `teams` (league_id → синтетическая лига «International»), игроки — с
-   `nationalteam_id` + `nationalteamformationorder` (запрос в `teamdata.cpp:251` это уже умеет).
+1. **Сборные по лиге «National Teams»** (починено 2026-09-08): колонки `teams.national` в схеме
+   импорта и в игре нет и не нужна — в SELECT `teamdata.cpp:61` добавлен `leagues.name as
+   league_name`, и `national` определяется по имени лиги (`== "National Teams"`), строка 74.
+2. Сборные — строки в `teams` (league_id → синтетическая лига «National Teams», id 280,
+   `country_id = NULL`), игроки — с `nationalteam_id` + `nationalteamformationorder`.
+   Запрос `teamdata.cpp:251` выбирает по `team_id` **или** `nationalteam_id`; сортировка — по
+   `nationalteamformationorder` (строка 249; раньше был несуществующий `nationalformationorder`, а
+   флаг `national` никогда не выставлялся — состав сборной шёл в порядке вставки).
 3. Реальные имена — осознанное решение (личный проект; в `master` остаются фейковые).
 4. **Выбор команд стал трёхступенчатым** (`src/menu/startmatch/teamselect.cpp`): страна →
    лига → команда. Первый пункт списка стран — «National Teams» (id `national`): выбирается
@@ -218,11 +242,15 @@ GF `CalculateStat`).
    лёгкими (id/caption/путь), а селектор держит пул из 9 иконок и назначает их только записям в
    видимой зоне карусели, загружая картинку при первом появлении. Сотни флагов/логотипов (107
    стран, 246 сборных, 280 лиг) больше не аллоцируют текстуру каждая.
-7. **Данные матча**: `formation_xml`/`tactics_xml` у всех команд были NULL — без них матч
-   не расставляет состав и зависал после розыгрыша. Залит дефолт 4-2-3-1 и дефолтные тактики
-   (из `mainmenu.cpp`); `formationorder` (клубы) и `nationalteamformationorder` (сборные)
-   пересобраны: XI = 1 GK + 4 DEF + 5 MID + 1 CF по `base_stat`, бенч = 11+. Команды с <11
-   игроками отфильтрованы из выбора (иначе матч виснет).
+7. **Данные матча** (починено 2026-09-08): раньше импорт писал `formation_xml`/`tactics_xml` = NULL
+   и матч не расставлял состав (зависание после розыгрыша) — shipped-БД чинилась отдельным прогоном
+   заливки дефолта 4-2-3-1 (см. `log.md` 2026-09-05). Теперь импорт пишет дефолт сам:
+   `DEFAULT_FORMATION` (4-2-3-1) + `DEFAULT_TACTICS` в `tm-gf-import/schema.py` — байт-в-байт
+   `defaultFormation`/`defaultTactics` из `mainmenu.cpp` (492-507 / 551-566), применяет
+   `builders/teams.py` для клубов и сборных → свежий импорт готов к матчу без ручного шага.
+   `formationorder` (клубы) и `nationalteamformationorder` (сборные) пересобраны: XI = 1 GK +
+   4 DEF + 5 MID + 1 CF по `base_stat`, бенч = 11+. Команды с <11 игроками отфильтрованы из
+   выбора (иначе матч виснет).
 8. **UI выбора команд**: флаги стран (`images_countries/<id>.png`) — **единый формат 512×512**,
    флаг по центру холста с сохранением собственных пропорций (прозрачные поля), источник —
    flagcdn.com (`w1280`) для ISO-стран + Wikimedia Commons для England/Scotland/Wales/Northern
@@ -261,8 +289,9 @@ GF `CalculateStat`).
   таким игроком имя не появлялось вообще (в т.ч. при ручном выборе). Фолбэк — `PlayerData::GetLastName()`
   возвращает имя, если фамилия пустая (`src/data/playerdata.hpp:23`). Конвертеру при желании можно
   выставлять в `last_name` одно имя, но код должен переживать и пустую фамилию.
-- **Лимит запросов**: HTML 1.5 rps к TM (безопасное значение по probe 2026-08-29: чисто на 2.0 rps
-  sustained, 3.0 rps burst; CDN-картинки не ограничены — 10 rps). Resume-кэш обязателен.
+- **Лимит запросов**: дефолты `config.py` скрейпера — HTML 2.0 rps (burst 2), CDN 15 rps
+  (burst 6); при 403-волнах адаптивный рейт (AIMD) сам режется до минимума (`HTML_RPS_MIN` 0.5,
+  `CDN_RPS_MIN` 5.0). Resume-кэш обязателен.
 - **`extract_from_url`** в transfermarkt-api должен срезать домен (`https://www...`) и ловить
   `AttributeError` — иначе канонические URL ломают парсинг (починено в форке).
 - **Возраст в составе сборной** брать со второго `td.zentriert` (`[2]`), не с первого (номер).
