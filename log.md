@@ -719,3 +719,31 @@ API), рейтинг NT-only игроков (ratings-generator, нейтраль
 (нет в текущих данных), спеллинг «Soulisack/Soulisak» (тот же игрок, tm 1427661), риск коллизий.
 Нужно везде опираться на TM-id. Следующая задача — Слой 2: колонки `tm_id` в БД и перевод всех
 матчингов на id (handoff `docs/reports/2026-09-09-handoff-tm-id-matching.md`).
+
+## [2026-09-09] session | Слой 2: схема БД v2 — матчинг данных на TM-id
+
+Выполнен handoff `docs/reports/2026-09-09-handoff-tm-id-matching.md`: весь конвейер переведён на
+матчинг по **TM-id**, имя — только отображение/логи.
+
+- **Схема БД v2** (`tm-gf-import/schema.py`): колонки `tm_id` в players/teams/leagues/countries
+  (NULL — только синтетика: «International», «National Teams»); rowid остаются ключами, которыми
+  читает игра. `builders/*` пишут `tm_id` при вставке; `countries` в импорте клюются по TM-id, а не
+  по имени; `patch_lineups.py`/`patch_nt_stats.py` матчат сборных/игроков по `tm_id`; дедуп дублей
+  клуба внутри лиги — по TM-id (заменил прежний name-based дедуп, 4721→4406 клубов).
+- **Сквозная проверка репо (субагенты по одному на репо)**: scrapper/api/kit — уже keyed по id
+  (только осознанный name-based `kits/linked.py` и `/search/{name}` API не трогали); **ratings** —
+  найдена и исправлена калибровка OVR по имени лиги (лиги-однофамильцы «Premier League»,
+  «Bundesliga», «Ligue 1» получали чужой остаток) → переведена на TM-id лиги, `output.json`
+  перегенерирован; **face** — `--countries` переведён на id страны, `load_players` несёт
+  `_country_id`.
+- **Пересборка БД** в staging (`import.py --db-only`, бэкап прежней), верификация (tm_id заполнен
+  у всех строк; Англия — Кейн на CF слот 10; Экв. Гвинея — ровно 1 GK Jesús Owono tm 631693, нет
+  Roberto; Лаос — Soulisak Souvankham tm 1427661; пустых `profile_xml` у игроков сборных — 0),
+  подмена `data/databases/default` + `build/Release/databases/default`. Сборка (MSVC x86) проходит,
+  матч headless (`determinism_runner`) работает.
+- **Детерминизм**: данные сменились (свежий срез + калибровка лиг по id), раннер играет армянские
+  клубы, а лига Армении «Premier League» раньше получала чужой остаток — эталон x86 перебазирован
+  `372c4bbd…` → `60380de0…` (см. [[открытые-вопросы]]). linux/x64/macos-эталоны требуют пересъёмки
+  на своих платформах.
+- **НЕ делалось** (следующие милстоуны data v2): плоский canon, `PRAGMA user_version`,
+  `manifest.json`/бандлы, пакеты лиг, LAN, карьера. `football_collection` не затронут.
