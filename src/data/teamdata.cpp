@@ -58,7 +58,7 @@ Vector3 GetDefaultRolePosition(e_PlayerRole role) {
 
 TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
 
-  DatabaseResult *result = GetDB()->Query("select teams.name, teams.logo_url, teams.kit_url, teams.formation_xml, teams.formation_factory_xml, teams.tactics_xml, teams.tactics_factory_xml, teams.shortname, teams.color1, teams.color2 from teams, leagues where teams.id = " + int_to_str(databaseID) + " and leagues.id = teams.league_id limit 1");
+  DatabaseResult *result = GetDB()->Query("select teams.name, teams.logo_url, teams.kit_url, teams.formation_xml, teams.formation_factory_xml, teams.tactics_xml, teams.tactics_factory_xml, teams.shortname, teams.color1, teams.color2, leagues.name as league_name from teams, leagues where teams.id = " + int_to_str(databaseID) + " and leagues.id = teams.league_id limit 1");
 
   std::string formationString;
   std::string factoryFormationString;
@@ -71,7 +71,7 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
   bool national = false;
 
   for (unsigned int c = 0; c < result->data.at(0).size(); c++) {
-    if (result->header.at(c).compare("national") == 0) national = (atoi(result->data.at(0).at(c).c_str()) == 0) ? false : true;
+    if (result->header.at(c).compare("league_name") == 0) national = (result->data.at(0).at(c).compare("National Teams") == 0);
 
     if (result->header.at(c).compare("name") == 0) name = result->data.at(0).at(c);
     if (result->header.at(c).compare("logo_url") == 0) logo_url = result->data.at(0).at(c);
@@ -246,7 +246,7 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
   // load players
 
   std::string order = "formationorder";
-  if (national) order = "nationalformationorder";
+  if (national) order = "nationalteamformationorder";
 
   result = GetDB()->Query("select id from players where team_id = " + int_to_str(teamDatabaseID) + " or nationalteam_id = " + int_to_str(teamDatabaseID) + " order by " + order);
   for (unsigned int r = 0; r < result->data.size(); r++) {
