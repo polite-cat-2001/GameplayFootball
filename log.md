@@ -747,3 +747,13 @@ API), рейтинг NT-only игроков (ratings-generator, нейтраль
   на своих платформах.
 - **НЕ делалось** (следующие милстоуны data v2): плоский canon, `PRAGMA user_version`,
   `manifest.json`/бандлы, пакеты лиг, LAN, карьера. `football_collection` не затронут.
+
+## [2026-09-09] fix | Ярко-красные волосы у игроков с haircolor=red
+Корень: `ResourceManager::Fetch` кэширует по **basename** (`get_file_name`,
+`src/managers/resourcemanager.hpp:47`), без пути. Отладочный `media/objects/helpers/red.png`
+(сплошной `(255,0,0)`, грузится при старте `GameContext`) перехватывал ключ `red.png`, и волосы
+игроков с `haircolor=red` (302 игрока / 224 клуба / 31 сборная, в т.ч. 3 в Aruba: Lentink,
+Vandepitte, Bennett) получали чистый красный вместо `hair/red.png`. Правки `hair/red.png` не
+влияли — файл не читался. Лечение: хелпер переименован `helpers/red.png` → `helper_red.png`
+(`red.ase` обновлён), `hair/red.png` приведён к натуральному медному (насыщенность 77 → 51).
+Ловушка задокументирована в [[архитектура]].
