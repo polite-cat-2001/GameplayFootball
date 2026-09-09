@@ -22,19 +22,25 @@ std::string GetNationalTeamsLeagueID() {
 
 void AddCountries(Gui2IconSelector *selector) {
   // "National Teams" is a special first-stage option; national teams are picked
-  // directly (no league stage) via the "national" entry id.
-  selector->AddEntry("national", "National Teams", "databases/default/images_competitions/nationalteams.png");
+  // directly (no league stage) via the "national" entry id. Its icon is a game
+  // asset (media/textures), not generated data — the data pipeline must not
+  // own or overwrite it.
+  selector->AddEntry("national", "National Teams", "media/textures/nationalteams.png");
 
   // only list countries that actually have leagues: the "International"
   // pseudo-country (and any future league-less country) would leave the league
-  // stage empty and crash the team query
-  DatabaseResult *result = GetDB()->Query("select distinct c.id, c.name from countries c join leagues l on l.country_id = c.id order by c.name");
+  // stage empty and crash the team query. Flags are keyed by the stable TM
+  // country id (countries.tm_id), not the rowid, so they survive DB rebuilds.
+  DatabaseResult *result = GetDB()->Query(
+      "select distinct c.id, c.tm_id, c.name from countries c "
+      "join leagues l on l.country_id = c.id order by c.name");
 
   for (unsigned int r = 0; r < result->data.size(); r++) {
     int id = atoi(result->data.at(r).at(0).c_str());
-    std::string name = result->data.at(r).at(1).c_str();
+    std::string tmId = result->data.at(r).at(1);
+    std::string name = result->data.at(r).at(2).c_str();
 
-    std::string flagPath = "databases/default/images_countries/" + int_to_str(id) + ".png";
+    std::string flagPath = "databases/default/images_countries/" + tmId + ".png";
     if (!boost::filesystem::exists(flagPath)) flagPath = "media/textures/orange.jpg";
     selector->AddEntry(int_to_str(id), name, flagPath);
   }
