@@ -782,3 +782,12 @@ Vandepitte, Bennett) получали чистый красный вместо `
   и `-wal`/`-shm` добавлены в `.gitignore` данных.
 - **НЕ делалось**: плоский canon, бандлы `GameplayFootball-data-<ver>.zip`, `data-versions.json`,
   пакеты лиг, LAN, карьера.
+
+## [2026-09-09] session | handoff: плоский canon + бандлы — следующая задача
+
+Написан handoff `docs/reports/2026-09-09-handoff-flat-canon-bundles.md` и помечен в
+[[открытые-вопросы]] как активная задача: (1) canon становится прод-выходом скрейпера
+(доделать colors сборных + logo/flag urls, прод-генерация из resume-кэша); (2) миграция четырёх
+потребителей (ratings/kit/faces/tm-gf-import) на `data/canon/*` с неизменным выходом;
+(3) бандлы `GameplayFootball-data-<ver>.zip` + реестр `data-versions.json` в репо игры.
+Детерминизм: пересъёмка linux/x64/macos-эталонов — после стабилизации данных этим милстоуном.
