@@ -13,10 +13,9 @@ Transfermarkt в две игры: GameplayFootball и football_collection. Ис�
 Сводный договор конвейера (звенья, границы форматов, порядок прогона, версионирование) —
 [[пайплайн-данных]].
 
-> **Текущий прод-формат — вложенный `data/full/*.json`** (страны→лиги→клубы→игроки) +
-> `data/images/`, см. [[пайплайн-данных]]. Плоский канон на TM-id, описанный в разделе
-> «Канонический формат», — **целевой формат data v2**, в проде не используется. Схема БД уже
-> v2 (колонки `tm_id`, см. ниже); на плоский канон импорт ещё не переведён.
+> **Прод-формат (data v2, с 2026-09-09) — плоский canon `data/canon/*.json` на TM-id** +
+> `data/images/`, см. [[пайплайн-данных]]. Вложенный `data/full/*.json` — legacy-срез, больше
+> не контракт. Схема БД v2 (колонки `tm_id`); импорт читает canon.
 
 ## Схема конвейера
 
@@ -49,27 +48,37 @@ football_collection — второй потребитель тех же данн
 
 ## Канонический формат
 
-> Раздел описывает **плоский канон** (`build_canon.py` + `canon_schema.json` в скрейпере) —
-> целевой формат data v2. В проде сейчас вложенный `data/full/*.json`; генераторы и импорт
-> читают его, а не плоский канон.
-
 Ключ всех сущностей — строковый **TM-id**. Никакой GF-специфики в каноне: `base_stat`,
-`profile_xml`, формации, цвета в формате GF считает конвертер.
+`profile_xml`, формации, цвета в формате GF считает конвертер. `age` в каноне НЕТ (TM-age
+ненадёжен — расходится с birth_date у ~15% игроков): возраст выводится из `birth_date` на дату
+сбора (`meta.snapshot_date`). `imageUrl` в каноне НЕТ: фото keyed по id на диске.
 
 ```
 data/
   meta.json                          # version, snapshot_date, tm_season, counts
-  competitions.json                  # лиги/кубки: id, name, type, country{id,name}, tier, logo
+  competitions.json                  # лиги/кубки: id, name, type, country{id,name},
+                                     #   tier (label "First Tier"/"Reserve league"/...), logo
   clubs.json                         # id, name, colors[] (HEX), stadium{name,seats}, league_id,
                                      #   logo, founded_on
-  national_teams.json                # id, name, coach_id, flag, emblem
-  players.json                       # id, name, first_name, last_name, birth_date, height, weight,
+  national_teams.json                # id, name, colors[], coach_id, flag, emblem
+  players.json                       # id, name, first_name, last_name, birth_date, height,
                                      #   foot, citizenship[], position{main,other}, club_id,
                                      #   national_team_id, shirt_number, market_value,
                                      #   max_market_value, outfitter, is_retired
   players_market_value.json          # id, history[{age,date,clubId,clubName,marketValue}]
   coaches.json                       # id, name, citizenship, current_club_id
 ```
+
+Один рекорд на игрока: клубная и сборная записи слиты в один объект (`club_id` +
+`national_team_id`). Игрок, числящийся и в основе, и в «II»/молодёжной команде, получает **один
+клуб — вторую (резервную/молодёжную) команду**: это сохраняет составы резервов/молодёжки и
+теряет минимум выбираемых команд. Если игрок в двух молодёжках одного клуба (U19↔U21), старшая
+побеждает детерминированно.
+
+Флаги: чёткие страновые флаги скрейпер качает в `data/images/country_flags/<tm_id>.png`
+(512×512, flagcdn/wikimedia) и флаги национальностей в `data/images/nationality_flags/<slug>.png`;
+импорт раскладывает страновые в `images_countries/<tm_id>.png`. `national_teams[].flag` — TM-URL
+флага страны ассоциации (по имени, best-effort; у исторических сборных null).
 
 ### Источники полей (проверено живыми запросами 2026-08-29)
 
@@ -226,6 +235,12 @@ data/
    лига → команда. Первый пункт списка стран — «National Teams» (id `national`): выбирается
    сборная сразу, без ступени лиги (лига 280 `National Teams`, `country_id = NULL`).
    Дефолт — первая по алфавиту страна; «National Teams» — на индексе 0.
+   **Лига «National Teams» не привязана к стране** (`country_id = NULL` в БД; импорт,
+   `builders/leagues.py::build_nt_league`): иначе синтетическая страна «International»
+   получала бы лигу, появлялась в списке стран и сборные были бы в двух местах.
+   **Логотип «National Teams» — игровой ассет** `data/media/textures/nationalteams.png`
+   (путь `media/textures/nationalteams.png`), а не данные: импорт его не создаёт и не
+   перезаписывает.
    **Лиги страны сортируются по важности** (`order by coalesce(tier, 99999), name`): высший
    дивизион первым, затем ниже по пирамиде, резервные/молодёжные — в конце. Источник — колонка
    `leagues.tier` (см. маппинг выше; для Англии: PL → Championship → League One → League Two →
