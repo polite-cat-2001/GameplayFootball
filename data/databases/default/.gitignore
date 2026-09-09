@@ -3,6 +3,9 @@
 # by the data pipeline and should not live in git.
 faces/
 database.sqlite
+database.sqlite-wal
+database.sqlite-shm
+manifest.json
 images_competitions/
 images_teams/
 images_countries/

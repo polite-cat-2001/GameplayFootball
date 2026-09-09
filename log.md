@@ -757,3 +757,28 @@ Vandepitte, Bennett) получали чистый красный вместо `
 влияли — файл не читался. Лечение: хелпер переименован `helpers/red.png` → `helper_red.png`
 (`red.ase` обновлён), `hair/red.png` приведён к натуральному медному (насыщенность 77 → 51).
 Ловушка задокументирована в [[архитектура]].
+
+## [2026-09-09] feat | Версионирование данных: user_version + manifest.json, чистота источника
+
+Закрыт хвост data v2 «PRAGMA user_version + manifest.json» и устранена причина дедупа в импорте.
+
+- **Версионирование** (`tm-gf-import`): `SCHEMA_VERSION = 2` в `schema.py`; импорт ставит
+  `PRAGMA user_version` и пишет `manifest.json` рядом с БД (schema_version, data_version =
+  дата среза `--snapshot-date`, snapshot_id = дата + git-хеши пяти инструментов, coverage,
+  sha256 БД после WAL-checkpoint). Игра (`src/gamecontext.cpp`, `src/gamedefines.hpp`):
+  константа `databaseSchemaVersion = 2`; при старте жёсткая сверка `user_version`
+  (несовместимая БД → понятная ошибка, проверено на user_version=99) и лог `data_version`
+  из манифеста (минимальный JSON-ридер, без зависимостей).
+- **Источник без дублей** (`transfermarkt_scrapper`): `build_pilot_json.py` перезаписывает клуб
+  по TM-id внутри лиги вместо аппенда (лиги Apertura/Clausura давали клуб 2–3×);
+  `data/full/clubs.json` пересобран из resume-кэша офлайн: 4406 клубов / 121 473 игрока,
+  совпадение с прежним файлом по id — 0 потеряно, 0 добавлено (и сборные: 246/5439 — 0/0).
+  Дедуп из импорта (`builders/teams.py`, `players.py`) удалён — источник теперь чистый.
+- **БД** пересобрана, подменена в `data/databases/default` + `build/Release`; контент бит-в-бит
+  совпал с прежней (sha256 тот же), детерминизм не сдвинулся (`60380de0…`). Сборка проходит,
+  `determinism_runner` логирует «Game data: schema v2, data version 2026-09-09».
+- Побочно: восстановлены индексы `idx_players_team/national` в схеме импорта (были только в
+  старой БД вручную; без них выбор команд ~1.5–2.5 с на лигу, см. [[база-данных]]); `manifest.json`
+  и `-wal`/`-shm` добавлены в `.gitignore` данных.
+- **НЕ делалось**: плоский canon, бандлы `GameplayFootball-data-<ver>.zip`, `data-versions.json`,
+  пакеты лиг, LAN, карьера.
