@@ -9,6 +9,11 @@
 #include "base/utils.hpp"
 #include "base/math/bluntmath.hpp"
 
+#include "gamedefines.hpp"
+
+#include <fstream>
+#include <sstream>
+
 #include "scene/scene2d/scene2d.hpp"
 #include "scene/scene3d/scene3d.hpp"
 
@@ -52,6 +57,30 @@ boost::intrusive_ptr<Geometry> largeDebugCircle;
 
 Database *db;
 Properties *config;
+
+// Minimal JSON field reader for manifest.json: returns the raw value of `key`
+// (quotes stripped for strings). Enough for the two fields the game reads; no
+// full JSON parser is pulled in. Returns "" when absent or unparseable.
+static std::string JsonStringField(const std::string &json, const std::string &key) {
+  std::string token = "\"" + key + "\"";
+  size_t pos = json.find(token);
+  if (pos == std::string::npos) return "";
+  pos = json.find(':', pos + token.size());
+  if (pos == std::string::npos) return "";
+  pos = json.find_first_not_of(" \t\r\n", pos + 1);
+  if (pos == std::string::npos) return "";
+  if (json[pos] == '"') {
+    size_t end = json.find('"', pos + 1);
+    return (end == std::string::npos) ? "" : json.substr(pos + 1, end - pos - 1);
+  }
+  size_t end = json.find_first_of(",\r\n}", pos);
+  if (end == std::string::npos) end = json.size();
+  std::string value = json.substr(pos, end - pos);
+  while (!value.empty() && (value[value.size() - 1] == ' ' || value[value.size() - 1] == '\t')) {
+    value.erase(value.size() - 1);
+  }
+  return value;
+}
 
 boost::intrusive_ptr<Image2D> debugImage;
 boost::intrusive_ptr<Image2D> debugOverlay;
@@ -197,6 +226,51 @@ bool InitGameContext(Properties &cfg) {
   db = new Database();
   bool dbSuccess = db->Load("databases/default/database.sqlite");
   if (!dbSuccess) { Log(e_FatalError, "gamecontext", "InitGameContext", "Could not open database"); return false; }
+
+  // Schema version gate: reject an incompatible database with a clear error
+  // instead of failing mid-match. user_version == 0 means legacy data without
+  // any schema marker.
+  {
+    DatabaseResult *versionResult = db->Query("PRAGMA user_version");
+    int dbSchemaVersion = 0;
+    if (versionResult && !versionResult->data.empty()) {
+      dbSchemaVersion = atoi(versionResult->data.at(0).at(0).c_str());
+    }
+    if (dbSchemaVersion != databaseSchemaVersion) {
+      Log(e_FatalError, "gamecontext", "InitGameContext",
+          "Database schema version mismatch: found " + int_to_str(dbSchemaVersion) +
+          ", expected " + int_to_str(databaseSchemaVersion) +
+          ". Re-run the data import (tm-gf-import) or update the game data.");
+      return false;
+    }
+  }
+
+  // Log the data version from manifest.json; its schema_version must agree
+  // with the database's user_version (a mismatch means the DB file was swapped
+  // or modified behind the manifest's back).
+  {
+    std::ifstream manifestFile("databases/default/manifest.json");
+    if (manifestFile.is_open()) {
+      std::stringstream manifestStream;
+      manifestStream << manifestFile.rdbuf();
+      manifestFile.close();
+      std::string manifest = manifestStream.str();
+      std::string schemaVersionStr = JsonStringField(manifest, "schema_version");
+      std::string dataVersion = JsonStringField(manifest, "data_version");
+      if (!schemaVersionStr.empty() && atoi(schemaVersionStr.c_str()) != databaseSchemaVersion) {
+        Log(e_FatalError, "gamecontext", "InitGameContext",
+            "manifest.json schema_version does not match the database: " + schemaVersionStr +
+            " != " + int_to_str(databaseSchemaVersion));
+        return false;
+      }
+      Log(e_Notice, "gamecontext", "InitGameContext",
+          "Game data: schema v" + int_to_str(databaseSchemaVersion) +
+          ", data version " + (dataVersion.empty() ? "unknown" : dataVersion));
+    } else {
+      Log(e_Notice, "gamecontext", "InitGameContext",
+          "Game data: schema v" + int_to_str(databaseSchemaVersion) + ", no manifest.json found");
+    }
+  }
 
 #ifndef __APPLE__
   // macOS creates the graphics/audio systems (and the GL window) on the main
