@@ -36,9 +36,14 @@ $stage = Join-Path $env:TEMP ("GameplayFootball-win32-" + $Arch)
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 
-# binary + data (relative paths in the game resolve against the exe dir)
+# binary + data (relative paths in the game resolve against the exe dir).
+# Data comes from the build dir, where the POST_BUILD copy_data.cmake already
+# applied data/ without the unused player photos (databases/default/faces).
 Copy-Item $exe $stage
-Copy-Item -Recurse -Force data\* $stage
+$release = Join-Path $BuildDir 'Release'
+Copy-Item -Recurse -Force (Join-Path $release 'databases') $stage
+Copy-Item -Recurse -Force (Join-Path $release 'media') $stage
+Copy-Item -Force (Join-Path $release 'football.config') $stage
 
 # dependency DLLs (transitive closure, resolved with dumpbin during the first
 # release; boost/VC names carry the compiler + toolset so match by wildcard)
