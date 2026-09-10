@@ -832,3 +832,13 @@ International (builders/leagues.py::build_nt_league), поэтому «Internati
 data/media/textures/nationalteams.png (путь media/textures/nationalteams.png), импорт больше
 не создаёт пустой плейсхолдер images_competitions/nationalteams.png. Игра пересобрана,
 детерминизм не изменился (7134def2..., check exit 0).
+
+## [2026-09-10] session | пересъёмка macOS-детерминизма после data v2
+macOS arm64 эталон переснят под бандл данных 2026-09-09: сборка `build-mac-dtr` (Release,
+AppleClang, CMake), `determinism_runner run` = cffeb1df6374339ea6693a1f6fd576d4628d37a3,
+`check` exit 0 (воспроизводимо). Записан в `tools/determinism/reference-macos-arm64.txt`
+(был 7b1c4983...). Найдена ловушка применения бандла: zip содержит СОДЕРЖИМОЕ
+`databases/default` без префикса каталога (package_data.py кладёт relpath от data_dir), поэтому
+распаковка в каталог сборки роняла картинки лиг/клубов/флаги и не находила manifest.json;
+правильно — `unzip -o ... -d databases/default`. Зафиксировано в вики ([[пайплайн-данных]]).
+Осталось из милстоуна: публикация бандла в релиз.
