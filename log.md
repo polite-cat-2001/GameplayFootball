@@ -878,3 +878,17 @@ Windows-сторона милстоуна data v2 закрыта с этого �
 выше); x86 (`7134def2...`), linux и x64 закоммичены с этого ПК (`fd8260a`), macOS — с Mac
 (`88ac096`). Ветка `squads-update` запушена в origin. `gh` установлен и авторизован
 (polite-cat-2001). Незакрытым остаётся выпуск **Windows/Linux ассетов** релиза `v0.4.0`.
+
+## [2026-09-11] deploy | v0.4.0 доукомплектован: win32 x86/x64 и linux
+Релиз `v0.4.0` собран целиком — теперь пять ассетов: macOS arm64 (601 МБ, см. запись выше),
+`GameplayFootball-data-2026-09-09.zip` (527 МБ), `GameplayFootball-v0.4.0-win32-x86.zip`
+(548 МБ), `-win32-x64.zip` (548 МБ), `-linux-x86_64.tar.gz` (515 МБ). Все self-contained:
+Windows несёт DLL-замыкание + VC runtime, Linux — бинарник и данные (нужны системные
+SDL3/OpenAL/Boost/sqlite3, Ubuntu 26.04+), macOS — dylib внутри .app.
+
+Починена ловушка упаковки: `package_windows.ps1` брал данные из репозиторного `data\*`, куда
+входят неиспользуемые `databases/default/faces` (4.1 ГБ, 67 205 фото) — архив раздувался бы до
+~4 ГБ. Теперь, как macOS/Linux, скрипт берёт `databases/`, `media/`, `football.config` из
+каталога сборки (там POST_BUILD `copy_data.cmake` уже выкинул `faces`). Windows-архивы проверены:
+`faces` нет, `database.sqlite` schema v2 (193 МБ), `media/`, exe, 18 DLL и VC runtime на месте.
+Вики [[релиз]] синхронизирована (Windows тоже берёт данные из сборки).
