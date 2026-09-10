@@ -852,3 +852,29 @@ data v2 встроена в .app (БД schema v2 193 МБ, 64 788 клубных
 `build-mac-dtr/databases/default`, `football.config` сброшен в пустой дефолт (иначе уезжали
 локальные 0.6/0.4). Установлены `bash` 4 (нужен `package_macos.sh`) и `gh`. Windows/Linux
 ассеты добавляются отдельно с другого ПК — собирать с применённым бандлом.
+
+## [2026-09-10] session | Пересъёмка linux/x64-эталонов и публикация бандла данных
+Windows-сторона милстоуна data v2 закрыта с этого ПК.
+
+Бандл `dist/GameplayFootball-data-2026-09-09.zip` проверен (sha256
+`84098522...` совпал с `data-versions.json`): распакован в чистый каталог, наложен на `media/`
+из сборки, `determinism_runner check 7134def2...` — exit 0, самодостаточен для x86. После
+проверки приложен к релизу `v0.4.0` (`gh release upload`) — теперь в релизе два ассета:
+`GameplayFootball-data-2026-09-09.zip` (527 МБ) и `GameplayFootball-v0.4.0-macos-arm64.zip`.
+
+Эталоны пересняты против data v2 на двух платформах:
+
+- **Linux** = `26aedeb152fa18fe1c79a86043ef52fd4b1c31ee`. Окружение поднято заново: WSL2 не
+  стартовал с «не включена виртуализация», хотя `VirtualMachinePlatform` уже была включена, а
+  гипервизор присутствовал (VBS). Причина — выключенные `HypervisorPlatform` (WHPX) и
+  `Microsoft-Windows-Subsystem-Linux`; после их включения через DISM и перезагрузки `wsl --status`
+  перестал ругаться, Ubuntu установился из Store. Дистрибутив — **Ubuntu 26.04 LTS (resolute),
+  gcc 15, SDL3 3.4.2, Boost 1.90**. Сборка в ext4 (`/root/gf-src`), БД — из `data/` рабочего
+  дерева; `determinism_runner run` дал хэш, `check` воспроизвёл.
+- **Windows x64** = `894671466e37c2fa4634d0c2c26cbb307ac29dca`. Локальная сборка `build-x64`
+  (`-A x64`, vcpkg `x64-windows`; конфигурация ~672 с на пакеты boost).
+
+Оба эталона записаны в `tools/determinism/reference-*.txt` вместе с macOS-эталоном (см. запись
+выше); x86 (`7134def2...`), linux и x64 закоммичены с этого ПК (`fd8260a`), macOS — с Mac
+(`88ac096`). Ветка `squads-update` запушена в origin. `gh` установлен и авторизован
+(polite-cat-2001). Незакрытым остаётся выпуск **Windows/Linux ассетов** релиза `v0.4.0`.
