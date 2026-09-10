@@ -842,3 +842,13 @@ AppleClang, CMake), `determinism_runner run` = cffeb1df6374339ea6693a1f6fd576d46
 распаковка в каталог сборки роняла картинки лиг/клубов/флаги и не находила manifest.json;
 правильно — `unzip -o ... -d databases/default`. Зафиксировано в вики ([[пайплайн-данных]]).
 Осталось из милстоуна: публикация бандла в релиз.
+
+## [2026-09-10] deploy | v0.4.0: macOS arm64 с встроенной data v2
+Опубликован GitHub Release `v0.4.0` (тег на вершине `squads-update` `88ac096`, `master` не
+трогали — вариант B). Единственный ассет — `GameplayFootball-v0.4.0-macos-arm64.zip` (601 МБ):
+data v2 встроена в .app (БД schema v2 193 МБ, 64 788 клубных картинок, бандл 2026-09-09,
+манифест находится на старте). Пакет проверен: `otool -L` без `/opt/homebrew`/`@rpath`,
+`codesign --verify --deep --strict` — valid. Перед упаковкой бандл применён в
+`build-mac-dtr/databases/default`, `football.config` сброшен в пустой дефолт (иначе уезжали
+локальные 0.6/0.4). Установлены `bash` 4 (нужен `package_macos.sh`) и `gh`. Windows/Linux
+ассеты добавляются отдельно с другого ПК — собирать с применённым бандлом.
