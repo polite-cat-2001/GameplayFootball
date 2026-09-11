@@ -5,7 +5,9 @@
 #include <boost/make_shared.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <deque>
+#include <map>
 
 #include "netassets.hpp"
 #include "nethiddevice.hpp"
@@ -14,6 +16,11 @@
 
 namespace {
 const size_t kHeaderSize = 4;
+
+unsigned long SteadyNow_ms() {
+  return (unsigned long)std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 }
 
 class NetServerConnection : public boost::enable_shared_from_this<NetServerConnection> {
@@ -30,7 +37,53 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
     boost::shared_ptr<NetHIDDevice> GetHIDevice() const { return hidDevice; }
     void SetHIDevice(boost::shared_ptr<NetHIDDevice> device) { hidDevice = device; }
 
-    void Start() { ReadHeader(); }
+    int GetRtt_ms() const { return rtt_ms.load(); }
+    unsigned long GetLastPacketTime_ms() const { return lastPacketTime_ms.load(); }
+    void Touch() { lastPacketTime_ms.store(SteadyNow_ms()); }
+
+    void SendPing() {
+      NetKeepalive keepalive;
+      keepalive.seq = ++pingSeq;
+      keepalive.echo = lastReceivedSeq;
+      pingSent[keepalive.seq] = SteadyNow_ms();
+      if (pingSent.size() > 64) pingSent.erase(pingSent.begin());
+
+      NetBuffer buffer;
+      WriteKeepalive(buffer, keepalive);
+      SendMessage(e_NetMessage_Keepalive, buffer);
+    }
+
+    // Reply to a ping immediately (seq 0 marks it as a pong, so it never
+    // triggers another reply). Waiting for the next periodic keepalive would
+    // inflate the measured RTT by up to a whole keepalive interval.
+    void SendPong(uint32_t echoSeq) {
+      NetKeepalive keepalive;
+      keepalive.seq = 0;
+      keepalive.echo = echoSeq;
+      NetBuffer buffer;
+      WriteKeepalive(buffer, keepalive);
+      SendMessage(e_NetMessage_Keepalive, buffer);
+    }
+
+    void HandleKeepalive(const NetKeepalive &keepalive) {
+      Touch();
+      if (keepalive.seq != 0) {
+        lastReceivedSeq = keepalive.seq;
+        SendPong(keepalive.seq);
+      }
+      if (keepalive.echo != 0) {
+        std::map<uint32_t, unsigned long>::iterator iter = pingSent.find(keepalive.echo);
+        if (iter != pingSent.end()) {
+          rtt_ms.store((int)(SteadyNow_ms() - iter->second));
+          pingSent.erase(iter);
+        }
+      }
+    }
+
+    void Start() {
+      Touch();
+      ReadHeader();
+    }
 
     void SendMessage(e_NetMessageType type, NetBuffer &body) {
       boost::shared_ptr<std::vector<uint8_t> > payload = boost::make_shared<std::vector<uint8_t> >();
@@ -71,6 +124,7 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
     void HandleBody(const boost::system::error_code &error) {
       if (error) { server->RemoveConnection(shared_from_this()); return; }
       if (!body.empty()) {
+        Touch();
         e_NetMessageType type = (e_NetMessageType)body[0];
         NetBuffer buffer;
         buffer.Data().assign(body.begin() + 1, body.end());
@@ -94,6 +148,8 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
         server->HandlePauseRequest(buffer.GetBool());
       } else if (type == e_NetMessage_ReplayStop) {
         server->HandleReplayStop();
+      } else if (type == e_NetMessage_Keepalive) {
+        HandleKeepalive(ReadKeepalive(buffer));
       }
     }
 
@@ -116,9 +172,15 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
     uint8_t header[kHeaderSize];
     std::vector<uint8_t> body;
     std::deque<boost::shared_ptr<std::vector<uint8_t> > > writeQueue;
+
+    uint32_t pingSeq = 0;
+    uint32_t lastReceivedSeq = 0;
+    std::map<uint32_t, unsigned long> pingSent;
+    std::atomic<int> rtt_ms{-1};
+    std::atomic<unsigned long> lastPacketTime_ms{0};
 };
 
-NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1), pauseRequestPending(false), pauseRequestState(false), replayStopPending(false) {
+NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1), pauseRequestPending(false), pauseRequestState(false), replayStopPending(false), allResumeReadyPending(false), sideSelectCancelPending(false) {
 }
 
 NetServer::~NetServer() {
@@ -155,6 +217,7 @@ bool NetServer::Start() {
       new boost::asio::executor_work_guard<boost::asio::io_context::executor_type>(boost::asio::make_work_guard(ioContext)));
   running.store(true);
   DoAccept();
+  StartPingTimer();
   ioThread = boost::thread(boost::bind(&NetServer::Run, this));
   return true;
 }
@@ -163,6 +226,10 @@ void NetServer::Stop() {
   if (!running.load()) return;
 
   running.store(false);
+
+  if (pingTimer) {
+    pingTimer->cancel();
+  }
 
   if (acceptor) {
     boost::system::error_code error;
@@ -178,6 +245,11 @@ void NetServer::Stop() {
     connections.clear();
   }
 
+  {
+    boost::mutex::scoped_lock lock(retiredMutex);
+    retiredDevices.clear();
+  }
+
   if (workGuard) workGuard->reset();
   ioContext.stop();
   if (ioThread.joinable()) ioThread.join();
@@ -186,6 +258,147 @@ void NetServer::Stop() {
 
 void NetServer::Run() {
   ioContext.run();
+}
+
+void NetServer::StartPingTimer() {
+  pingTimer = boost::make_shared<boost::asio::steady_timer>(ioContext);
+  SchedulePingTimer();
+}
+
+void NetServer::SchedulePingTimer() {
+  pingTimer->expires_after(boost::asio::chrono::milliseconds(net_keepaliveInterval_ms));
+  pingTimer->async_wait(boost::bind(&NetServer::HandlePingTimer, this, boost::asio::placeholders::error));
+}
+
+void NetServer::HandlePingTimer(const boost::system::error_code &error) {
+  if (error || !running.load()) return;
+
+  std::vector<boost::shared_ptr<NetServerConnection> > current;
+  {
+    boost::mutex::scoped_lock lock(connectionsMutex);
+    current = connections;
+  }
+
+  const unsigned long now_ms = SteadyNow_ms();
+  for (unsigned int i = 0; i < current.size(); i++) {
+    current.at(i)->SendPing();
+    if (now_ms - current.at(i)->GetLastPacketTime_ms() > (unsigned long)net_disconnectTimeout_ms) {
+      RemoveConnection(current.at(i));
+    }
+  }
+
+  SchedulePingTimer();
+}
+
+int NetServer::GetMaxClientRtt_ms() {
+  int maxRtt = 0;
+  boost::mutex::scoped_lock lock(connectionsMutex);
+  for (unsigned int i = 0; i < connections.size(); i++) {
+    int rtt = connections.at(i)->GetRtt_ms();
+    if (rtt > maxRtt) maxRtt = rtt;
+  }
+  return maxRtt;
+}
+
+bool NetServer::ConsumeDisconnectedPlayer(uint32_t &playerId) {
+  boost::mutex::scoped_lock lock(disconnectMutex);
+  if (disconnectedPlayers.empty()) return false;
+  playerId = disconnectedPlayers.front();
+  disconnectedPlayers.erase(disconnectedPlayers.begin());
+  return true;
+}
+
+bool NetServer::ConsumeJoinedPlayer(uint32_t &playerId) {
+  boost::mutex::scoped_lock lock(disconnectMutex);
+  if (joinedPlayers.empty()) return false;
+  playerId = joinedPlayers.front();
+  joinedPlayers.erase(joinedPlayers.begin());
+  return true;
+}
+
+void NetServer::ClearRosterEvents() {
+  boost::mutex::scoped_lock lock(disconnectMutex);
+  disconnectedPlayers.clear();
+  joinedPlayers.clear();
+}
+
+void NetServer::ClearRetiredDevices() {
+  boost::mutex::scoped_lock lock(retiredMutex);
+  retiredDevices.clear();
+}
+
+void NetServer::SetSideSelectMode(bool on) {
+  {
+    boost::mutex::scoped_lock lock(lobbyMutex);
+    if (lobbyState.sideSelect == on) return;
+    lobbyState.sideSelect = on;
+    lobbyState.phase = e_NetLobbyPhase_Sides;
+    for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+      lobbyState.players.at(i).ready = false;
+      lobbyState.players.at(i).resumeReady = false;
+    }
+    lobbyState.teamReady[0] = false;
+    lobbyState.teamReady[1] = false;
+    lobbyState.revision++;
+    RecomputeChoppers();
+  }
+  {
+    boost::mutex::scoped_lock lock(resumeMutex);
+    allResumeReadyPending = false;
+    sideSelectCancelPending = false;
+  }
+  BroadcastLobbyState();
+  sig_OnLobbyState(GetLobbyState());
+}
+
+void NetServer::RecomputeResumeReady() {
+  // caller holds lobbyMutex
+  bool allReady = !lobbyState.players.empty() && !lobbyState.sideSelect;
+  for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+    if (!lobbyState.players.at(i).resumeReady) { allReady = false; break; }
+  }
+  boost::mutex::scoped_lock lock(resumeMutex);
+  if (allReady) allResumeReadyPending = true;
+}
+
+void NetServer::ResetResumeVotes() {
+  {
+    boost::mutex::scoped_lock lock(lobbyMutex);
+    for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).resumeReady = false;
+    lobbyState.revision++;
+  }
+  {
+    boost::mutex::scoped_lock lock(resumeMutex);
+    allResumeReadyPending = false;
+    sideSelectCancelPending = false;
+  }
+  BroadcastLobbyState();
+  sig_OnLobbyState(GetLobbyState());
+}
+
+bool NetServer::ConsumeAllResumeReady() {
+  boost::mutex::scoped_lock lock(resumeMutex);
+  if (!allResumeReadyPending) return false;
+  allResumeReadyPending = false;
+  return true;
+}
+
+bool NetServer::ConsumeSideSelectCancel() {
+  boost::mutex::scoped_lock lock(resumeMutex);
+  if (!sideSelectCancelPending) return false;
+  sideSelectCancelPending = false;
+  return true;
+}
+
+void NetServer::SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body) {
+  boost::shared_ptr<NetServerConnection> target;
+  {
+    boost::mutex::scoped_lock lock(connectionsMutex);
+    for (unsigned int i = 0; i < connections.size(); i++) {
+      if (connections.at(i)->GetSessionId() == playerId) { target = connections.at(i); break; }
+    }
+  }
+  if (target) target->SendMessage(type, body);
 }
 
 void NetServer::DoAccept() {
@@ -256,6 +469,10 @@ void NetServer::HandleClientHello(boost::shared_ptr<NetServerConnection> connect
     for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).ready = false;
     lobbyState.revision++;
     RecomputeChoppers();
+    {
+      boost::mutex::scoped_lock lock(disconnectMutex);
+      joinedPlayers.push_back(response.sessionId);
+    }
   }
 
   NetBuffer buffer;
@@ -410,6 +627,41 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         lobbyState.teamReady[1] = false;
         RecomputeChoppers();
         changed = true;
+      } else if (action.type == e_NetLobbyAction_SetResumeReady) {
+        player->resumeReady = (action.value != 0);
+        changed = true;
+      } else if (action.type == e_NetLobbyAction_RequestSideSelect) {
+        // Any peer may ask for (value != 0) or cancel (value == 0) in-match side
+        // selection; the host mirrors it. Cancel resumes the match as-is.
+        if (action.value != 0) {
+          if (!lobbyState.sideSelect) {
+            lobbyState.sideSelect = true;
+            lobbyState.phase = e_NetLobbyPhase_Sides;
+            for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+              lobbyState.players.at(i).ready = false;
+              lobbyState.players.at(i).resumeReady = false;
+            }
+            lobbyState.teamReady[0] = false;
+            lobbyState.teamReady[1] = false;
+            RecomputeChoppers();
+            changed = true;
+          }
+        } else {
+          if (lobbyState.sideSelect) {
+            lobbyState.sideSelect = false;
+            lobbyState.phase = e_NetLobbyPhase_Sides;
+            for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+              lobbyState.players.at(i).ready = false;
+              lobbyState.players.at(i).resumeReady = false;
+            }
+            lobbyState.teamReady[0] = false;
+            lobbyState.teamReady[1] = false;
+            RecomputeChoppers();
+            changed = true;
+            boost::mutex::scoped_lock lock(resumeMutex);
+            sideSelectCancelPending = true;
+          }
+        }
       }
 
       if (lobbyState.phase == e_NetLobbyPhase_Sides) {
@@ -417,7 +669,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
           if (!lobbyState.players.at(i).ready) { allReady = false; break; }
         }
-        if (allReady) {
+        if (allReady && !lobbyState.sideSelect) {
           lobbyState.phase = e_NetLobbyPhase_Teams;
           RecomputeChoppers();
           changed = true;
@@ -425,6 +677,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
       }
     }
 
+    if (player) RecomputeResumeReady();
     if (changed) lobbyState.revision++;
   }
 
@@ -440,6 +693,13 @@ void NetServer::RemoveConnection(boost::shared_ptr<NetServerConnection> connecti
 
   uint32_t playerId = connection->GetSessionId();
 
+  // The team may still hold a raw pointer to this device and the game thread
+  // keeps running until it detects the disconnect. Keep the device alive (with
+  // all buttons released) until the host rebinds controllers, otherwise
+  // Match::Process dereferences freed memory.
+  boost::shared_ptr<NetHIDDevice> device = connection->GetHIDevice();
+  if (device) device->Clear();
+
   {
     boost::mutex::scoped_lock lock(connectionsMutex);
     for (unsigned int i = 0; i < connections.size(); i++) {
@@ -450,7 +710,16 @@ void NetServer::RemoveConnection(boost::shared_ptr<NetServerConnection> connecti
     }
   }
 
+  if (device) {
+    boost::mutex::scoped_lock lock(retiredMutex);
+    retiredDevices.push_back(device);
+  }
+
   if (running.load() && playerId != 0) {
+    {
+      boost::mutex::scoped_lock lock(disconnectMutex);
+      disconnectedPlayers.push_back(playerId);
+    }
     RemovePlayer(playerId);
   }
 }
@@ -469,6 +738,9 @@ void NetServer::RemovePlayer(uint32_t playerId) {
     for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).ready = false;
     lobbyState.revision++;
     RecomputeChoppers();
+    // If the player who left was the only one still refusing to resume, the
+    // rest can continue now.
+    RecomputeResumeReady();
   }
 
   BroadcastLobbyState();

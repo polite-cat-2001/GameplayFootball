@@ -47,6 +47,7 @@ struct Snapshot {
     bestPossessionTeamID = -1;
     goalScored = false;
     goalScoredTimer = 0;
+    maxRtt_ms = 0;
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
@@ -62,6 +63,7 @@ struct Snapshot {
   int bestPossessionTeamID; // lets the client's camera pan like the host's
   bool goalScored; // synced so the goal replay triggers on every peer
   unsigned long goalScoredTimer;
+  int maxRtt_ms; // host's max client RTT, so clients mirror the input delay
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

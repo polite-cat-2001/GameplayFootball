@@ -1039,3 +1039,166 @@ team id и строит `MatchData` из своей БД (handshake и так т
 Осталось (Task 7): UDP-канал, host input-delay/интерполяция (сейчас заметна
 задержка ввода по TCP), дисконнект/реконнект/join во время матча, смена
 сторон/команд в паузе. См. [[открытые-вопросы]].
+
+## [2026-09-11] feat | LAN: ping/fairness, дисконнект/join, живая смена сторон (Task 7)
+Ping/keepalive: у сервера (per-connection) и клиента — `steady_timer` на
+`net_keepaliveInterval_ms`, сообщение `NetKeepalive{seq, echo}`, расчёт RTT,
+таймаут `net_disconnectTimeout_ms` (сервер закрывает, клиент — «host timed out»).
+Host input-delay: `src/net/delayedhiddevice.*` (`DelayedHIDDevice : IHIDevice`)
+оборачивает локальное устройство хоста и отдаёт кадр возрастом `delayTicks`;
+хост задерживает ввод на `maxRTT + B`, клиент — на `2U - u_i + B`, так что ввод
+применяется в один момент; `maxRTT` едет в снапшоте, `B =
+net_interpolationBuffer_ms`. Дисконнект/join во время матча: хост вычитывает
+`ConsumeDisconnectedPlayer`/`ConsumeJoinedPlayer`, ставит паузу, лобби уходит в
+режим выбора сторон (`NetLobbyState.sideSelect`), у всех открывается зеркальный
+экран сторон; новичку `SendToPlayer` шлёт setup/anim/env/snapshot. Смена сторон
+в паузе: `NetworkLobbyPage` в режиме `resumeOnClose` по готовности зовёт
+`GameTask::RebindNetworkControllers` (host) → `SetupNetworkControllers` + unpause;
+в пауза-меню добавлен пункт «side selection» (`RequestSideSelect` для клиента).
+Сборка ок, `nettest` `PASS`, детерминизм `7134def2...` не сдвинулся. Вики
+[[сеть]]/[[константы]] и [[открытые-вопросы]] обновлены.
+
+## [2026-09-11] session | LAN Task 7 — fairness, дисконнект/join, смена сторон
+Сделаны ping/RTT, host input-delay (`DelayedHIDDevice`), дисконнект/join во время
+матча с паузой и зеркальным выбором сторон, живая смена сторон в паузе. Остался
+хвост Task 7: UDP-канал и интерполяция снапшотов (`B` пока только в задержке
+ввода); калибровка порога задержки и full-setup карьеры (Task 8). Полевой тест
+Task 7 не проводился — только сборка/`nettest`/детерминизм.
+
+## [2026-09-11] fix | LAN: немедленный pong — устранена ложная задержка ввода
+Симптом: большая (~сотни мс) задержка между вводом и действием. Причина:
+keepalive-пинг отвечался не сразу, а следующим срабатыванием 500-мс таймера, поэтому
+RTT измерялся как «сеть + остаток до таймера» вплоть до ~500 мс, а `hostInputDelay =
+maxRTT + B` раздувалась. Фикс: на входящий пинг (`seq != 0`) обе стороны шлют pong
+(`seq = 0`, `echo = seq`) **сразу**; pong не вызывает встречного ответа. Проверено
+диагностикой в `nettest`: `client_rtt=1 мс`, `server_max_rtt=0 мс`. Дополнительно
+`net_interpolationBuffer_ms` снижен 20 → 0: B имеет смысл только вместе с
+интерполяцией, поэтому теперь задержка = чистый RTT (на localhost ≈ 0 мс). Вики
+[[сеть]] и [[константы]] обновлены.
+
+## [2026-09-11] fix | LAN: краш хоста при дисконнекте клиента (use-after-free)
+Симптом: при отключении клиента во время матча падал хост. Причина: io-поток в
+`NetServer::RemoveConnection` уничтожал `NetServerConnection` вместе с его
+`NetHIDDevice`, а `Team`/`HumanGamer` держат сырой `IHIDevice*` и читают его в
+`Match::Process` (в т.ч. лочат `boost::mutex` освобождённого объекта). Фикс:
+отключённое устройство «уходит в отставку» — `Clear()` (кнопки отпущены) и
+хранение в `NetServer::retiredDevices` до `ClearRetiredDevices()`; хост в
+`HandleNetworkRosterChanges` сразу зовёт `SetupNetworkControllers` (убирает
+мёртвую привязку, AI берёт сторону) и затем освобождает retired. Сборка ок,
+`nettest` `PASS`, детерминизм без изменений.
+
+## [2026-09-11] fix | LAN: мигание окна выбора сторон при переподключении
+Симптом: у переподключившегося клиента быстро мигало окно выбора сторон.
+Причина: хост уже стоял на паузе и повторно `PauseState` не рассылал, поэтому
+`Match` нового клиента не знал о паузе; клиентское resume-окно выходило по
+`!Match::GetPause()`, `GamePage` тут же открывал его снова — цикл. Фикс: хост в
+`HandleNetworkRosterChanges` шлёт новичку текущий `PauseState` (`SendToPlayer`);
+клиентское resume-окно выходит по смене `LobbyState.sideSelect` (был true → стал
+false), а не по паузе. Вики [[сеть]] обновлена.
+
+## [2026-09-11] feat | LAN: хост-опции паузы (киты, погода, сложность AI)
+`VisualOptionsPage` теперь хост-центрична: для сетевого клиента показывает только
+пояснение, а хост/локалка получают киты, «Randomize sun position» и новый выбор
+сложности AI. `Team` хранит текущий `kitNumber`; `Match::SetMatchDifficulty`
+меняет `matchDifficulty` живьём (влияет только на AI-команды). `NetMatchEnvironment`
+расширен номерами китов; `Match::GetMatchEnvironment`/`BroadcastMatchOptions`
+рассылают солнце + киты, клиент применяет их при `ConsumeEnvironment` (в т.ч. при
+join в матч). Сборка ок, `nettest` `PASS`, детерминизм `7134def2...` без изменений.
+Вики [[сеть]] обновлена.
+
+## [2026-09-11] feat | LAN: голосование за продолжение и личные экраны паузы
+Выход из паузы больше не мгновенный: в пауза-меню кнопка «Continue (X/N)», пир
+отмечает себя `e_NetLobbyAction_SetResumeReady` (`NetLobbyPlayer.resumeReady`), и
+матч продолжается только когда отметились все (хост: `RecomputeResumeReady` →
+`ConsumeAllResumeReady` → `Match::Pause(false)`). Голоса сбрасываются на входе/выходе
+из паузы (`Match::Pause` → `NetServer::ResetResumeVotes`). Общим экраном остаётся
+только выбор сторон (требует подтверждения всех); остальные экраны паузы —
+личные, их навигация не зеркалится. Сборка ок, `nettest` `PASS`, детерминизм
+`7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: выбор сторон не открывался у остальных машин
+Симптом: при открытии «side selection» из паузы окно появлялось только у
+инициатора. Причина: авто-открытие висело на `GamePage::Process`, но при активной
+паузе сверху находится `IngamePage`, и `GamePage::Process` не вызывается. Фикс:
+открытие перенесено в `GameTask::SyncNetworkSideSelectOverlay()` — вызывается
+каждый тик на всех пирах по флагу `LobbyState.sideSelect`; блок из `GamePage`
+убран. Сборка ок, `nettest` `PASS`, детерминизм без изменений. Вики [[сеть]]
+обновлена.
+
+## [2026-09-11] fix | LAN: краш при повторном open side selection (gui2 GoBack UAF)
+Симптом: повторное открытие выбора сторон в рамках одного меню паузы роняло клиента.
+Причина: `Gui2Page::GoBack()` пересоздавал предыдущую страницу через
+`PageFactory::CreatePage(const Gui2PageData&)`, который **не** обновляет
+`mostRecentlyCreatedPage`; после `delete this` указатель висел на освобождённой
+странице, а `GameTask::OpenNetworkSideSelect()`/gamepad-блок дёргают
+`GetMostRecentlyCreatedPage()` → use-after-free. Фикс: `GoBack` пересоздаёт через
+`CreatePage(pageID, properties, data)` (обновляет `mostRecentlyCreatedPage`).
+Плюс корректная отмена: клиент по Esc шлёт `RequestSideSelect` value = 0, хост снимает
+`sideSelect` и резюмирует; локальный `GoBack` у клиента убран (иначе Sync мгновенно
+переоткрывал окно). Сборка ок, `nettest` `PASS`, детерминизм без изменений.
+Вики [[сеть]] обновлена.
+
+## [2026-09-11] feat | LAN: личные camera/visual на клиенте, ограничения паузы
+По просьбе: (1) «controller select» убран из пауза-меню сетевого матча —
+устройство выбирается на экране выбора сторон, локальный `UpdateControllerSetup`
+сломал бы сетевые привязки. (2) Клиент теперь может переопределять камеру
+(`Match::SetRemoteCameraOverride`; `ApplyRemoteSnapshot` при override зовёт
+`UpdateIngameCamera()` по снапшот-позициям вместо хостовой камеры) — в «camera
+settings» слайдеры наконец действуют. (3) В «visual options» киты и погода
+доступны всем (у клиента — локально, без рассылки; у хоста — с
+`BroadcastMatchOptions`), а сложность AI только у хоста. (4) System settings →
+gameplay у клиента заблокирован (кнопка неактивна), т.к. assist/agility влияют на
+общую симуляцию; controller/graphics/audio остаются локальными. Сборка ок,
+`nettest` `PASS`, детерминизм `7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: сетевая сессия не закрывалась при выходе в меню
+Симптом: после сетевого матча в следующем **локальном** матче в паузе открывался
+сетевой экран выбора сторон со старым составом («Host» + старый клиент). Причина:
+`MenuTask::ProcessPhase` при `e_MenuAction_Menu` (forfeit/game over) не останавливал
+`NetServer`/`NetClient`; указатели оставались, `networkMatch` был true, и сетевой
+`NetworkLobbyPage` показывал устаревший `LobbyState`. Фикс: при переходе в меню
+`netServer->Stop(); netServer.reset();` и `netClient->Disconnect(); netClient.reset();`.
+Локальный матч снова показывает локальный выбор сторон (`ControllerSelectPage`).
+Сборка ок, детерминизм без изменений.
+
+## [2026-09-11] refactor | LAN: NetMatchSession + явное состояние паузы
+Вынес сетевую логику матча из `GameTask` в `src/net/netmatchsession.{hpp,cpp}`
+(в `gamelib`): input-delay, снапшоты, роster (дисконнект/join), пауза/голоса,
+окружение, `SetupControllers`/`RebindControllers`. Ввёл `e_NetMatchPhaseState`
+(`Playing`/`Paused`/`SideSelect`), **выводимый** из `Match::GetPause()` +
+`LobbyState.sideSelect` вместо набора флагов. `GameTask::ProcessPhase` теперь:
+`netSession.Process` → `PreparePutBuffers` (под мьютексом) →
+`netSession.BroadcastSnapshot` → при `SideSelect` централизованно открыть оверлей.
+Убраны `SetupNetworkControllers`/`SyncNetworkSideSelectOverlay`/
+`HandleNetworkRosterChanges`, `hostInputDelay`/`clientInputQueue`/
+`lastNetSnapshotTimeMs` переехали в сессию. GUI-навигация осталась в `GameTask`,
+но решение — за состоянием. Сборка ок, `nettest` `PASS`, детерминизм
+`7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: сдвиг пулдаунов в visual options у клиента
+Симптом: у клиента в «visual options» киты и кнопка солнца уезжали вправо.
+Причина: примечание для клиента лежало в `Gui2Grid` в колонке 0 и было шире
+остальных подписей (40 против 20), а `Gui2Grid::UpdateLayout` считает ширину
+колонки по самому широкому элементу — колонка 1 с пулдаунами/кнопкой сдвигалась.
+Фикс: примечание вынесено из грида на `Gui2Frame` (абсолютная позиция), колонки
+больше не меняются. Сборка ок, `nettest` `PASS`, детерминизм без изменений.
+
+## [2026-09-11] fix | LAN: выход из SideSelection у клиента уводил в матч
+Симптом: хост из SideSelection возвращался в пауза-меню, а клиент — сразу в матч
+(пауза-меню пропадало). Причина: «выход» трактовался как «отмена + продолжить»:
+host `Leave` и серверный `ConsumeSideSelectCancel` звали `RebindNetworkControllers`,
+который снимает паузу; клиент, дождавшись `sideSelect=false` и `pause=false`,
+через `GoBack` попадал в `GamePage`. Фикс: выход из выбора сторон **не** снимает
+паузу — `GameTask::ApplyNetworkControllers` (`SetupControllers` без `Pause(false)`),
+хост применяет стороны и возвращается в пауза-меню; возобновление — отдельным
+голосованием Continue. Сборка ок, `nettest` `PASS`, детерминизм без изменений.
+Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: отмена SideSelection клиентом не закрывала экран у хоста
+Симптом: клиент выходил из SideSelection, а хост оставался на экране. Причина:
+проверка выхода по `LobbyState.sideSelect == false` была только в клиентской ветке
+`NetworkLobbyPage::Process`; у хоста выход был только по all-ready или своему Esc,
+поэтому серверная отмена (`sideSelectCancelPending`) закрывала экран лишь у
+инициатора. Фикс: проверка `sawSideSelect && !state.sideSelect` вынесена на общий
+уровень (хост и клиент); у клиента оставлен safety-net по `!Match::GetPause()`.
+Сборка ок, `nettest` `PASS`, детерминизм без изменений. Вики [[сеть]] обновлена.

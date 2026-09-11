@@ -26,17 +26,25 @@ class IngamePage : public Gui2Page {
 
     void GoGamePlan();
     void GoControllerSelect();
+    void GoSideSelect();
     void GoCameraSettings();
     void GoVisualOptions();
     void GoSystemSettings();
     void GoReplay();
     void GoPreQuit();
+    void VoteResume();
 
     virtual void Process();
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
+    bool IsNetworkMatch();
+    bool LocalResumeReady();
+    int GetResumeReadyCount();
+    int GetPeerCount();
+
     int teamID; // team that activated the ingame menu
+    Gui2Button *buttonContinue;
 
 };
 

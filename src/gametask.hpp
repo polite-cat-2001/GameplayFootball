@@ -16,6 +16,8 @@
 
 #include "menu/menutask.hpp"
 
+#include "net/netmatchsession.hpp"
+
 using namespace blunted;
 
 
@@ -84,6 +86,12 @@ class GameTask : public IUserTask {
     Match *GetMatch() { return match; }
     MenuScene *GetMenuScene() { return menuScene; }
 
+    // Re-binds host controllers from the current lobby state and resumes the
+    // paused match (live side change after a disconnect or the pause menu).
+    void RebindNetworkControllers();
+    // Same, but keeps the match paused (leaving side selection back to the menu).
+    void ApplyNetworkControllers();
+
     MessageQueue<e_GameTaskMessage> messageQueue;
 
     virtual std::string GetName() const { return "game"; }
@@ -91,7 +99,7 @@ class GameTask : public IUserTask {
     boost::mutex matchLifetimeMutex;
 
   protected:
-    void SetupNetworkControllers(Match *target);
+    void OpenNetworkSideSelect();
 
     Match *match;
     MenuScene *menuScene;
@@ -102,7 +110,10 @@ class GameTask : public IUserTask {
     boost::shared_ptr<Scene3D> scene3D;
 
     unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
-    unsigned long lastNetSnapshotTime_ms = 0; // rate-limit host snapshot broadcast
+
+    // Network match glue: input delay, snapshots, roster, pause votes and the
+    // explicit Playing/Paused/SideSelect state. GameTask only reacts to it.
+    NetMatchSession netSession;
 
 };
 

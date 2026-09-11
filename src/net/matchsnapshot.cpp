@@ -109,6 +109,7 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutU32((uint32_t)snapshot.bestPossessionTeamID);
   buffer.PutBool(snapshot.goalScored);
   buffer.PutU32((uint32_t)snapshot.goalScoredTimer);
+  buffer.PutU32((uint32_t)snapshot.maxRtt_ms);
 
   buffer.PutU32((uint32_t)snapshot.players.size());
   for (unsigned int i = 0; i < snapshot.players.size(); i++) {
@@ -144,6 +145,7 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
   snapshot.bestPossessionTeamID = (int)buffer.GetU32();
   snapshot.goalScored = buffer.GetBool();
   snapshot.goalScoredTimer = buffer.GetU32();
+  snapshot.maxRtt_ms = (int)buffer.GetU32();
 
   uint32_t playerCount = buffer.GetU32();
   snapshot.players.resize(playerCount);

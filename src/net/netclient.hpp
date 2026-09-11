@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <deque>
+#include <map>
 #include <vector>
 
 #include "netmessages.hpp"
@@ -27,6 +28,9 @@ class NetClient {
     const NetLobbyState &GetLobbyState() const { return lobbyState; }
     const std::vector<NetCatalogEntry> &GetCatalog() const { return catalog; }
     uint32_t GetPlayerId() const { return playerId; }
+
+    // Round-trip time to the host (-1 until the first ping is echoed).
+    int GetRtt_ms() const { return rtt_ms.load(); }
 
     void SetPlayerName(const std::string &name) { playerName = name; }
 
@@ -49,6 +53,12 @@ class NetClient {
 
   private:
     void Run();
+    void StartPingTimer();
+    void SchedulePingTimer();
+    void HandlePingTimer(const boost::system::error_code &error);
+    void SendPing();
+    void SendPong(uint32_t echoSeq);
+    void HandleKeepalive(const NetKeepalive &keepalive);
     void DoConnect(const std::string &ip, uint16_t port);
     void HandleConnect(const boost::system::error_code &error);
     void SendClientHello();
@@ -70,6 +80,13 @@ class NetClient {
     boost::asio::ip::tcp::resolver resolver;
     boost::shared_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type> > workGuard;
     boost::thread ioThread;
+    boost::shared_ptr<boost::asio::steady_timer> pingTimer;
+
+    std::atomic<int> rtt_ms{-1};
+    std::atomic<unsigned long> lastPacketTime_ms{0};
+    uint32_t pingSeq = 0;
+    uint32_t lastReceivedSeq = 0;
+    std::map<uint32_t, unsigned long> pingSent;
 
     uint8_t header[4];
     std::vector<uint8_t> body;

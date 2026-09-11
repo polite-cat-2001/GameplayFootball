@@ -252,7 +252,8 @@ add_library(gamelib STATIC
         src/onthepitch/proceduralpitch.cpp
         src/onthepitch/team.cpp
         src/onthepitch/teamAIcontroller.cpp
-        src/net/matchsnapshot.cpp)
+        src/net/matchsnapshot.cpp
+        src/net/netmatchsession.cpp)
 apply_common_includes(gamelib)
 add_library(hidlib STATIC src/hid/gamepad.cpp src/hid/keyboard.cpp)
 apply_common_includes(hidlib)
@@ -304,6 +305,7 @@ add_library(netlib STATIC
         src/net/netmessages.cpp
         src/net/netassets.cpp
         src/net/nethiddevice.cpp
+        src/net/delayedhiddevice.cpp
         src/net/netserver.cpp
         src/net/netclient.cpp)
 apply_common_includes(netlib)

@@ -4,11 +4,17 @@
 #include <boost/make_shared.hpp>
 
 #include <algorithm>
+#include <chrono>
 
 #include "netassets.hpp"
 
 namespace {
 const size_t kHeaderSize = 4;
+
+unsigned long SteadyNow_ms() {
+  return (unsigned long)std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 }
 
 NetClient::NetClient()
@@ -48,6 +54,9 @@ void NetClient::Disconnect() {
   if (!running.load()) return;
 
   running.store(false);
+  if (pingTimer) {
+    pingTimer->cancel();
+  }
   boost::system::error_code error;
   socket.close(error);
   if (workGuard) workGuard->reset();
@@ -71,9 +80,71 @@ void NetClient::DoConnect(const std::string &ip, uint16_t port) {
 
 void NetClient::HandleConnect(const boost::system::error_code &error) {
   if (error) { Fail(e_NetReject_Unknown, "connection failed"); return; }
+  lastPacketTime_ms.store(SteadyNow_ms());
   state.store(e_NetConnectionState_Handshaking);
   SendClientHello();
+  StartPingTimer();
   ReadHeader();
+}
+
+void NetClient::StartPingTimer() {
+  pingTimer = boost::make_shared<boost::asio::steady_timer>(ioContext);
+  SchedulePingTimer();
+}
+
+void NetClient::SchedulePingTimer() {
+  pingTimer->expires_after(boost::asio::chrono::milliseconds(net_keepaliveInterval_ms));
+  pingTimer->async_wait(boost::bind(&NetClient::HandlePingTimer, this, boost::asio::placeholders::error));
+}
+
+void NetClient::HandlePingTimer(const boost::system::error_code &error) {
+  if (error || !running.load()) return;
+
+  SendPing();
+
+  if (SteadyNow_ms() - lastPacketTime_ms.load() > (unsigned long)net_disconnectTimeout_ms) {
+    Fail(e_NetReject_Unknown, "host timed out");
+    return;
+  }
+
+  SchedulePingTimer();
+}
+
+void NetClient::SendPing() {
+  NetKeepalive keepalive;
+  keepalive.seq = ++pingSeq;
+  keepalive.echo = lastReceivedSeq;
+  pingSent[keepalive.seq] = SteadyNow_ms();
+  if (pingSent.size() > 64) pingSent.erase(pingSent.begin());
+
+  NetBuffer body;
+  WriteKeepalive(body, keepalive);
+  SendMessage(e_NetMessage_Keepalive, body);
+}
+
+// Reply immediately; seq 0 marks a pong and never triggers another reply.
+void NetClient::SendPong(uint32_t echoSeq) {
+  NetKeepalive keepalive;
+  keepalive.seq = 0;
+  keepalive.echo = echoSeq;
+  NetBuffer body;
+  WriteKeepalive(body, keepalive);
+  SendMessage(e_NetMessage_Keepalive, body);
+}
+
+void NetClient::HandleKeepalive(const NetKeepalive &keepalive) {
+  lastPacketTime_ms.store(SteadyNow_ms());
+  if (keepalive.seq != 0) {
+    lastReceivedSeq = keepalive.seq;
+    SendPong(keepalive.seq);
+  }
+  if (keepalive.echo != 0) {
+    std::map<uint32_t, unsigned long>::iterator iter = pingSent.find(keepalive.echo);
+    if (iter != pingSent.end()) {
+      rtt_ms.store((int)(SteadyNow_ms() - iter->second));
+      pingSent.erase(iter);
+    }
+  }
 }
 
 void NetClient::SendClientHello() {
@@ -156,6 +227,7 @@ void NetClient::HandleHeader(const boost::system::error_code &error) {
 
 void NetClient::HandleBody(const boost::system::error_code &error) {
   if (error) { Fail(e_NetReject_Unknown, "connection lost"); return; }
+  lastPacketTime_ms.store(SteadyNow_ms());
   if (!body.empty()) {
     e_NetMessageType type = (e_NetMessageType)body[0];
     NetBuffer buffer;
@@ -204,6 +276,8 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   } else if (type == e_NetMessage_ReplayStop) {
     boost::mutex::scoped_lock lock(pendingMutex);
     replayStopPending = true;
+  } else if (type == e_NetMessage_Keepalive) {
+    HandleKeepalive(ReadKeepalive(buffer));
   }
 }
 

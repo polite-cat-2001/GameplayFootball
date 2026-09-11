@@ -20,6 +20,13 @@ SettingsPage::SettingsPage(Gui2WindowManager *windowManager, const Gui2PageData 
   Gui2Button *buttonGraphics = new Gui2Button(windowManager, "button_graphics", 0, 0, 30, 3, "graphics");
   Gui2Button *buttonAudio = new Gui2Button(windowManager, "button_audio", 0, 0, 30, 3, "audio");
 
+  // In a network match gameplay settings are host-authoritative: a client must
+  // not change assist/agility factors that affect the shared simulation.
+  if (GetMenuTask()->GetNetClient() != 0) {
+    buttonGameplay->SetActive(false);
+    buttonGameplay->SetCaption("gameplay (host only)");
+  }
+
   buttonGameplay->sig_OnClick.connect(boost::bind(&SettingsPage::GoGameplay, this));
   buttonController->sig_OnClick.connect(boost::bind(&SettingsPage::GoController, this));
   buttonGraphics->sig_OnClick.connect(boost::bind(&SettingsPage::GoGraphics, this));

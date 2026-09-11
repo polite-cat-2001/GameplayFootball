@@ -25,8 +25,10 @@ class VisualOptionsPage : public Gui2Page {
   protected:
     void OnRandomizeSun();
     void OnChangeKit(Gui2Pulldown *pulldown);
+    void OnChangeDifficulty(Gui2Pulldown *pulldown);
 
     Gui2Pulldown *kitSelectionPulldown[2];
+    Gui2Pulldown *difficultyPulldown;
 
 };
 

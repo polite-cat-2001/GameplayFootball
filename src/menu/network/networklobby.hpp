@@ -83,6 +83,11 @@ class NetworkLobbyPage : public Gui2Page {
     int localGamepadId;
     bool deviceLostSent;
 
+    bool resumeOnClose;   // opened over a paused match: all-ready = resume
+    bool resumeModeSet;
+    bool resumeTriggered;
+    bool sawSideSelect;   // client: side-select mode was seen at least once
+
     bool teamsBuilt;
     bool teamsVisible;
     bool matchStartTriggered;

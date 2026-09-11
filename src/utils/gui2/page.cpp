@@ -24,7 +24,13 @@ namespace blunted {
     if (windowManager->GetPagePath()->GetPath().size() > 0) {
       Gui2PageData prevPage = windowManager->GetPagePath()->GetLast();
       windowManager->GetPagePath()->Pop(); // pop previous page from path too, since it is going to be added with the createpage again
-      windowManager->GetPageFactory()->CreatePage(prevPage);
+      // Recreate through the pageID overload: it updates mostRecentlyCreatedPage.
+      // The pageData overload does not, which would leave that pointer dangling
+      // at the page we delete below (GetMostRecentlyCreatedPage() then returned
+      // freed memory -> crash on a later page open).
+      Properties emptyProperties;
+      const Properties &properties = prevPage.properties ? *prevPage.properties : emptyProperties;
+      windowManager->GetPageFactory()->CreatePage(prevPage.pageID, properties, prevPage.data);
     } // else: no mo menus :[
 
     delete this;

@@ -87,9 +87,11 @@ class Team {
     Player *GetGoalie();
 
     void SetKitNumber(int num);
+    int GetKitNumber() const { return kitNumber; }
 
   protected:
     int id;
+    int kitNumber;
     Match *match;
     TeamData *teamData;
 

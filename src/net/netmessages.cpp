@@ -41,6 +41,7 @@ NetServerHello ReadServerHello(NetBuffer &buffer) {
 void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
   buffer.PutU32(state.revision);
   buffer.PutU8((uint8_t)state.phase);
+  buffer.PutBool(state.sideSelect);
   buffer.PutU32((uint32_t)state.players.size());
   for (unsigned int i = 0; i < state.players.size(); i++) {
     const NetLobbyPlayer &player = state.players.at(i);
@@ -51,6 +52,7 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
     buffer.PutBool(player.isHost);
     buffer.PutU32((uint32_t)player.ping_ms);
     buffer.PutU32((uint32_t)player.device);
+    buffer.PutBool(player.resumeReady);
   }
   for (int side = 0; side < 2; side++) {
     buffer.PutU32((uint32_t)state.teamId[side]);
@@ -67,6 +69,7 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
   NetLobbyState state;
   state.revision = buffer.GetU32();
   state.phase = (int)buffer.GetU8();
+  state.sideSelect = buffer.GetBool();
   uint32_t playerCount = buffer.GetU32();
   state.players.resize(playerCount);
   for (unsigned int i = 0; i < playerCount; i++) {
@@ -78,6 +81,7 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
     player.isHost = buffer.GetBool();
     player.ping_ms = (int)buffer.GetU32();
     player.device = (int)buffer.GetU32();
+    player.resumeReady = buffer.GetBool();
   }
   for (int side = 0; side < 2; side++) {
     state.teamId[side] = (int)buffer.GetU32();
@@ -174,13 +178,29 @@ NetInputFrame ReadInputFrame(NetBuffer &buffer) {
 void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment) {
   buffer.PutVector3(environment.sunPosition);
   buffer.PutVector3(environment.sunColor);
+  buffer.PutU32((uint32_t)environment.homeKit);
+  buffer.PutU32((uint32_t)environment.awayKit);
 }
 
 NetMatchEnvironment ReadMatchEnvironment(NetBuffer &buffer) {
   NetMatchEnvironment environment;
   environment.sunPosition = buffer.GetVector3();
   environment.sunColor = buffer.GetVector3();
+  environment.homeKit = (int)buffer.GetU32();
+  environment.awayKit = (int)buffer.GetU32();
   return environment;
+}
+
+void WriteKeepalive(NetBuffer &buffer, const NetKeepalive &keepalive) {
+  buffer.PutU32(keepalive.seq);
+  buffer.PutU32(keepalive.echo);
+}
+
+NetKeepalive ReadKeepalive(NetBuffer &buffer) {
+  NetKeepalive keepalive;
+  keepalive.seq = buffer.GetU32();
+  keepalive.echo = buffer.GetU32();
+  return keepalive;
 }
 
 

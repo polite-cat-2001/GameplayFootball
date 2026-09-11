@@ -49,6 +49,41 @@ class NetServer {
     void BroadcastReplayStop();
     bool ConsumeReplayStop();
 
+    // Fairness: max one-way delay estimate (RTT/2) over all connected clients,
+    // used to delay the host's own input so no peer gains a ping advantage.
+    int GetMaxClientRtt_ms();
+
+    // A client vanished (socket error or keepalive timeout). Consumed by the
+    // game task so a match in progress can pause and re-open side selection.
+    bool ConsumeDisconnectedPlayer(uint32_t &playerId);
+
+    // A client finished the handshake. Consumed by the game task so a match in
+    // progress can pause and hand the newcomer the current match state.
+    bool ConsumeJoinedPlayer(uint32_t &playerId);
+
+    // Drop pending join/disconnect events (called when a match starts, so lobby
+    // churn never triggers a spurious mid-match pause).
+    void ClearRosterEvents();
+
+    // A disconnected client's HID device must outlive the connection until the
+    // host has re-bound controllers (the team holds a raw IHIDevice*). These
+    // kept-alive devices are dropped once rebinding is done.
+    void ClearRetiredDevices();
+
+    // In-match side selection mode: keeps the lobby in the Sides phase.
+    void SetSideSelectMode(bool on);
+
+    // Resume vote: while paused every peer votes to continue; the match resumes
+    // once all of them have. Reset when a new pause begins.
+    void ResetResumeVotes();
+    bool ConsumeAllResumeReady();
+
+    // A peer cancelled side selection; the host resumes the match as-is.
+    bool ConsumeSideSelectCancel();
+
+    // Send one control message to a single peer (host -> one client).
+    void SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body);
+
     boost::signals2::signal<void(const NetClientHello &, const NetServerHello &)> sig_OnHandshake;
     boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
@@ -56,6 +91,9 @@ class NetServer {
     friend class NetServerConnection;
 
     void Run();
+    void StartPingTimer();
+    void SchedulePingTimer();
+    void HandlePingTimer(const boost::system::error_code &error);
     void DoAccept();
     void HandleAccept(boost::shared_ptr<NetServerConnection> connection, const boost::system::error_code &error);
     void HandleClientHello(boost::shared_ptr<NetServerConnection> connection, const NetClientHello &hello);
@@ -67,6 +105,7 @@ class NetServer {
     void RemovePlayer(uint32_t playerId);
     void BroadcastLobbyState();
     void RecomputeChoppers();
+    void RecomputeResumeReady(); // caller holds lobbyMutex
 
     uint16_t port;
     std::atomic<bool> running;
@@ -74,6 +113,7 @@ class NetServer {
     boost::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor;
     boost::shared_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type> > workGuard;
     boost::thread ioThread;
+    boost::shared_ptr<boost::asio::steady_timer> pingTimer;
 
     boost::mutex connectionsMutex;
     std::vector<boost::shared_ptr<NetServerConnection> > connections;
@@ -89,6 +129,17 @@ class NetServer {
 
     boost::mutex replayMutex;
     bool replayStopPending;
+
+    boost::mutex resumeMutex;
+    bool allResumeReadyPending;
+    bool sideSelectCancelPending;
+
+    boost::mutex disconnectMutex;
+    std::vector<uint32_t> disconnectedPlayers;
+    std::vector<uint32_t> joinedPlayers;
+
+    boost::mutex retiredMutex;
+    std::vector<boost::shared_ptr<NetHIDDevice> > retiredDevices;
 };
 
 #endif

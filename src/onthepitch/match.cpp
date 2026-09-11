@@ -58,7 +58,9 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   remoteAnimTableReady = false;
   pauseMenuRequested = false;
   extendedReplayFired = false;
+  remoteCameraOverride = false;
   localPeerId = 0;
+  remoteMaxRtt_ms = 0;
 
   matchDurationFactor = GetConfiguration()->GetReal("match_duration", 1.0) * 0.2f + 0.05f;
   matchDifficulty = GetConfiguration()->GetReal("match_difficulty", 0.8f);
@@ -515,7 +517,11 @@ void Match::Pause(bool doPause) {
   pause = doPause;
   pauseMenuRequested = doPause;
   boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
-  if (server) server->BroadcastPause(doPause);
+  if (server) {
+    // Resume votes only matter while paused; clear them on any pause change.
+    server->ResetResumeVotes();
+    server->BroadcastPause(doPause);
+  }
 }
 
 bool Match::ConsumeReplayStop() {
@@ -587,6 +593,22 @@ void Match::GetSunParams(Vector3 &position, Vector3 &color) {
 void Match::SetSunParams(const Vector3 &position, const Vector3 &color) {
   sunNode->GetObject("sun")->SetPosition(position);
   static_pointer_cast<Light>(sunNode->GetObject("sun"))->SetColor(color);
+}
+
+void Match::GetMatchEnvironment(NetMatchEnvironment &environment) {
+  GetSunParams(environment.sunPosition, environment.sunColor);
+  environment.homeKit = teams[0]->GetKitNumber();
+  environment.awayKit = teams[1]->GetKitNumber();
+}
+
+void Match::BroadcastMatchOptions() {
+  boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
+  if (!server) return;
+  NetMatchEnvironment environment;
+  GetMatchEnvironment(environment);
+  NetBuffer buffer;
+  WriteMatchEnvironment(buffer, environment);
+  server->BroadcastMessage(e_NetMessage_MatchEnvironment, buffer);
 }
 
 void Match::RandomizeAdboards(boost::intrusive_ptr<Node> stadiumNode) {
@@ -1280,11 +1302,15 @@ void Match::ResolveRemoteAnimTable(const std::vector<std::string> &names) {
 }
 
 void Match::CaptureRemoteSnapshot(NetBuffer &buffer) {
-  WriteSnapshot(buffer, CaptureSnapshot(this));
+  Snapshot snapshot = CaptureSnapshot(this);
+  boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
+  snapshot.maxRtt_ms = server ? server->GetMaxClientRtt_ms() : 0;
+  WriteSnapshot(buffer, snapshot);
 }
 
 void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
   const Snapshot snapshot = ReadSnapshot(buffer);
+  remoteMaxRtt_ms = snapshot.maxRtt_ms;
 
   matchTime_ms = snapshot.matchTime_ms;
   actualTime_ms = snapshot.actualTime_ms;
@@ -1345,15 +1371,21 @@ void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
   }
 
   // The camera is computed on the host and shipped in the snapshot, so every
-  // peer shows the exact same view (following the ball). During a replay the
-  // local replay camera drives it instead (autoUpdateIngameCamera is false).
+  // peer shows the exact same view (following the ball). A client that changed
+  // its own camera settings overrides this and computes locally from the
+  // snapshot positions. During a replay the local replay camera drives it
+  // instead (autoUpdateIngameCamera is false).
   if (autoUpdateIngameCamera) {
-    cameraOrientation = snapshot.cameraOrientation;
-    cameraNodeOrientation = snapshot.cameraNodeOrientation;
-    cameraNodePosition = snapshot.cameraNodePosition;
-    cameraFOV = snapshot.cameraFOV;
-    cameraNearCap = snapshot.cameraNearCap;
-    cameraFarCap = snapshot.cameraFarCap;
+    if (remoteCameraOverride && designatedPossessionPlayer) {
+      UpdateIngameCamera();
+    } else {
+      cameraOrientation = snapshot.cameraOrientation;
+      cameraNodeOrientation = snapshot.cameraNodeOrientation;
+      cameraNodePosition = snapshot.cameraNodePosition;
+      cameraFOV = snapshot.cameraFOV;
+      cameraNearCap = snapshot.cameraNearCap;
+      cameraFarCap = snapshot.cameraFarCap;
+    }
   }
 
   // A remote match never runs Process(), so advance the iteration counter here:

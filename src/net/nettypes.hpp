@@ -14,6 +14,12 @@ const int net_keepaliveInterval_ms = 500;
 const int net_disconnectTimeout_ms = 5000;
 const int net_snapshotRate_hz = 100;
 const int net_inputRate_hz = 100;
+// Interpolation buffer B: the client renders this far behind the newest
+// snapshot so a late packet can be smoothed over. Adds to both the host and the
+// client input delay so every peer's input is applied at the same instant.
+// Zero while snapshots are rendered "hold last" at 100 Hz over TCP; raise this
+// together with actual snapshot interpolation.
+const int net_interpolationBuffer_ms = 0;
 
 struct NetAddress {
   NetAddress() : port(0) {}

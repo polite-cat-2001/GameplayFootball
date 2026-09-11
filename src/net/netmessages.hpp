@@ -64,11 +64,13 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_SetSelection,
   e_NetLobbyAction_SetTeamReady,
   e_NetLobbyAction_SetDevice,
-  e_NetLobbyAction_DeviceLost
+  e_NetLobbyAction_DeviceLost,
+  e_NetLobbyAction_RequestSideSelect,
+  e_NetLobbyAction_SetResumeReady
 };
 
 struct NetLobbyPlayer {
-  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0), device(0) {}
+  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0), device(0), resumeReady(false) {}
 
   uint32_t id;
   std::string name;
@@ -77,12 +79,13 @@ struct NetLobbyPlayer {
   bool isHost;
   int ping_ms;
   int device; // 0 = keyboard, 1 = gamepad (last device used by this peer)
+  bool resumeReady; // voted to leave the in-match pause menu
 };
 
 // Canonical, host-authoritative lobby state. Mirrored to every peer so that side
 // changes and the team cursor are visible live on all devices.
 struct NetLobbyState {
-  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides) {
+  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides), sideSelect(false) {
     teamId[0] = -1;
     teamId[1] = -1;
     countryId[0] = -1;
@@ -101,6 +104,9 @@ struct NetLobbyState {
 
   uint32_t revision;
   int phase;
+  // In-match side selection: while true the lobby stays in the Sides phase and
+  // never advances to team selection; all-ready means "resume the match".
+  bool sideSelect;
   std::vector<NetLobbyPlayer> players;
   int teamId[2];
   int countryId[2];
@@ -159,13 +165,27 @@ NetInputFrame ReadInputFrame(NetBuffer &buffer);
 
 // Visual match environment (sun light) so lighting matches on the thin client.
 struct NetMatchEnvironment {
-  NetMatchEnvironment() {}
+  NetMatchEnvironment() : homeKit(-1), awayKit(-1) {}
   blunted::Vector3 sunPosition;
   blunted::Vector3 sunColor;
+  int homeKit; // current kit number per side; -1 = leave as-is
+  int awayKit;
 };
 
 void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment);
 NetMatchEnvironment ReadMatchEnvironment(NetBuffer &buffer);
+
+// Keepalive / ping. `echo` carries the last received sequence so the peer can
+// measure round-trip time; all input-delay (fairness) timing is derived from it.
+struct NetKeepalive {
+  NetKeepalive() : seq(0), echo(0) {}
+
+  uint32_t seq;
+  uint32_t echo;
+};
+
+void WriteKeepalive(NetBuffer &buffer, const NetKeepalive &keepalive);
+NetKeepalive ReadKeepalive(NetBuffer &buffer);
 
 #endif
 

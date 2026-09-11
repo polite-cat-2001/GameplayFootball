@@ -63,5 +63,9 @@ void CameraPage::UpdateCamera() {
   GetConfiguration()->Set("camera_height", sliderHeight->GetValue());
   GetConfiguration()->Set("camera_fov", sliderFOV->GetValue());
   GetConfiguration()->Set("camera_anglefactor", sliderAngleFactor->GetValue());
-  GetGameTask()->GetMatch()->SetCameraParams(sliderZoom->GetValue(), sliderHeight->GetValue(), sliderFOV->GetValue(), sliderAngleFactor->GetValue());
+  Match *match = GetGameTask()->GetMatch();
+  match->SetCameraParams(sliderZoom->GetValue(), sliderHeight->GetValue(), sliderFOV->GetValue(), sliderAngleFactor->GetValue());
+  // On a thin LAN client the camera otherwise comes from the host snapshot; let
+  // this peer use its own settings from now on.
+  if (match->IsRemotePresentation()) match->SetRemoteCameraOverride(true);
 }

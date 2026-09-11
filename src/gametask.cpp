@@ -16,60 +16,35 @@
 #include "base/properties.hpp"
 
 #include "net/netclient.hpp"
-#include "net/netmessages.hpp"
-#include "net/nethiddevice.hpp"
 #include "net/netserver.hpp"
 
 #include "blunted.hpp"
 
-namespace {
-// Lobby 'device' field: 0 = keyboard, 1 = gamepad. Returns the local HID device
-// to bind (host) or to sample for InputFrame (client).
-IHIDevice *FindLocalDevice(int deviceType) {
-  const std::vector<IHIDevice*> &controllers = GetControllers();
-  if (deviceType == 1) {
-    for (unsigned int i = 1; i < controllers.size(); i++) {
-      if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Gamepad) return controllers.at(i);
-    }
-    return 0;
-  }
-  for (unsigned int i = 0; i < controllers.size(); i++) {
-    if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Keyboard) return controllers.at(i);
-  }
-  return 0;
+void GameTask::RebindNetworkControllers() {
+  if (!match || match->IsRemotePresentation()) return;
+  netSession.RebindControllers(match);
 }
 
-int GetLocalDeviceType(boost::shared_ptr<NetClient> client) {
-  const NetLobbyState &lobby = client->GetLobbyState();
-  uint32_t localId = client->GetPlayerId();
-  for (unsigned int i = 0; i < lobby.players.size(); i++) {
-    if (lobby.players.at(i).id == localId) return lobby.players.at(i).device;
-  }
-  return 0;
-}
+void GameTask::ApplyNetworkControllers() {
+  if (!match || match->IsRemotePresentation()) return;
+  netSession.SetupControllers(match);
 }
 
-void GameTask::SetupNetworkControllers(Match *target) {
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (!server || !target) return;
+void GameTask::OpenNetworkSideSelect() {
+  const std::vector<Gui2PageData> &pageStack = GetMenuTask()->GetWindowManager()->GetPagePath()->GetPath();
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_NetworkLobby) return;
 
-  const NetLobbyState lobby = server->GetLobbyState();
-  int colorCounter[2] = {0, 0};
-  for (unsigned int i = 0; i < lobby.players.size(); i++) {
-    const NetLobbyPlayer &player = lobby.players.at(i);
-    if (player.side != e_NetSide_Home && player.side != e_NetSide_Away) continue;
-
-    int teamID = (player.side == e_NetSide_Home) ? 0 : 1;
-    IHIDevice *device = 0;
-    if (player.isHost) {
-      device = FindLocalDevice(player.device);
-    } else {
-      device = server->GetHIDevice(player.id).get();
-    }
-    if (device) {
-      target->GetTeam(teamID)->AddHumanGamer(device, (e_PlayerColor)(colorCounter[teamID] % 5));
-      colorCounter[teamID]++;
-    }
+  Properties props;
+  props.SetBool("isInGame", true);
+  props.SetBool("resumeOnClose", true);
+  // Open through the top page (Gui2Page::CreatePage) so the current page is
+  // properly replaced in the stack; opening via the page factory directly would
+  // leave the previous page in the root and leak it.
+  Gui2Page *topPage = GetMenuTask()->GetWindowManager()->GetPageFactory()->GetMostRecentlyCreatedPage();
+  if (topPage) {
+    topPage->CreatePage((int)e_PageID_NetworkLobby, props, 0);
+  } else {
+    GetMenuTask()->GetWindowManager()->GetPageFactory()->CreatePage((int)e_PageID_NetworkLobby, props, 0);
   }
 }
 
@@ -122,10 +97,6 @@ void GameTask::Action(e_GameTaskMessage message) {
         if (GetMenuTask()->GetNetClient()) {
           tmpMatch->SetRemotePresentation(true);
           tmpMatch->SetLocalPeerId((int)GetMenuTask()->GetNetClient()->GetPlayerId());
-        } else {
-          // Host: bind local + remote HID devices to the teams before the match
-          // becomes visible to the graphics thread.
-          SetupNetworkControllers(tmpMatch);
         }
 
         matchLifetimeMutex.lock();
@@ -137,32 +108,16 @@ void GameTask::Action(e_GameTaskMessage message) {
         matchLifetimeMutex.unlock();
         GetGraphicsSystem()->getPhaseMutex.unlock();
 
-        // Hosts publish their animation table so clients can resolve animIDs.
-        boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-        if (server) {
-          std::vector<std::string> names;
-          const std::vector<Animation*> &animations = match->GetAnims()->GetAnimations();
-          names.reserve(animations.size());
-          for (unsigned int i = 0; i < animations.size(); i++) names.push_back(animations.at(i)->GetName());
-          NetBuffer buffer;
-          WriteAnimationTable(buffer, names);
-          server->BroadcastMessage(e_NetMessage_AnimationTable, buffer);
-
-          // Match environment (sun) is randomized per process; mirror it.
-          Vector3 sunPosition, sunColor;
-          match->GetSunParams(sunPosition, sunColor);
-          NetMatchEnvironment environment;
-          environment.sunPosition = sunPosition;
-          environment.sunColor = sunColor;
-          NetBuffer environmentBuffer;
-          WriteMatchEnvironment(environmentBuffer, environment);
-          server->BroadcastMessage(e_NetMessage_MatchEnvironment, environmentBuffer);
-        }
+        // Network glue: (host) bind controllers, clear roster churn, publish the
+        // animation table + environment; (client) reset the input queue.
+        netSession.StartMatch(match);
       }
       break;
 
     case e_GameTaskMessage_StopMatch:
       if (Verbose()) printf("*gametaskmessage: stopping match\n");
+
+      netSession.StopMatch();
 
       GetGraphicsSystem()->getPhaseMutex.lock();
       matchLifetimeMutex.lock();
@@ -278,74 +233,29 @@ void GameTask::ProcessPhase() {
   }
 
   if (match) {
-    if (match->IsRemotePresentation()) {
-      boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-      if (client) {
-        NetMatchEnvironment environment;
-        if (client->ConsumeEnvironment(environment)) {
-          match->SetSunParams(environment.sunPosition, environment.sunColor);
-        }
+    if (netSession.IsActive()) {
+      // Host simulates / client applies snapshots; both then prepare the Put
+      // buffers (locked) and the host relays the render state.
+      netSession.Process(match);
 
-        bool networkPaused = false;
-        if (client->ConsumePauseState(networkPaused)) match->SetPauseFromNetwork(networkPaused);
-
-        // Sample the local device and ship it to the authoritative host.
-        IHIDevice *localDevice = FindLocalDevice(GetLocalDeviceType(client));
-        if (localDevice) {
-          NetInputFrame frame;
-          frame.buttons = 0;
-          for (int b = 0; b < e_ButtonFunction_Size; b++) {
-            if (localDevice->GetButton((e_ButtonFunction)b)) frame.buttons |= (1u << b);
-          }
-          frame.direction = localDevice->GetDirection();
-          client->SendInputFrame(frame);
-        }
-
-        if (!match->HasRemoteAnimTable()) {
-          std::vector<std::string> names;
-          if (client->ConsumeAnimationTable(names)) match->ResolveRemoteAnimTable(names);
-        }
-        if (match->HasRemoteAnimTable()) {
-          std::vector<uint8_t> bytes;
-          if (client->ConsumeSnapshot(bytes)) {
-            NetBuffer buffer;
-            buffer.Data().assign(bytes.begin(), bytes.end());
-            buffer.ResetRead();
-            match->ApplyRemoteSnapshot(buffer);
-          }
-        }
-      }
       matchPutBufferMutex.lock();
       match->PreparePutBuffers();
       matchPutBufferMutex.unlock();
-    } else {
-      // Feed remote clients' input into their virtual devices before simulating.
-      boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-      if (server) {
-        std::vector<boost::shared_ptr<NetHIDDevice> > netDevices = server->GetHIDevices();
-        for (unsigned int i = 0; i < netDevices.size(); i++) netDevices.at(i)->Process();
 
-        // Pause is peer-equal: apply any client request and rebroadcast.
-        bool requestPaused = false;
-        if (server->ConsumePauseRequest(requestPaused)) match->Pause(requestPaused);
+      netSession.BroadcastSnapshot(match);
+
+      // Mirrored side selection surfaces on every peer, even while the pause
+      // menu (not GamePage) is the active page. Open centrally from the state.
+      if (netSession.GetState() == e_NetMatchPhaseState_SideSelect) {
+        const std::vector<Gui2PageData> &pageStack = GetMenuTask()->GetWindowManager()->GetPagePath()->GetPath();
+        if (pageStack.empty() || pageStack.back().pageID != e_PageID_NetworkLobby) OpenNetworkSideSelect();
       }
-
+    } else {
       match->Process();
 
       matchPutBufferMutex.lock();
       match->PreparePutBuffers();
       matchPutBufferMutex.unlock();
-
-      // Host: relay the render state to every connected thin client.
-      if (server) {
-        unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
-        if (now_ms - lastNetSnapshotTime_ms >= (unsigned long)(1000 / net_snapshotRate_hz)) {
-          lastNetSnapshotTime_ms = now_ms;
-          NetBuffer buffer;
-          match->CaptureRemoteSnapshot(buffer);
-          server->BroadcastMessage(e_NetMessage_Snapshot, buffer);
-        }
-      }
     }
   }
 

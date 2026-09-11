@@ -22,6 +22,10 @@
 
 NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
+  resumeOnClose = pageData.properties && pageData.properties->GetBool("resumeOnClose");
+  resumeModeSet = false;
+  resumeTriggered = false;
+  sawSideSelect = false;
   teamsBuilt = false;
   teamsVisible = false;
   matchStartTriggered = false;
@@ -566,6 +570,50 @@ void NetworkLobbyPage::Process() {
   NetLobbyState state = GetState();
   uint32_t localId = GetLocalPlayerId();
 
+  // Resume mode (opened over a paused match): keep the lobby in the Sides phase
+  // and, once everyone confirmed, rebind controllers on the host and resume.
+  if (resumeOnClose && !resumeModeSet) {
+    resumeModeSet = true;
+    if (IsHost()) {
+      boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+      if (server) server->SetSideSelectMode(true);
+    }
+  }
+
+  if (resumeOnClose) {
+    // Leave when side-select mode came and went — on the host too, otherwise a
+    // client's cancel wouldn't close the host's screen (and vice versa). Do NOT
+    // key this off Match::GetPause(): a reconnecting client builds its Match
+    // after the host paused, so its pause flag may lag (caused flicker before).
+    if (state.sideSelect) sawSideSelect = true;
+    if (sawSideSelect && !state.sideSelect) {
+      GoBack();
+      return;
+    }
+
+    if (IsHost()) {
+      bool allReady = !state.players.empty();
+      for (unsigned int i = 0; i < state.players.size(); i++) {
+        if (!state.players.at(i).ready) { allReady = false; break; }
+      }
+      if (allReady && !resumeTriggered) {
+        resumeTriggered = true;
+        boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+        if (server) server->SetSideSelectMode(false);
+        GetGameTask()->RebindNetworkControllers();
+        GoBack();
+        return;
+      }
+    } else {
+      // Safety net: the host resumed without clearing the flag.
+      Match *m = GetGameTask()->GetMatch();
+      if (m && !m->GetPause()) {
+        GoBack();
+        return;
+      }
+    }
+  }
+
   if (!teamsBuilt) BuildTeamPanels();
 
   bool teams = (state.phase == e_NetLobbyPhase_Teams);
@@ -705,6 +753,31 @@ void NetworkLobbyPage::ProcessWindowingEvent(WindowingEvent *event) {
 }
 
 void NetworkLobbyPage::Leave() {
+  if (resumeOnClose) {
+    // Cancel keeps the current setup and simply resumes the match (the freed
+    // side is taken over by AI / the remaining human).
+    if (IsHost()) {
+      boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+      if (server) server->SetSideSelectMode(false);
+      // Apply chosen sides but keep the match paused: leaving side selection
+      // returns to the pause menu, it does not resume the game.
+      GetGameTask()->ApplyNetworkControllers();
+      GoBack();
+    } else {
+      // Ask the host to cancel; Process() closes this page once sideSelect turns
+      // false, so every peer resumes together. Do not GoBack here, or the
+      // overlay would immediately re-open while the flag is still set.
+      boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+      if (client) {
+        NetLobbyAction action;
+        action.type = e_NetLobbyAction_RequestSideSelect;
+        action.value = 0; // cancel
+        client->SendLobbyAction(action);
+      }
+    }
+    return;
+  }
+
   if (IsHost()) {
     boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
     if (server) server->Stop();

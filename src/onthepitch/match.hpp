@@ -48,6 +48,7 @@ struct ReplayBallTouchesNetFrame {
 };
 
 class NetBuffer;
+struct NetMatchEnvironment;
 
 struct ReplaySpatial {
   ReplaySpatial(int frameCount) {
@@ -114,6 +115,9 @@ class Match {
     void GetSunParams(Vector3 &position, Vector3 &color);
     void GetCameraState(Quaternion &cameraOrientation, Quaternion &nodeOrientation, Vector3 &nodePosition, float &fov, float &nearCap, float &farCap);
     void SetSunParams(const Vector3 &position, const Vector3 &color);
+    // Host pause options: sun (weather) + kit numbers, mirrored to clients.
+    void GetMatchEnvironment(NetMatchEnvironment &environment);
+    void BroadcastMatchOptions();
     void RandomizeAdboards(boost::intrusive_ptr<Node> stadiumNode);
     void UpdateControllerSetup();
     void SpamMessage(const std::string &msg, int time_ms = 3000);
@@ -137,6 +141,9 @@ class Match {
     bool HasRemoteAnimTable() const { return remoteAnimTableReady; }
     void CaptureRemoteSnapshot(NetBuffer &buffer);
     void ApplyRemoteSnapshot(NetBuffer &buffer);
+    // Host's max client RTT, mirrored in snapshots. The client uses it to delay
+    // its input by the same amount the host delays its own.
+    int GetRemoteMaxRtt_ms() const { return remoteMaxRtt_ms; }
 
     const MentalImage *GetMentalImage(int history_ms);
     void UpdateLatestMentalImageBallPredictions();
@@ -221,6 +228,11 @@ class Match {
 
     void SetAutoUpdateIngameCamera(bool autoUpdate = true) { if (autoUpdate != autoUpdateIngameCamera) { camPos.clear(); autoUpdateIngameCamera = autoUpdate; } }
 
+    // Thin client: use this peer's own camera params instead of the host camera
+    // shipped in snapshots (each client may pick its own view).
+    void SetRemoteCameraOverride(bool on) { if (on != remoteCameraOverride) { camPos.clear(); remoteCameraOverride = on; } }
+    bool GetRemoteCameraOverride() const { return remoteCameraOverride; }
+
     int GetReplaySize_ms();
     int GetReplayCamCount();
 
@@ -231,6 +243,7 @@ class Match {
 
     float GetMatchDurationFactor() const { return matchDurationFactor; }
     float GetMatchDifficulty() const { return matchDifficulty; }
+    void SetMatchDifficulty(float difficulty) { matchDifficulty = difficulty; }
 
     std::vector<Vector3> &GetAnimPositionCache(Animation *anim) { return animPositionCache.find(anim)->second; }
 
@@ -409,7 +422,9 @@ class Match {
     bool remoteAnimTableReady;
     bool pauseMenuRequested;
     bool extendedReplayFired;
+    bool remoteCameraOverride;
     int localPeerId;
+    int remoteMaxRtt_ms;
     std::vector<Animation*> remoteAnimTable;
 };
 

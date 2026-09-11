@@ -17,6 +17,9 @@
 
 #include "gametask.hpp"
 
+#include "../net/netclient.hpp"
+#include "../net/netserver.hpp"
+
 #include "main.hpp"
 
 #include "framework/scheduler.hpp"
@@ -139,6 +142,12 @@ void MenuTask::ProcessPhase() {
   Gui2Task::ProcessPhase();
 
   if (menuAction == e_MenuAction_Menu) {
+
+    // Leaving a network match (forfeit / game over) must tear the session down.
+    // Otherwise a stale server/client makes the next local match look networked
+    // and its pause menu opens the old mirrored lobby.
+    if (netServer) { netServer->Stop(); netServer.reset(); }
+    if (netClient) { netClient->Disconnect(); netClient.reset(); }
 
     windowManager->GetPagePath()->Clear();
 

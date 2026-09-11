@@ -71,6 +71,7 @@ void Team::InitPlayers(boost::intrusive_ptr<Node> fullbodyNode, std::map<Vector3
   playerNode->SetLocalMode(e_LocalMode_Absolute);
 
   activePlayerCount = playerNum;
+  kitNumber = GetMenuTask()->GetTeamKitNum(GetID());
 
   Log(e_Notice, "Team", "Team", "Creating players");
 
@@ -562,6 +563,7 @@ Player *Team::GetGoalie() {
 }
 
 void Team::SetKitNumber(int num) {
+  kitNumber = num;
   std::string kitNumberString = int_to_str(num);
   if (kitNumberString.size() < 2) kitNumberString = "0" + kitNumberString;
   std::string kitFilename = GetTeamData()->GetKitUrl() + "_kit_" + kitNumberString + ".png";
