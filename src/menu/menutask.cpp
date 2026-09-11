@@ -172,7 +172,36 @@ void MenuTask::ProcessPhase() {
 
   }
 
+  UpdateNetworkOverlay();
+
   menuAction = e_MenuAction_None;
+}
+
+void MenuTask::UpdateNetworkOverlay() {
+  // The menu layer owns page navigation; GameTask only exposes the match state.
+  // While a network match wants side selection, surface the mirrored overlay on
+  // every peer (even while the pause menu, not GamePage, is the active page).
+  boost::shared_ptr<GameTask> gameTask = GetGameTask();
+  if (!gameTask) return;
+  NetMatchSession *session = gameTask->GetNetSession();
+  if (!session || !session->IsActive() || !gameTask->GetMatch()) return;
+  if (session->GetState() != e_NetMatchPhaseState_SideSelect) return;
+
+  const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_NetworkLobby) return;
+
+  Properties properties;
+  properties.SetBool("isInGame", true);
+  properties.SetBool("resumeOnClose", true);
+  // Open through the top page (Gui2Page::CreatePage) so the current page is
+  // properly replaced in the stack; opening via the page factory directly would
+  // leave the previous page in the root and leak it.
+  Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
+  if (topPage) {
+    topPage->CreatePage((int)e_PageID_NetworkLobby, properties, 0);
+  } else {
+    windowManager->GetPageFactory()->CreatePage((int)e_PageID_NetworkLobby, properties, 0);
+  }
 }
 
 bool MenuTask::QuickStart() {

@@ -85,6 +85,8 @@ class GameTask : public IUserTask {
 
     Match *GetMatch() { return match; }
     MenuScene *GetMenuScene() { return menuScene; }
+    // Read-only view of the network match state for the menu layer (overlay).
+    NetMatchSession *GetNetSession() { return &netSession; }
 
     // Re-binds host controllers from the current lobby state and resumes the
     // paused match (live side change after a disconnect or the pause menu).
@@ -99,8 +101,6 @@ class GameTask : public IUserTask {
     boost::mutex matchLifetimeMutex;
 
   protected:
-    void OpenNetworkSideSelect();
-
     Match *match;
     MenuScene *menuScene;
 

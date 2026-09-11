@@ -30,24 +30,6 @@ void GameTask::ApplyNetworkControllers() {
   netSession.SetupControllers(match);
 }
 
-void GameTask::OpenNetworkSideSelect() {
-  const std::vector<Gui2PageData> &pageStack = GetMenuTask()->GetWindowManager()->GetPagePath()->GetPath();
-  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_NetworkLobby) return;
-
-  Properties props;
-  props.SetBool("isInGame", true);
-  props.SetBool("resumeOnClose", true);
-  // Open through the top page (Gui2Page::CreatePage) so the current page is
-  // properly replaced in the stack; opening via the page factory directly would
-  // leave the previous page in the root and leak it.
-  Gui2Page *topPage = GetMenuTask()->GetWindowManager()->GetPageFactory()->GetMostRecentlyCreatedPage();
-  if (topPage) {
-    topPage->CreatePage((int)e_PageID_NetworkLobby, props, 0);
-  } else {
-    GetMenuTask()->GetWindowManager()->GetPageFactory()->CreatePage((int)e_PageID_NetworkLobby, props, 0);
-  }
-}
-
 void UploadFullbodyModel::Update() {
   for (unsigned int i = 0; i < geometryToUpload.size(); i++) {
     geometryToUpload.at(i)->OnUpdateGeometryData(false);
@@ -243,13 +225,6 @@ void GameTask::ProcessPhase() {
       matchPutBufferMutex.unlock();
 
       netSession.BroadcastSnapshot(match);
-
-      // Mirrored side selection surfaces on every peer, even while the pause
-      // menu (not GamePage) is the active page. Open centrally from the state.
-      if (netSession.GetState() == e_NetMatchPhaseState_SideSelect) {
-        const std::vector<Gui2PageData> &pageStack = GetMenuTask()->GetWindowManager()->GetPagePath()->GetPath();
-        if (pageStack.empty() || pageStack.back().pageID != e_PageID_NetworkLobby) OpenNetworkSideSelect();
-      }
     } else {
       match->Process();
 

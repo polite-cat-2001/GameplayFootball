@@ -83,6 +83,10 @@ class MenuTask : public Gui2Task {
     boost::shared_ptr<NetClient> GetNetClient() { return netClient; }
 
   protected:
+    // Menu-layer reaction to the network match state: opens the mirrored side
+    // selection overlay. GameTask no longer touches the GUI.
+    void UpdateNetworkOverlay();
+
     e_MenuAction menuAction;
 
     Lockable<QueuedFixture> queuedFixture; // todo: we can probably unlock this stuff
