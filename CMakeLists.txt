@@ -380,3 +380,22 @@ add_executable(nettest tools/nettest/main.cpp)
 apply_common_includes(nettest)
 target_link_libraries(nettest PRIVATE netlib blunted2)
 copy_data_post_build(nettest)
+
+# Headless host-side integration test for a LAN match (Match + NetServer + raw
+# NetClient peer, driven through NetMatchSession). Same core sources as
+# determinism_runner because it builds a real Match.
+add_executable(lanmatchtest
+        tools/lanmatchtest/main.cpp
+        src/misc/perlin.cpp
+        src/misc/hungarian.c
+        src/gametask.cpp
+        src/utils.cpp
+        src/dbquery.cpp
+        src/gamedefines.cpp)
+apply_common_includes(lanmatchtest)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(lanmatchtest PRIVATE -Wl,--start-group ${LIBRARIES} -Wl,--end-group)
+else()
+  target_link_libraries(lanmatchtest PRIVATE ${LIBRARIES})
+endif()
+copy_data_post_build(lanmatchtest)

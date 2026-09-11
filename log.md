@@ -1202,3 +1202,38 @@ host `Leave` и серверный `ConsumeSideSelectCancel` звали `RebindN
 инициатора. Фикс: проверка `sawSideSelect && !state.sideSelect` вынесена на общий
 уровень (хост и клиент); у клиента оставлен safety-net по `!Match::GetPause()`.
 Сборка ок, `nettest` `PASS`, детерминизм без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] test | nettest: сценарные тесты протокола LAN
+`tools/nettest` расширен из handshake-smoke в набор сценарных проверок (своя
+`CHECK`/`WaitFor`-обвязка, `PASS (N checks)`/`FAIL`): handshake, поток лобби
+(side/ready → Sides→Teams), открытие/отмена выбора сторон
+(`RequestSideSelect` value 1/0 → `sideSelect` + `ConsumeSideSelectCancel`),
+resume-голосование (`SetResumeReady` → `ConsumeAllResumeReady`, `ResetResumeVotes`),
+дисконнект (`ConsumeDisconnectedPlayer`), RTT/keepalive и round-trip новых
+сообщений (`NetLobbyState` с sideSelect/resumeReady/device, `NetMatchEnvironment`
+с китами, `NetKeepalive`). 43 проверки, все зелёные. Это база для безопасных
+дальнейших правок. Вики [[сеть]] обновлена.
+
+## [2026-09-11] refactor | LAN: гигиена потоков и версия протокола
+Быстрая гигиена после тестов. (1) Убрана гонка `NetClient::lobbyState` (и
+`serverHello`/`catalog`): io-поток писал, игровой/меню читал ссылку. Теперь
+`stateMutex`, геттеры возвращают копии; `playerId` — `std::atomic`. (2) Удалены
+неиспользуемые сигналы `NetClient/NetServer::sig_OnHandshake`/`sig_OnLobbyState`
+— они вызывались из io-потока (мина при подключении слота); во всём коде слотов
+не было, только старый nettest. (3) `net_protocolVersion` 1 → 2: формат уже
+менялся (sideSelect/resumeReady, киты, maxRtt, keepalive), константа теперь
+отражает ревизию. Сборка ок, `nettest` `PASS (43 checks)`, детерминизм
+`7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] test | lanmatchtest: headless интеграционный тест host-стороны
+Новый `tools/lanmatchtest` (в CMake, линкует `${LIBRARIES}` как `determinism`):
+реальный `Match` + `NetServer` + «сырой» `NetClient`, прогон через
+`NetMatchSession`. Сценарий: старт матча + привязка контроллеров, запрос паузы,
+resume-голосование (одна сторона не резюмит, обе — резюмит), открытие/отмена
+выбора сторон (возврат в паузу, пауза сохраняется), дисконнект (ростер-пауза +
+выбор сторон, клиент уходит из лобби), отмена выбора сторон хостом и резюм после
+дисконнекта. `PASS (21 checks)`. Два `Match` в одном процессе не поднимаются
+(глобальные `PlayerBase::id`/контроллеры/`MenuTask`), поэтому клиентская
+remote-презентация не инстанцируется — её протокол покрыт `nettest`. `nettest`
+`PASS (43 checks)`, детерминизм `7134def2...` без изменений. Вики [[сеть]]
+обновлена.
