@@ -292,10 +292,12 @@ apply_common_includes(menulib)
 add_library(datalib STATIC
         src/data/matchdata.cpp
         src/data/playerdata.cpp
-        src/data/teamdata.cpp)
+        src/data/teamdata.cpp
+        src/data/teamcatalog.cpp)
 apply_common_includes(datalib)
 add_library(netlib STATIC
         src/net/netbuffer.cpp
+        src/net/netdata.cpp
         src/net/netmessages.cpp
         src/net/netassets.cpp
         src/net/netserver.cpp

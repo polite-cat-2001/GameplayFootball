@@ -65,25 +65,75 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
   std::string factoryTacticsString;
   std::string tacticsString;
 
-  color1.Set(0, 0, 0);
-  color2.Set(255, 255, 255);
+  raw.databaseID = teamDatabaseID;
+  raw.color1.Set(0, 0, 0);
+  raw.color2.Set(255, 255, 255);
 
   bool national = false;
 
   for (unsigned int c = 0; c < result->data.at(0).size(); c++) {
     if (result->header.at(c).compare("league_name") == 0) national = (result->data.at(0).at(c).compare("National Teams") == 0);
 
-    if (result->header.at(c).compare("name") == 0) name = result->data.at(0).at(c);
-    if (result->header.at(c).compare("logo_url") == 0) logo_url = result->data.at(0).at(c);
-    if (result->header.at(c).compare("kit_url") == 0) kit_url = result->data.at(0).at(c);
+    if (result->header.at(c).compare("name") == 0) raw.name = result->data.at(0).at(c);
+    if (result->header.at(c).compare("logo_url") == 0) raw.logoUrl = result->data.at(0).at(c);
+    if (result->header.at(c).compare("kit_url") == 0) raw.kitUrl = result->data.at(0).at(c);
     if (result->header.at(c).compare("formation_xml") == 0) formationString = result->data.at(0).at(c);
     if (result->header.at(c).compare("formation_factory_xml") == 0) factoryFormationString = result->data.at(0).at(c);
     if (result->header.at(c).compare("tactics_xml") == 0) tacticsString = result->data.at(0).at(c);
     if (result->header.at(c).compare("tactics_factory_xml") == 0) factoryTacticsString = result->data.at(0).at(c);
-    if (result->header.at(c).compare("shortname") == 0) shortName = result->data.at(0).at(c);
-    if (result->header.at(c).compare("color1") == 0) color1 = GetVectorFromString(result->data.at(0).at(c));
-    if (result->header.at(c).compare("color2") == 0) color2 = GetVectorFromString(result->data.at(0).at(c));
+    if (result->header.at(c).compare("shortname") == 0) raw.shortName = result->data.at(0).at(c);
+    if (result->header.at(c).compare("color1") == 0) raw.color1 = GetVectorFromString(result->data.at(0).at(c));
+    if (result->header.at(c).compare("color2") == 0) raw.color2 = GetVectorFromString(result->data.at(0).at(c));
   }
+
+  delete result;
+
+  raw.formationXml = formationString;
+  raw.formationFactoryXml = factoryFormationString;
+  raw.tacticsXml = tacticsString;
+  raw.tacticsFactoryXml = factoryTacticsString;
+  raw.logoUrl = "databases/default/" + raw.logoUrl;
+  raw.kitUrl = "databases/default/" + raw.kitUrl;
+
+  InitFromRaw();
+
+  // load players
+
+  std::string order = "formationorder";
+  if (national) order = "nationalteamformationorder";
+
+  result = GetDB()->Query("select id from players where team_id = " + int_to_str(teamDatabaseID) + " or nationalteam_id = " + int_to_str(teamDatabaseID) + " order by " + order);
+  for (unsigned int r = 0; r < result->data.size(); r++) {
+    //int playerDatabaseID = atoi(playerQuery.result[r * playerQuery.columns + c]);
+    int playerDatabaseID = atoi(result->data.at(r).at(0).c_str());
+    //printf("loading player %i\n", playerDatabaseID);
+    PlayerData *onePlayerData = new PlayerData(playerDatabaseID);
+    playerData.push_back(onePlayerData);
+    raw.players.push_back(onePlayerData->GetRaw());
+  }
+
+  delete result;
+
+}
+
+TeamData::TeamData(const TeamDataRaw &source) : databaseID(source.databaseID), raw(source) {
+
+  InitFromRaw();
+
+  for (unsigned int i = 0; i < raw.players.size(); i++) {
+    playerData.push_back(new PlayerData(raw.players.at(i)));
+  }
+
+}
+
+void TeamData::InitFromRaw() {
+
+  name = raw.name;
+  shortName = raw.shortName;
+  logo_url = raw.logoUrl;
+  kit_url = raw.kitUrl;
+  color1 = raw.color1;
+  color2 = raw.color2;
 
   if (shortName.compare("") == 0) {
     shortName = name;
@@ -91,16 +141,11 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
     shortName = boost::to_upper_copy(shortName.substr(0, 3));
   }
 
-  delete result;
-
-  logo_url = "databases/default/" + logo_url;
-  kit_url = "databases/default/" + kit_url;
-
 
   // team formation
 
   XMLLoader loader;
-  XMLTree tree = loader.Load(formationString);
+  XMLTree tree = loader.Load(raw.formationXml);
 
   //loader.PrintTree(tree);
 
@@ -169,12 +214,12 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
 
   // team tactics
 
-  tree = loader.Load(tacticsString);
+  tree = loader.Load(raw.tacticsXml);
 
   iter = tree.children.begin();
   while (iter != tree.children.end()) {
     tactics.userProperties.Set((*iter).first.c_str(), atof((*iter).second.value.c_str()));
-    //printf("value name: %s, value: %f\n", (*iter).first.c_str(), atof((*iter).second.value.c_str()));
+    //printf("value name: %f\n", atof((*iter).second.value.c_str()));
 
     if ((*iter).first.compare("position_offense_depth_factor") == 0) {
       tactics.humanReadableNames.Set((*iter).first.c_str(), "attacking: team depth");
@@ -233,31 +278,14 @@ TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
 
   // factory tactics
 
-  tree = loader.Load(factoryTacticsString);
+  tree = loader.Load(raw.tacticsFactoryXml);
 
   iter = tree.children.begin();
   while (iter != tree.children.end()) {
     tactics.factoryProperties.Set((*iter).first.c_str(), atof((*iter).second.value.c_str()));
-    //printf("value name: %s, value: %f\n", (*iter).first.c_str(), atof((*iter).second.value.c_str()));
+    //printf("value name: %f\n", atof((*iter).second.value.c_str()));
     iter++;
   }
-
-
-  // load players
-
-  std::string order = "formationorder";
-  if (national) order = "nationalteamformationorder";
-
-  result = GetDB()->Query("select id from players where team_id = " + int_to_str(teamDatabaseID) + " or nationalteam_id = " + int_to_str(teamDatabaseID) + " order by " + order);
-  for (unsigned int r = 0; r < result->data.size(); r++) {
-    //int playerDatabaseID = atoi(playerQuery.result[r * playerQuery.columns + c]);
-    int playerDatabaseID = atoi(result->data.at(r).at(0).c_str());
-    //printf("loading player %i\n", playerDatabaseID);
-    PlayerData *onePlayerData = new PlayerData(playerDatabaseID);
-    playerData.push_back(onePlayerData);
-  }
-
-  delete result;
 
 }
 

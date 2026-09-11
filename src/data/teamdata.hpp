@@ -24,10 +24,28 @@ struct TeamTactics {
 
 };
 
+// Serializable team payload streamed from host to clients. XML strings are kept
+// raw so the receiving side can rebuild formation/tactics without a database.
+struct TeamDataRaw {
+  int databaseID = 0;
+  std::string name;
+  std::string shortName;
+  std::string logoUrl;
+  std::string kitUrl;
+  std::string formationXml;
+  std::string formationFactoryXml;
+  std::string tacticsXml;
+  std::string tacticsFactoryXml;
+  Vector3 color1;
+  Vector3 color2;
+  std::vector<PlayerDataRaw> players;
+};
+
 class TeamData {
 
   public:
     TeamData(int teamDatabaseID);
+    TeamData(const TeamDataRaw &raw);
     virtual ~TeamData();
 
     std::string GetName() { return name; }
@@ -53,11 +71,15 @@ class TeamData {
     PlayerData *GetPlayerData(int num) { return playerData.at(num); }
     PlayerData *GetPlayerDataByDatabaseID(int id);
 
+    const TeamDataRaw &GetRaw() const { return raw; }
+
     void SaveLineup();
     void SaveTactics();
     void Save();
 
   protected:
+    void InitFromRaw();
+
     int databaseID;
 
     std::string name;
@@ -71,6 +93,8 @@ class TeamData {
     FormationEntry formation[playerNum];
 
     std::vector<PlayerData*> playerData;
+
+    TeamDataRaw raw;
 
 };
 
