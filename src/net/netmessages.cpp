@@ -50,9 +50,13 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
     buffer.PutBool(player.ready);
     buffer.PutBool(player.isHost);
     buffer.PutU32((uint32_t)player.ping_ms);
+    buffer.PutU32((uint32_t)player.device);
   }
   for (int side = 0; side < 2; side++) {
     buffer.PutU32((uint32_t)state.teamId[side]);
+    buffer.PutU32((uint32_t)state.countryId[side]);
+    buffer.PutU32((uint32_t)state.leagueId[side]);
+    buffer.PutBool(state.teamReady[side]);
     buffer.PutU32(state.chooser[side]);
     buffer.PutU32((uint32_t)state.teamCursor[side]);
     buffer.PutU32((uint32_t)state.listScroll[side]);
@@ -73,9 +77,13 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
     player.ready = buffer.GetBool();
     player.isHost = buffer.GetBool();
     player.ping_ms = (int)buffer.GetU32();
+    player.device = (int)buffer.GetU32();
   }
   for (int side = 0; side < 2; side++) {
     state.teamId[side] = (int)buffer.GetU32();
+    state.countryId[side] = (int)buffer.GetU32();
+    state.leagueId[side] = (int)buffer.GetU32();
+    state.teamReady[side] = buffer.GetBool();
     state.chooser[side] = buffer.GetU32();
     state.teamCursor[side] = (int)buffer.GetU32();
     state.listScroll[side] = (int)buffer.GetU32();
@@ -88,6 +96,7 @@ void WriteLobbyAction(NetBuffer &buffer, const NetLobbyAction &action) {
   buffer.PutU32(action.playerId);
   buffer.PutU32((uint32_t)action.side);
   buffer.PutU32((uint32_t)action.value);
+  buffer.PutU32((uint32_t)action.value2);
 }
 
 NetLobbyAction ReadLobbyAction(NetBuffer &buffer) {
@@ -96,6 +105,7 @@ NetLobbyAction ReadLobbyAction(NetBuffer &buffer) {
   action.playerId = buffer.GetU32();
   action.side = (int)buffer.GetU32();
   action.value = (int)buffer.GetU32();
+  action.value2 = (int)buffer.GetU32();
   return action;
 }
 

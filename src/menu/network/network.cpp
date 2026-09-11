@@ -60,41 +60,39 @@ void NetworkMenuPage::GoBack() {
 
 NetworkHostPage::NetworkHostPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
-  Gui2Caption *title = new Gui2Caption(windowManager, "caption_network_host", 20, 15, 60, 3, "Host game");
+  Gui2Caption *title = new Gui2Caption(windowManager, "caption_network_host", 20, 12, 60, 3, "Host game");
   this->AddView(title);
   title->Show();
 
-  Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_host_port", 20, 25, 30, 3, "Port");
-  this->AddView(portLabel);
-  portLabel->Show();
-
-  portInput = new Gui2EditLine(windowManager, "editline_network_host_port", 50, 25, 20, 3, "27015");
+  Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_host_port", 0, 0, 30, 3, "Port");
+  portInput = new Gui2EditLine(windowManager, "editline_network_host_port", 0, 0, 20, 3, "27015");
   portInput->SetAllowedChars("0123456789");
   portInput->SetMaxLength(5);
-  this->AddView(portInput);
-  portInput->Show();
 
-  Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_host_name", 20, 30, 30, 3, "Name");
-  this->AddView(nameLabel);
-  nameLabel->Show();
-
-  nameInput = new Gui2EditLine(windowManager, "editline_network_host_name", 50, 30, 20, 3, "Host");
+  Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_host_name", 0, 0, 30, 3, "Name");
+  nameInput = new Gui2EditLine(windowManager, "editline_network_host_name", 0, 0, 20, 3, "Host");
   nameInput->SetAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ ");
   nameInput->SetMaxLength(16);
-  this->AddView(nameInput);
-  nameInput->Show();
 
-  Gui2Button *openButton = new Gui2Button(windowManager, "button_network_host_open", 20, 40, 30, 3, "Open lobby");
+  Gui2Button *openButton = new Gui2Button(windowManager, "button_network_host_open", 0, 0, 30, 3, "Open lobby");
   openButton->sig_OnClick.connect(boost::bind(&NetworkHostPage::OpenLobby, this));
-  this->AddView(openButton);
-  openButton->Show();
 
-  Gui2Button *backButton = new Gui2Button(windowManager, "button_network_host_back", 20, 45, 30, 3, "Back");
+  Gui2Button *backButton = new Gui2Button(windowManager, "button_network_host_back", 0, 0, 30, 3, "Back");
   backButton->sig_OnClick.connect(boost::bind(&NetworkHostPage::GoBack, this));
-  this->AddView(backButton);
-  backButton->Show();
 
-  statusCaption = new Gui2Caption(windowManager, "caption_network_host_status", 20, 55, 60, 3, "");
+  Gui2Grid *grid = new Gui2Grid(windowManager, "grid_network_host", 20, 22, 60, 45);
+  grid->AddView(portLabel, 0, 0);
+  grid->AddView(portInput, 0, 1);
+  grid->AddView(nameLabel, 1, 0);
+  grid->AddView(nameInput, 1, 1);
+  grid->AddView(openButton, 2, 1);
+  grid->AddView(backButton, 2, 0);
+  grid->UpdateLayout(0.5);
+
+  this->AddView(grid);
+  grid->Show();
+
+  statusCaption = new Gui2Caption(windowManager, "caption_network_host_status", 20, 72, 60, 3, "");
   this->AddView(statusCaption);
   statusCaption->Show();
 
@@ -147,51 +145,46 @@ NetworkJoinPage::NetworkJoinPage(Gui2WindowManager *windowManager, const Gui2Pag
 
   connecting = false;
 
-  Gui2Caption *title = new Gui2Caption(windowManager, "caption_network_join", 20, 15, 60, 3, "Join game");
+  Gui2Caption *title = new Gui2Caption(windowManager, "caption_network_join", 20, 10, 60, 3, "Join game");
   this->AddView(title);
   title->Show();
 
-  Gui2Caption *addressLabel = new Gui2Caption(windowManager, "caption_network_join_address", 20, 25, 30, 3, "Address");
-  this->AddView(addressLabel);
-  addressLabel->Show();
-
-  addressInput = new Gui2EditLine(windowManager, "editline_network_join_address", 50, 25, 20, 3, "127.0.0.1");
+  Gui2Caption *addressLabel = new Gui2Caption(windowManager, "caption_network_join_address", 0, 0, 30, 3, "Address");
+  addressInput = new Gui2EditLine(windowManager, "editline_network_join_address", 0, 0, 20, 3, "127.0.0.1");
   addressInput->SetAllowedChars("0123456789.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-");
   addressInput->SetMaxLength(64);
-  this->AddView(addressInput);
-  addressInput->Show();
 
-  Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_join_port", 20, 30, 30, 3, "Port");
-  this->AddView(portLabel);
-  portLabel->Show();
-
-  portInput = new Gui2EditLine(windowManager, "editline_network_join_port", 50, 30, 20, 3, "27015");
+  Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_join_port", 0, 0, 30, 3, "Port");
+  portInput = new Gui2EditLine(windowManager, "editline_network_join_port", 0, 0, 20, 3, "27015");
   portInput->SetAllowedChars("0123456789");
   portInput->SetMaxLength(5);
-  this->AddView(portInput);
-  portInput->Show();
 
-  Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_join_name", 20, 35, 30, 3, "Name");
-  this->AddView(nameLabel);
-  nameLabel->Show();
-
-  nameInput = new Gui2EditLine(windowManager, "editline_network_join_name", 50, 35, 20, 3, "Player");
+  Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_join_name", 0, 0, 30, 3, "Name");
+  nameInput = new Gui2EditLine(windowManager, "editline_network_join_name", 0, 0, 20, 3, "Player");
   nameInput->SetAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ ");
   nameInput->SetMaxLength(16);
-  this->AddView(nameInput);
-  nameInput->Show();
 
-  Gui2Button *connectButton = new Gui2Button(windowManager, "button_network_join_connect", 20, 45, 30, 3, "Connect");
+  Gui2Button *connectButton = new Gui2Button(windowManager, "button_network_join_connect", 0, 0, 30, 3, "Connect");
   connectButton->sig_OnClick.connect(boost::bind(&NetworkJoinPage::Connect, this));
-  this->AddView(connectButton);
-  connectButton->Show();
 
-  Gui2Button *backButton = new Gui2Button(windowManager, "button_network_join_back", 20, 50, 30, 3, "Back");
+  Gui2Button *backButton = new Gui2Button(windowManager, "button_network_join_back", 0, 0, 30, 3, "Back");
   backButton->sig_OnClick.connect(boost::bind(&NetworkJoinPage::GoBack, this));
-  this->AddView(backButton);
-  backButton->Show();
 
-  statusCaption = new Gui2Caption(windowManager, "caption_network_join_status", 20, 60, 60, 3, "");
+  Gui2Grid *grid = new Gui2Grid(windowManager, "grid_network_join", 20, 20, 60, 50);
+  grid->AddView(addressLabel, 0, 0);
+  grid->AddView(addressInput, 0, 1);
+  grid->AddView(portLabel, 1, 0);
+  grid->AddView(portInput, 1, 1);
+  grid->AddView(nameLabel, 2, 0);
+  grid->AddView(nameInput, 2, 1);
+  grid->AddView(connectButton, 3, 1);
+  grid->AddView(backButton, 3, 0);
+  grid->UpdateLayout(0.5);
+
+  this->AddView(grid);
+  grid->Show();
+
+  statusCaption = new Gui2Caption(windowManager, "caption_network_join_status", 20, 74, 60, 3, "");
   this->AddView(statusCaption);
   statusCaption->Show();
 

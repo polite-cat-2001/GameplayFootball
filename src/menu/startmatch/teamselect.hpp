@@ -19,6 +19,12 @@
 
 using namespace blunted;
 
+// Selector population helpers shared with the LAN lobby team-select phase.
+std::string GetNationalTeamsLeagueID();
+void AddCountries(Gui2IconSelector *selector);
+void AddLeagues(Gui2IconSelector *selector, const std::string &country_id);
+void AddTeams(Gui2IconSelector *selector, const std::string &competition_id);
+
 class TeamSelectPage : public Gui2Page {
 
   public:

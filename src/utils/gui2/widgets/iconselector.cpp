@@ -172,6 +172,13 @@ namespace blunted {
     Redraw();
   }
 
+  int Gui2IconSelector::FindEntryIndex(const std::string &id) const {
+    for (int i = 0; i < (signed int)entries.size(); i++) {
+      if (entries.at(i).id == id) return i;
+    }
+    return -1;
+  }
+
   void Gui2IconSelector::EnsureIconPool() {
     if (iconPool.size() != 0) return;
     const int poolSize = 9;

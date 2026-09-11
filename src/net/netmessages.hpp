@@ -59,11 +59,15 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_SetSide = 0,
   e_NetLobbyAction_SetReady,
   e_NetLobbyAction_MoveCursor,
-  e_NetLobbyAction_CommitTeam
+  e_NetLobbyAction_CommitTeam,
+  e_NetLobbyAction_SetSelection,
+  e_NetLobbyAction_SetTeamReady,
+  e_NetLobbyAction_SetDevice,
+  e_NetLobbyAction_DeviceLost
 };
 
 struct NetLobbyPlayer {
-  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0) {}
+  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0), device(0) {}
 
   uint32_t id;
   std::string name;
@@ -71,6 +75,7 @@ struct NetLobbyPlayer {
   bool ready;
   bool isHost;
   int ping_ms;
+  int device; // 0 = keyboard, 1 = gamepad (last device used by this peer)
 };
 
 // Canonical, host-authoritative lobby state. Mirrored to every peer so that side
@@ -79,6 +84,12 @@ struct NetLobbyState {
   NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides) {
     teamId[0] = -1;
     teamId[1] = -1;
+    countryId[0] = -1;
+    countryId[1] = -1;
+    leagueId[0] = -1;
+    leagueId[1] = -1;
+    teamReady[0] = false;
+    teamReady[1] = false;
     chooser[0] = 0;
     chooser[1] = 0;
     teamCursor[0] = 0;
@@ -91,6 +102,9 @@ struct NetLobbyState {
   int phase;
   std::vector<NetLobbyPlayer> players;
   int teamId[2];
+  int countryId[2];
+  int leagueId[2];
+  bool teamReady[2];
   uint32_t chooser[2];
   int teamCursor[2];
   int listScroll[2];
@@ -99,12 +113,13 @@ struct NetLobbyState {
 // Client intent. The server attributes it to the connection (playerId is filled in
 // by the server) and applies it to the canonical state.
 struct NetLobbyAction {
-  NetLobbyAction() : type(0), playerId(0), side(0), value(0) {}
+  NetLobbyAction() : type(0), playerId(0), side(0), value(0), value2(0) {}
 
   int type;
   uint32_t playerId;
   int side;
   int value;
+  int value2;
 };
 
 void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state);

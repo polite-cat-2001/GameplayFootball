@@ -300,6 +300,40 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
           lobbyState.teamId[action.side] = action.value;
           changed = true;
         }
+      } else if (action.type == e_NetLobbyAction_SetSelection) {
+        if (action.side >= 0 && action.side < 2 && lobbyState.chooser[action.side] == player->id) {
+          if (action.value == 0) {
+            lobbyState.countryId[action.side] = action.value2;
+            lobbyState.leagueId[action.side] = -1;
+            lobbyState.teamId[action.side] = -1;
+            lobbyState.teamReady[action.side] = false;
+            changed = true;
+          } else if (action.value == 1) {
+            lobbyState.leagueId[action.side] = action.value2;
+            lobbyState.teamId[action.side] = -1;
+            lobbyState.teamReady[action.side] = false;
+            changed = true;
+          } else if (action.value == 2) {
+            lobbyState.teamId[action.side] = action.value2;
+            lobbyState.teamReady[action.side] = false;
+            changed = true;
+          }
+        }
+      } else if (action.type == e_NetLobbyAction_SetTeamReady) {
+        if (action.side >= 0 && action.side < 2 && lobbyState.chooser[action.side] == player->id) {
+          lobbyState.teamReady[action.side] = (action.value != 0);
+          changed = true;
+        }
+      } else if (action.type == e_NetLobbyAction_SetDevice) {
+        player->device = action.value;
+        changed = true;
+      } else if (action.type == e_NetLobbyAction_DeviceLost) {
+        lobbyState.phase = e_NetLobbyPhase_Sides;
+        for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).ready = false;
+        lobbyState.teamReady[0] = false;
+        lobbyState.teamReady[1] = false;
+        RecomputeChoppers();
+        changed = true;
       }
 
       if (lobbyState.phase == e_NetLobbyPhase_Sides) {
