@@ -88,6 +88,9 @@ namespace blunted {
       void SetKeyContinuous(SDL_Keycode id) { keyContinuous.insert(id); }
       bool GetKeyRepeated(SDL_Keycode id) const { return keyRepeated.count(id); }
       void SetKeyRepeated(SDL_Keycode id) { keyRepeated.insert(id); }
+      // First-press + auto-repeat keycodes. Gui2Task fills this set; the keysym*
+      // sets below are a never-wired future idea and stay empty.
+      const std::set<SDL_Keycode> &GetRepeatedKeys() const { return keyRepeated; }
       std::set<SDL_Keycode> &GetKeysymOnce() { return keysymOnce; }
       std::set<SDL_Keycode> &GetKeysymContinuous() { return keysymContinuous; }
       std::set<SDL_Keycode> &GetKeysymRepeated() { return keysymRepeated; }

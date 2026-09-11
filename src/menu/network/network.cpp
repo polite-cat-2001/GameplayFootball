@@ -10,10 +10,67 @@
 
 #include <boost/make_shared.hpp>
 
+#include <cctype>
+
 #include "data/teamcatalog.hpp"
 #include "net/netclient.hpp"
 #include "net/netmessages.hpp"
 #include "net/netserver.hpp"
+
+namespace {
+// Small address check for the join field: either dotted-quad IPv4 or a DNS
+// hostname. No regex (heavy, constructs per call); this is a one-off at submit.
+bool IsValidIPv4(const std::string &s) {
+  int parts = 0;
+  size_t i = 0;
+  while (i < s.size()) {
+    int value = 0;
+    int digits = 0;
+    while (i < s.size() && std::isdigit((unsigned char)s[i])) {
+      value = value * 10 + (s[i] - '0');
+      if (++digits > 3) return false;
+      i++;
+    }
+    if (digits == 0 || value > 255) return false;
+    parts++;
+    if (i < s.size()) {
+      if (s[i] != '.') return false;
+      i++;
+      if (i == s.size()) return false; // trailing dot
+    }
+  }
+  return parts == 4;
+}
+
+bool IsValidHostname(const std::string &s) {
+  if (s.empty() || s.size() > 253) return false;
+  size_t labelStart = 0;
+  for (size_t i = 0; i <= s.size(); i++) {
+    if (i == s.size() || s[i] == '.') {
+      size_t len = i - labelStart;
+      if (len == 0 || len > 63) return false;
+      if (s[labelStart] == '-' || s.at(i - 1) == '-') return false;
+      for (size_t j = labelStart; j < i; j++) {
+        char c = s[j];
+        if (!(std::isalnum((unsigned char)c) || c == '-')) return false;
+      }
+      labelStart = i + 1;
+    }
+  }
+  return true;
+}
+
+bool IsValidAddress(const std::string &s) {
+  if (s.empty()) return false;
+  bool onlyDigitsAndDots = true;
+  for (size_t i = 0; i < s.size(); i++) {
+    if (!(std::isdigit((unsigned char)s[i]) || s[i] == '.')) { onlyDigitsAndDots = false; break; }
+  }
+  // All-digit labels are syntactically a hostname, but here it should be an IP.
+  if (onlyDigitsAndDots) return IsValidIPv4(s);
+  return IsValidHostname(s);
+}
+}
 
 NetworkMenuPage::NetworkMenuPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
@@ -109,6 +166,11 @@ void NetworkHostPage::OpenLobby() {
     statusCaption->SetCaption("Invalid port");
     return;
   }
+  std::string name = nameInput->GetText();
+  if (name.empty()) {
+    statusCaption->SetCaption("Enter a name");
+    return;
+  }
 
   boost::shared_ptr<NetServer> server = boost::make_shared<NetServer>((uint16_t)port);
   if (!server->Start()) {
@@ -116,7 +178,7 @@ void NetworkHostPage::OpenLobby() {
     return;
   }
 
-  server->SetHostName(nameInput->GetText());
+  server->SetHostName(name);
 
   std::vector<TeamCatalogEntry> source = QueryTeamCatalog(0, 100000, "");
   std::vector<NetCatalogEntry> catalog;
@@ -201,10 +263,20 @@ void NetworkJoinPage::Connect() {
     statusCaption->SetCaption("Invalid port");
     return;
   }
+  std::string host = addressInput->GetText();
+  if (!IsValidAddress(host)) {
+    statusCaption->SetCaption("Invalid address");
+    return;
+  }
+  std::string name = nameInput->GetText();
+  if (name.empty()) {
+    statusCaption->SetCaption("Enter a name");
+    return;
+  }
 
   boost::shared_ptr<NetClient> client = boost::make_shared<NetClient>();
-  client->SetPlayerName(nameInput->GetText());
-  client->Connect(NetAddress(addressInput->GetText(), (uint16_t)port));
+  client->SetPlayerName(name);
+  client->Connect(NetAddress(host, (uint16_t)port));
 
   GetMenuTask()->SetNetServer(boost::shared_ptr<NetServer>());
   GetMenuTask()->SetNetClient(client);

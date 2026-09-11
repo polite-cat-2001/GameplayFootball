@@ -87,7 +87,7 @@ namespace blunted {
   void Gui2EditLine::ProcessKeyboardEvent(KeyboardEvent *event) {
     bool nothingHappened = true;
 
-    for (auto key : event->GetKeysymRepeated()) {
+    for (auto key : event->GetRepeatedKeys()) {
 
       if (event->GetKeyRepeated(key)) {
 
@@ -135,9 +135,11 @@ namespace blunted {
           break;
         }
 
-        // ascii char
-        if ((key & 0xFF80) == 0 && key >= 0x20 && currentText.length() <= maxLength) {
-          char ch = key & 0x7F;
+        // ascii char. SDL keycodes for printable keys equal their ASCII value;
+        // everything else (arrows/F-keys/...) uses bit 30 (SDLK_SCANCODE_MASK)
+        // and must not be inserted, which the old (key & 0xFF80) test missed.
+        if (key >= 0x20 && key <= 0x7E && currentText.length() <= maxLength) {
+          char ch = (char)key;
           if (allowedChars.length() == 0 || allowedChars.find_first_of(ch) != std::string::npos) {
             currentText.insert(cursorPos, 1, ch);
             cursorPos++;
