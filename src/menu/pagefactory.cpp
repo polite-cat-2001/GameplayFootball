@@ -19,6 +19,8 @@
 #include "gameplan.hpp"
 #include "cameramenu.hpp"
 #include "visualoptions.hpp"
+#include "network/network.hpp"
+#include "network/networklobby.hpp"
 #include "league/league.hpp"
 #include "league/league_calendar.hpp"
 #include "league/league_forward.hpp"
@@ -146,6 +148,25 @@ Gui2Page *PageFactory::CreatePage(const Gui2PageData &pageData) {
 
     case e_PageID_Audio:
       page = new AudioPage(windowManager, pageData);
+      break;
+
+
+    // network mode
+
+    case e_PageID_NetworkMenu:
+      page = new NetworkMenuPage(windowManager, pageData);
+      break;
+
+    case e_PageID_NetworkHost:
+      page = new NetworkHostPage(windowManager, pageData);
+      break;
+
+    case e_PageID_NetworkJoin:
+      page = new NetworkJoinPage(windowManager, pageData);
+      break;
+
+    case e_PageID_NetworkLobby:
+      page = new NetworkLobbyPage(windowManager, pageData);
       break;
 
 

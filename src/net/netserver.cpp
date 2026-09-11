@@ -249,7 +249,15 @@ void NetServer::HandleClientHello(boost::shared_ptr<NetServerConnection> connect
   WriteServerHello(buffer, response);
   connection->SendMessage(e_NetMessage_ServerHello, buffer);
 
-  if (response.accepted) BroadcastLobbyState();
+  if (response.accepted) {
+    NetBuffer catalogBuffer;
+    {
+      boost::mutex::scoped_lock lock(lobbyMutex);
+      WriteCatalog(catalogBuffer, catalog);
+    }
+    connection->SendMessage(e_NetMessage_Catalog, catalogBuffer);
+    BroadcastLobbyState();
+  }
 
   sig_OnHandshake(hello, response);
 }
@@ -400,4 +408,26 @@ void NetServer::RecomputeChoppers() {
 NetLobbyState NetServer::GetLobbyState() {
   boost::mutex::scoped_lock lock(lobbyMutex);
   return lobbyState;
+}
+
+void NetServer::SetCatalog(const std::vector<NetCatalogEntry> &catalog) {
+  boost::mutex::scoped_lock lock(lobbyMutex);
+  this->catalog = catalog;
+}
+
+std::vector<NetCatalogEntry> NetServer::GetCatalog() {
+  boost::mutex::scoped_lock lock(lobbyMutex);
+  return catalog;
+}
+
+void NetServer::SetHostName(const std::string &name) {
+  {
+    boost::mutex::scoped_lock lock(lobbyMutex);
+    for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+      if (lobbyState.players.at(i).isHost) { lobbyState.players.at(i).name = name; break; }
+    }
+    lobbyState.revision++;
+  }
+  BroadcastLobbyState();
+  sig_OnLobbyState(GetLobbyState());
 }

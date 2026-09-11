@@ -278,6 +278,8 @@ add_library(menulib STATIC
         src/menu/menuscene.cpp
         src/menu/controllerselect.cpp
         src/menu/mainmenu.cpp
+        src/menu/network/network.cpp
+        src/menu/network/networklobby.cpp
         src/menu/ingame/radar.cpp
         src/menu/ingame/tacticsdebug.cpp
         src/menu/ingame/gamepage.cpp

@@ -25,7 +25,10 @@ class NetClient {
     e_NetConnectionState GetState() const { return state.load(); }
     const NetServerHello &GetServerHello() const { return serverHello; }
     const NetLobbyState &GetLobbyState() const { return lobbyState; }
+    const std::vector<NetCatalogEntry> &GetCatalog() const { return catalog; }
     uint32_t GetPlayerId() const { return playerId; }
+
+    void SetPlayerName(const std::string &name) { playerName = name; }
 
     void SendLobbyAction(const NetLobbyAction &action);
 
@@ -62,6 +65,8 @@ class NetClient {
 
     NetServerHello serverHello;
     NetLobbyState lobbyState;
+    std::vector<NetCatalogEntry> catalog;
+    std::string playerName;
     uint32_t playerId;
 };
 

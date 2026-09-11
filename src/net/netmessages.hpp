@@ -112,5 +112,15 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer);
 void WriteLobbyAction(NetBuffer &buffer, const NetLobbyAction &action);
 NetLobbyAction ReadLobbyAction(NetBuffer &buffer);
 
+struct NetCatalogEntry {
+  int id = 0;
+  std::string name;
+  std::string shortName;
+};
+
+void WriteCatalog(NetBuffer &buffer, const std::vector<NetCatalogEntry> &catalog);
+std::vector<NetCatalogEntry> ReadCatalog(NetBuffer &buffer);
+
 #endif
+
 

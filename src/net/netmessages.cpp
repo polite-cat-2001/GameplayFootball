@@ -99,3 +99,25 @@ NetLobbyAction ReadLobbyAction(NetBuffer &buffer) {
   return action;
 }
 
+void WriteCatalog(NetBuffer &buffer, const std::vector<NetCatalogEntry> &catalog) {
+  buffer.PutU32((uint32_t)catalog.size());
+  for (unsigned int i = 0; i < catalog.size(); i++) {
+    buffer.PutU32((uint32_t)catalog.at(i).id);
+    buffer.PutString(catalog.at(i).name);
+    buffer.PutString(catalog.at(i).shortName);
+  }
+}
+
+std::vector<NetCatalogEntry> ReadCatalog(NetBuffer &buffer) {
+  std::vector<NetCatalogEntry> catalog;
+  uint32_t count = buffer.GetU32();
+  catalog.resize(count);
+  for (unsigned int i = 0; i < count; i++) {
+    catalog.at(i).id = (int)buffer.GetU32();
+    catalog.at(i).name = buffer.GetString();
+    catalog.at(i).shortName = buffer.GetString();
+  }
+  return catalog;
+}
+
+

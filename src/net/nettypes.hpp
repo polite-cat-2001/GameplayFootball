@@ -26,6 +26,7 @@ struct NetAddress {
 enum e_NetMessageType {
   e_NetMessage_ClientHello = 1,
   e_NetMessage_ServerHello,
+  e_NetMessage_Catalog,
   e_NetMessage_LobbyAction,
   e_NetMessage_LobbyState,
   e_NetMessage_MatchSetup,

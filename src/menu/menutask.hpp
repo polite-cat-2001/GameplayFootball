@@ -17,6 +17,8 @@
 
 class Match;
 class MatchData;
+class NetServer;
+class NetClient;
 
 using namespace blunted;
 
@@ -74,10 +76,19 @@ class MenuTask : public Gui2Task {
 
     void SetMenuAction(e_MenuAction menuAction) { this->menuAction = menuAction; }
 
+    // LAN session lifetime is owned by the menu session; pages create/clear it.
+    void SetNetServer(boost::shared_ptr<NetServer> server) { netServer = server; }
+    boost::shared_ptr<NetServer> GetNetServer() { return netServer; }
+    void SetNetClient(boost::shared_ptr<NetClient> client) { netClient = client; }
+    boost::shared_ptr<NetClient> GetNetClient() { return netClient; }
+
   protected:
     e_MenuAction menuAction;
 
     Lockable<QueuedFixture> queuedFixture; // todo: we can probably unlock this stuff
+
+    boost::shared_ptr<NetServer> netServer;
+    boost::shared_ptr<NetClient> netClient;
 
 };
 

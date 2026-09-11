@@ -75,7 +75,7 @@ void NetClient::SendClientHello() {
   hello.dataVersion = NetGetDataVersion();
   hello.dataHash = NetGetDataHash();
   hello.animationHash = NetGetAnimationHash();
-  hello.playerName = "player";
+  hello.playerName = playerName.empty() ? "player" : playerName;
   hello.sessionId = 0;
 
   NetBuffer body;
@@ -147,6 +147,8 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   } else if (type == e_NetMessage_LobbyState) {
     lobbyState = ReadLobbyState(buffer);
     sig_OnLobbyState(lobbyState);
+  } else if (type == e_NetMessage_Catalog) {
+    catalog = ReadCatalog(buffer);
   }
 }
 

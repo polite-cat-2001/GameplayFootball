@@ -38,6 +38,11 @@ enum e_PageID {
   e_PageID_Graphics,
   e_PageID_Audio,
 
+  e_PageID_NetworkMenu,
+  e_PageID_NetworkHost,
+  e_PageID_NetworkJoin,
+  e_PageID_NetworkLobby,
+
   e_PageID_League_Start,
   e_PageID_League_Start_Load,
   e_PageID_League_Start_New,

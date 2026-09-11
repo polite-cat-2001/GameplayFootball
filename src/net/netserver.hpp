@@ -29,6 +29,10 @@ class NetServer {
     NetLobbyState GetLobbyState();
     void ApplyLobbyAction(const NetLobbyAction &action);
 
+    void SetCatalog(const std::vector<NetCatalogEntry> &catalog);
+    std::vector<NetCatalogEntry> GetCatalog();
+    void SetHostName(const std::string &name);
+
     boost::signals2::signal<void(const NetClientHello &, const NetServerHello &)> sig_OnHandshake;
     boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
@@ -58,6 +62,7 @@ class NetServer {
 
     boost::mutex lobbyMutex;
     NetLobbyState lobbyState;
+    std::vector<NetCatalogEntry> catalog;
 };
 
 #endif

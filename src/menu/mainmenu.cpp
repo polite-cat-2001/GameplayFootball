@@ -8,6 +8,7 @@
 #include "controllerselect.hpp"
 #include "settings.hpp"
 #include "credits.hpp"
+#include "network/network.hpp"
 
 #include "pagefactory.hpp"
 
@@ -134,6 +135,11 @@ MainMenuPage::MainMenuPage(Gui2WindowManager *windowManager, const Gui2PageData 
   grid->AddView(buttons.at(6), 2, 1);
   if (!IsReleaseVersion()) grid->AddView(buttons.at(7), 3, 1);
 
+  Gui2Button *networkButton = new Gui2Button(windowManager, "button_main_network", 0, 0, 20, 3, "Network");
+  networkButton->sig_OnClick.connect(boost::bind(&MainMenuPage::GoNetwork, this));
+  buttons.push_back(networkButton);
+  grid->AddView(networkButton, 0, 2);
+
   grid->UpdateLayout(0.25, 0.25, 0.25, 0.25);
 
   this->AddView(grid);
@@ -159,8 +165,19 @@ void MainMenuPage::GoControllerSelect() {
   delete this;
 }
 
-void MainMenuPage::GoLeague() {
+void MainMenuPage::GoNetwork() {
 
+  this->Exit();
+
+  pageData.properties->Set("selectedButtonID", 0);
+  Properties properties;
+  properties.SetBool("isInGame", false);
+  windowManager->GetPageFactory()->CreatePage((int)e_PageID_NetworkMenu, properties, 0);
+
+  delete this;
+}
+
+void MainMenuPage::GoLeague() {
   this->Exit();
 
   pageData.properties->Set("selectedButtonID", 2);

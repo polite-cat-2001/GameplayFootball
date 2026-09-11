@@ -9,6 +9,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+// winsock2.h must precede windows.h, otherwise windows.h pulls the legacy
+// winsock.h and boost::asio (or anything else using winsock2) fails with
+// "WinSock.h has already been included".
+#include <winsock2.h>
 #include <windows.h>
 #endif
 
