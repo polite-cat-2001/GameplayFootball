@@ -37,6 +37,9 @@ Snapshot CaptureSnapshot(Match *match) {
   snapshot.bestPossessionTeamID = match->GetBestPossessionTeamID();
   snapshot.goalScored = match->IsGoalScored();
   snapshot.goalScoredTimer = match->GetGoalScoredTimer();
+  snapshot.message = match->GetSpamMessage();
+  snapshot.messageTime_ms = match->GetSpamMessageTime_ms();
+  snapshot.messageCounter = match->GetSpamMessageCounter();
 
   const std::vector<Animation*> &animations = match->GetAnims()->GetAnimations();
   std::map<Animation*, int> animIDs;
@@ -110,6 +113,9 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutBool(snapshot.goalScored);
   buffer.PutU32((uint32_t)snapshot.goalScoredTimer);
   buffer.PutU32((uint32_t)snapshot.maxRtt_ms);
+  buffer.PutString(snapshot.message);
+  buffer.PutU32((uint32_t)snapshot.messageTime_ms);
+  buffer.PutU32((uint32_t)snapshot.messageCounter);
 
   buffer.PutU32((uint32_t)snapshot.players.size());
   for (unsigned int i = 0; i < snapshot.players.size(); i++) {
@@ -146,6 +152,9 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
   snapshot.goalScored = buffer.GetBool();
   snapshot.goalScoredTimer = buffer.GetU32();
   snapshot.maxRtt_ms = (int)buffer.GetU32();
+  snapshot.message = buffer.GetString();
+  snapshot.messageTime_ms = (int)buffer.GetU32();
+  snapshot.messageCounter = buffer.GetU32();
 
   uint32_t playerCount = buffer.GetU32();
   snapshot.players.resize(playerCount);

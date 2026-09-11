@@ -48,6 +48,8 @@ struct Snapshot {
     goalScored = false;
     goalScoredTimer = 0;
     maxRtt_ms = 0;
+    messageTime_ms = 0;
+    messageCounter = 0;
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
@@ -64,6 +66,12 @@ struct Snapshot {
   bool goalScored; // synced so the goal replay triggers on every peer
   unsigned long goalScoredTimer;
   int maxRtt_ms; // host's max client RTT, so clients mirror the input delay
+
+  // On-screen message (goal scorer, referee calls): the host creates these in
+  // Process(), which a thin client never runs, so relay the text.
+  std::string message;
+  int messageTime_ms;
+  unsigned long messageCounter;
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

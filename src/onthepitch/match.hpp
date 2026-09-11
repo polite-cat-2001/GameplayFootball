@@ -196,6 +196,12 @@ class Match {
 
     unsigned long GetIterations() const { return iterations.GetData(); }
     unsigned long GetGoalScoredTimer() const { return goalScoredTimer; }
+
+    // On-screen message (goal scorer / referee). Thin clients get it via the
+    // snapshot so they can show the same caption as the host.
+    const std::string &GetSpamMessage() const { return lastSpamMessage; }
+    int GetSpamMessageTime_ms() const { return lastSpamMessageTime_ms; }
+    unsigned long GetSpamMessageCounter() const { return spamMessageCounter; }
     unsigned long GetMatchTime_ms() const { return matchTime_ms; }
     unsigned long GetActualTime_ms() const { return actualTime_ms; }
 
@@ -321,6 +327,10 @@ class Match {
     Gui2TacticsDebug *tacticsDebug;
     Gui2Caption *messageCaption;
     unsigned long messageCaptionRemoveTime_ms;
+    std::string lastSpamMessage;      // host: last SpamMessage, relayed in snapshots
+    int lastSpamMessageTime_ms;
+    unsigned long spamMessageCounter;
+    unsigned long remoteSpamMessageCounter; // client: last relayed message id
 
     mutable Lockable<unsigned long> iterations;
     TaskSequenceInfo gameSequenceInfo;

@@ -1237,3 +1237,24 @@ resume-голосование (одна сторона не резюмит, об
 remote-презентация не инстанцируется — её протокол покрыт `nettest`. `nettest`
 `PASS (43 checks)`, детерминизм `7134def2...` без изменений. Вики [[сеть]]
 обновлена.
+
+## [2026-09-11] refactor | LAN: GUI-развязка GameTask (сетевые оверлеи)
+Открытие зеркального выбора сторон убрано из `GameTask` в меню-слой:
+`MenuTask::UpdateNetworkOverlay()` каждый тик читает
+`GameTask::GetNetSession()->GetState()` и при `SideSelect` открывает
+`NetworkLobbyPage` (через top-page `CreatePage`). `GameTask::OpenNetworkSideSelect`
+удалён, `ProcessPhase` больше не создаёт страниц для сети; gamepad-missing блок
+(локальный `ControllerSelectPage`) оставлен — перенос в меню поменял бы тайминг
+относительно `RefreshGamepads` (`MenuTask::Process` идёт до `GameTask::Process`).
+Сборка ок, `nettest` `PASS (43)`, `lanmatchtest` `PASS (21)`, детерминизм
+`7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: у клиента не показывалась подпись автора гола
+Симптом: у клиента после гола нет подписи «кто забил». Причина: подпись создаёт
+`Match::SpamMessage` в `Match::Process`, а thin-клиент `Process` не вызывает;
+в снапшоте текста не было. Фикс: `Match` запоминает последнее `SpamMessage`
+(текст/длительность/счётчик), снапшот несёт `message`/`messageTime_ms`/
+`messageCounter`; `ApplyRemoteSnapshot` при новом счётчике показывает подпись
+через `SpamMessage`. Закрывает и гол-автора, и сообщения рефери. `lanmatchtest`
+дополнен round-trip снапшота (`PASS (26 checks)`). `nettest` `PASS (43)`,
+детерминизм `7134def2...` без изменений. Вики [[сеть]] обновлена.

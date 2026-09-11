@@ -353,6 +353,10 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   messageCaption->SetTransparency(0.3f);
   root->AddView(messageCaption);
   messageCaptionRemoveTime_ms = actualTime_ms + 5000;
+  lastSpamMessage = "";
+  lastSpamMessageTime_ms = 0;
+  spamMessageCounter = 0;
+  remoteSpamMessageCounter = 0;
 
   // for usage in destructor
   scene3D = GetScene3D();
@@ -706,6 +710,9 @@ void Match::SpamMessage(const std::string &msg, int time_ms) {
   messageCaption->SetPosition(50 - w * 0.5f, 5);
   messageCaption->Show();
   messageCaptionRemoveTime_ms = actualTime_ms + time_ms;
+  lastSpamMessage = msg;
+  lastSpamMessageTime_ms = time_ms;
+  spamMessageCounter++;
 }
 
 Player *Match::GetPlayer(int playerID) {
@@ -1325,6 +1332,12 @@ void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
   }
   goalScored = snapshot.goalScored;
   goalScoredTimer = snapshot.goalScoredTimer;
+  // Relay the host's on-screen message (goal scorer / referee call): Process(),
+  // which normally creates it, does not run on a thin client.
+  if (snapshot.messageCounter != remoteSpamMessageCounter) {
+    remoteSpamMessageCounter = snapshot.messageCounter;
+    if (!snapshot.message.empty()) SpamMessage(snapshot.message, snapshot.messageTime_ms);
+  }
   // Replay trigger used to live in UpdateIngameCamera (host only); on a client
   // the camera is host-driven, so fire it from the synced goal state instead.
   if (!goalScored) extendedReplayFired = false;

@@ -27,6 +27,7 @@
 #include "menu/pagefactory.hpp"
 #include "data/matchdata.hpp"
 #include "onthepitch/match.hpp"
+#include "net/matchsnapshot.hpp"
 #include "net/netmatchsession.hpp"
 #include "net/netclient.hpp"
 #include "net/netserver.hpp"
@@ -103,6 +104,21 @@ int main(int argc, char **argv) {
   randomize(42);
 
   Match *match = new Match(matchData, GetControllers());
+
+  // Snapshot round-trip: covers the header the thin client decodes, including
+  // the relayed on-screen message (goal scorer).
+  match->SpamMessage("host test message", 1000);
+  {
+    NetBuffer buffer;
+    match->CaptureRemoteSnapshot(buffer);
+    buffer.ResetRead();
+    Snapshot snapshot = ReadSnapshot(buffer);
+    CHECK(!buffer.Failed(), "snapshot buffer failed");
+    CHECK(snapshot.matchTime_ms == match->GetMatchTime_ms(), "snapshot match time mismatch");
+    CHECK(snapshot.message == "host test message", "snapshot message mismatch");
+    CHECK(snapshot.messageCounter == match->GetSpamMessageCounter(), "snapshot message counter mismatch");
+    CHECK(snapshot.maxRtt_ms == 0, "snapshot maxRtt should be 0 without clients");
+  }
 
   // --- network setup: host server + one raw client peer ---------------------
   boost::shared_ptr<NetServer> server = boost::make_shared<NetServer>(port);
