@@ -937,3 +937,15 @@ localhost — `PASS`. Детерминизм Windows x86 (`7134def2...`) не с
 data-классов. `QueryTeamCatalog` (`src/data/teamcatalog.cpp`, `datalib`) — пейджинг/поиск
 по `teams` для лобби. `tools/nettest` теперь проверяет и round-trip `TeamDataRaw` —
 `PASS`. Вики [[сеть]] обновлена. Следующее — Task 4 (зеркальное лобби).
+
+## [2026-09-11] feat | LAN: протокол зеркального лобби (Task 4a)
+В `netmessages` добавлены `NetLobbyState`/`NetLobbyPlayer`/`NetLobbyAction`
+(SetSide/SetReady/MoveCursor/CommitTeam) с (де)сериализацией. `NetServer` держит
+каноническое состояние (`GetLobbyState`/`ApplyLobbyAction`), сам применяет действия
+(с атрибуцией по `sessionId` соединения), переходит `Sides → Teams` по готовности всех,
+назначает `chooser` сторон (хост / первый на противоположной), на join/leave сбрасывает
+фазу и Ready, рассылает состояние. `NetClient` шлёт действия и хранит/сигналит
+`sig_OnLobbyState`. Запись в сокет уходит через `boost::asio::post` на executor, так что
+API потокобезопасен. `tools/nettest` теперь прогоняет и лобби-обмен (клиент выбирает
+сторону, сервер и клиент видят её) — `PASS`; детерминизм `7134def2...` не сдвинулся.
+Следующее — Task 4b: UI-страницы (host/join/IP+порт, зеркальный экран выбора).
