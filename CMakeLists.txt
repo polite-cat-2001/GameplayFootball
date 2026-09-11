@@ -278,7 +278,7 @@ add_library(menulib STATIC
         src/menu/menutask.cpp
         src/menu/cameramenu.cpp
         src/menu/menuscene.cpp
-        src/menu/controllerselect.cpp
+        src/menu/sideselect.cpp
         src/menu/mainmenu.cpp
         src/menu/network/network.cpp
         src/menu/network/networklobby.cpp

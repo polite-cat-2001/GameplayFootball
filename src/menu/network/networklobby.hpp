@@ -17,6 +17,9 @@
 
 using namespace blunted;
 
+// Team-selection phase of a mirrored LAN lobby. Side selection lives in the
+// shared SideSelectPage; this page is entered once the host advanced the lobby
+// to the Teams phase, and falls back to SideSelectPage if the roster changes.
 class NetworkLobbyPage : public Gui2Page {
 
   public:
@@ -36,21 +39,9 @@ class NetworkLobbyPage : public Gui2Page {
     void SendAction(int type, int side, int value, int value2 = 0);
     void Leave();
 
-    // side-selection phase
-    int SideOffset(int side);
-    int SpatialIndex(int side);
-    int SideFromSpatialIndex(int spatial);
-    void ChangeSide(int delta);
-    void ToggleReady();
-    void SetReadyIndicator(int slot, bool ready);
-    void DrawPixelLine(boost::intrusive_ptr<Image2D> img, int x0, int y0, int x1, int y1, const Vector3 &color);
-    void HideSlot(int slot);
-    void SetSidePhaseVisible(bool on);
-
     // team-selection phase
     void BuildTeamPanels();
     void ApplyTeamState();
-    void ResetApplied(int side);
     void SelectEntryById(Gui2IconSelector *selector, int id);
     int FirstCountryIndex(Gui2IconSelector *selector);
     void OnCountryChanged(int side);
@@ -66,31 +57,16 @@ class NetworkLobbyPage : public Gui2Page {
     void StartHostMatch(int team0, int team1);
 
     Gui2Image *background;
-    Gui2Caption *phaseCaption;
-    Gui2Caption *side1Caption;
-    Gui2Caption *side2Caption;
-    Gui2Caption *team1Caption;
-    Gui2Caption *team2Caption;
+    Gui2Caption *homePanelCaption;
+    Gui2Caption *awayPanelCaption;
     Gui2Caption *helpCaption;
 
-    std::vector<Gui2Image*> playerImages;
-    std::vector<Gui2Caption*> playerNames;
-    std::vector<Gui2Image*> playerReadyIcons;
-    std::vector<bool> playerReadyState;
-    std::vector<int> playerDeviceState;
-    int sentDevice;
-    unsigned long lastGamepadSideChange_ms;
-    int localGamepadId;
-    bool deviceLostSent;
-
-    bool resumeOnClose;   // opened over a paused match: all-ready = resume
-    bool resumeModeSet;
-    bool resumeTriggered;
-    bool sawSideSelect;   // client: side-select mode was seen at least once
-
     bool teamsBuilt;
-    bool teamsVisible;
     bool matchStartTriggered;
+    bool deviceLostSent;
+    int sentDevice;      // last device type reported to the lobby (0 keyboard, 1 gamepad)
+    int lastLocalDevice; // last device seen in the lobby state, drives input reconfig
+    int localGamepadId;
     bool defaultSent[2];
     Gui2Image *teamBg[2];
     Gui2Grid *teamGrid[2];
@@ -98,8 +74,6 @@ class NetworkLobbyPage : public Gui2Page {
     Gui2IconSelector *leagueSelect[2];
     Gui2IconSelector *teamSelect[2];
     Gui2Button *readyButton[2];
-    Gui2Caption *homePanelCaption;
-    Gui2Caption *awayPanelCaption;
     int lastCountryId[2];
     int lastLeagueId[2];
     int lastTeamId[2];

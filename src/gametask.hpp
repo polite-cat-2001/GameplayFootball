@@ -109,8 +109,6 @@ class GameTask : public IUserTask {
 
     boost::shared_ptr<Scene3D> scene3D;
 
-    unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
-
     // Network match glue: input delay, snapshots, roster, pause votes and the
     // explicit Playing/Paused/SideSelect state. GameTask only reacts to it.
     NetMatchSession netSession;

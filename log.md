@@ -1258,3 +1258,45 @@ remote-презентация не инстанцируется — её про�
 через `SpamMessage`. Закрывает и гол-автора, и сообщения рефери. `lanmatchtest`
 дополнен round-trip снапшота (`PASS (26 checks)`). `nettest` `PASS (43)`,
 детерминизм `7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] refactor | LAN: SideSelectPage + бэкенды, GUI-развязка GameTask
+Локальный `ControllerSelectPage` и сетевая Sides-фаза `NetworkLobbyPage` сведены в
+один `SideSelectPage` (`src/menu/sideselect.*`) поверх `SideSelectBackend`:
+`LocalSideSelectBackend` (устройства из `GetControllers()`, `SetControllerSetup`) и
+`NetworkSideSelectBackend` (`NetLobbyState`/`LobbyAction`), плюс сценарий матча (все
+Ready → хост `SetSideSelectMode(false)` + `RebindNetworkControllers`; выход → назад в
+пауза-меню без возобновления). `NetworkLobbyPage` стал только фазой Teams (при
+сбросе лобби в Sides возвращается на `SideSelectPage`). `ControllerSelectPage`
+удалён, `e_PageID_ControllerSelect` → `e_PageID_SideSelect`; `NetworkHostPage`/
+`NetworkJoinPage`/`MainMenuPage`/`InGamePage`/`MenuTask` переведены на новый экран.
+Gamepad-missing оверлей перенесён из `GameTask::ProcessPhase` в
+`MenuTask::UpdateGamepadMissingOverlay` — `GameTask` больше не трогает окно/фабрику
+страниц (тайминг: меню видит список контроллеров на кадр раньше, проверка и так раз
+в 1 с). Смешанный режим (локальные девайсы хоста + удалённые пиры) не делал — это
+бонус цели, вне текущего UI. Сборка ок, `nettest` `PASS (43)`, `lanmatchtest`
+`PASS (26)`, детерминизм `7134def2...` без изменений. Вики [[сеть]],
+[[архитектура]], [[глоссарий]], [[открытые-вопросы]] обновлены.
+
+## [2026-09-11] fix | LAN: join во время матча открывал prematch-выбор сторон
+Симптом: клиент после реконнекта/join в идущий матч попадал на экран выбора
+сторон как при создании матча, а не в матч на паузе. Причина: `NetworkJoinPage`
+теперь ведёт на общий `SideSelectPage`, а вычитку `MatchSetup` (переход в
+`LoadingMatch`) оставили только в teams-фазе `NetworkLobbyPage` — новичок её не
+достигал и застревал в prematch-экране. Фикс: `NetworkSideSelectBackend::
+PollTransition` (клиентская, не-resume ветка) вычитывает `MatchSetup`, ставит team
+id и возвращает `e_PageID_LoadingMatch`; дальше меню-слой открывает матчевый
+`SideSelectPage` поверх паузы. Сборка ок, `nettest` `PASS (43)`, `lanmatchtest`
+`PASS (26)`, детерминизм `7134def2...` без изменений. Вики [[сеть]] обновлена.
+
+## [2026-09-11] fix | LAN: геймпад не выбирался (device терялся между фазами)
+Симптом: в сетевом матче управление всегда оставалось клавиатурным. Причина: при
+развязке UI потерялись два поведения `NetworkLobbyPage`: (1) в фазе **Teams**
+больше не отправлялся `e_NetLobbyAction_SetDevice` по вводу — устройство,
+выбранное на экране сторон, не обновлялось, если игрок брал геймпад уже в выборе
+команды; (2) иконка устройства на экране сторон перестраивалась только при
+изменении числа участников, а не при смене устройства. Фикс: в `NetworkLobbyPage`
+(teams) снова шлём `SetDevice` по клавиатурному/джойстик-событию и перезапускаем
+`ConfigureTeamsInput()` при смене устройства из `LobbyState`; в `SideSelectPage`
+иконка обновляется при смене `device` (`RefreshDeviceIcons`). Сборка ок,
+`nettest` `PASS (43)`, `lanmatchtest` `PASS (26)`, детерминизм `7134def2...` без
+изменений. Вики [[сеть]] обновлена.

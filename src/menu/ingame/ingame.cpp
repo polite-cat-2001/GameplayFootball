@@ -6,7 +6,7 @@
 
 #include "main.hpp"
 #include "../gameplan.hpp"
-#include "../controllerselect.hpp"
+#include "../sideselect.hpp"
 #include "../pagefactory.hpp"
 
 #include "replaymenu.hpp"
@@ -97,7 +97,7 @@ void IngamePage::GoGamePlan() {
 void IngamePage::GoControllerSelect() {
   Properties properties;
   properties.SetBool("isInGame", true);
-  CreatePage(e_PageID_ControllerSelect, properties);
+  CreatePage(e_PageID_SideSelect, properties);
 }
 
 void IngamePage::GoSideSelect() {
@@ -116,7 +116,7 @@ void IngamePage::GoSideSelect() {
   Properties properties;
   properties.SetBool("isInGame", true);
   properties.SetBool("resumeOnClose", true);
-  CreatePage(e_PageID_NetworkLobby, properties);
+  CreatePage(e_PageID_SideSelect, properties);
 }
 
 void IngamePage::GoCameraSettings() {

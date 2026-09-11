@@ -16,7 +16,7 @@ enum e_PageID {
   e_PageID_Outro,
   e_PageID_Credits,
   e_PageID_Settings,
-  e_PageID_ControllerSelect,
+  e_PageID_SideSelect,
   e_PageID_TeamSelect,
   e_PageID_MatchOptions,
   e_PageID_LoadingMatch,

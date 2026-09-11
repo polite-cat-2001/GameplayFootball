@@ -7,7 +7,7 @@
 #include "mainmenu.hpp"
 #include "credits.hpp"
 #include "settings.hpp"
-#include "controllerselect.hpp"
+#include "sideselect.hpp"
 #include "startmatch/teamselect.hpp"
 #include "startmatch/matchoptions.hpp"
 #include "startmatch/loadingmatch.hpp"
@@ -66,8 +66,8 @@ Gui2Page *PageFactory::CreatePage(const Gui2PageData &pageData) {
       page = new SettingsPage(windowManager, pageData);
       break;
 
-    case e_PageID_ControllerSelect:
-      page = new ControllerSelectPage(windowManager, pageData);
+    case e_PageID_SideSelect:
+      page = new SideSelectPage(windowManager, pageData);
       break;
 
     case e_PageID_TeamSelect:

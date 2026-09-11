@@ -13,26 +13,17 @@
 #include "net/netserver.hpp"
 
 #include "hid/gamepad.hpp"
-#include "managers/environmentmanager.hpp"
-
-#include "scene/objects/image2d.hpp"
 
 #include <SDL3/SDL.h>
-#include <cmath>
 
 NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
-  resumeOnClose = pageData.properties && pageData.properties->GetBool("resumeOnClose");
-  resumeModeSet = false;
-  resumeTriggered = false;
-  sawSideSelect = false;
   teamsBuilt = false;
-  teamsVisible = false;
   matchStartTriggered = false;
-  sentDevice = -1;
-  lastGamepadSideChange_ms = 0;
-  localGamepadId = -1;
   deviceLostSent = false;
+  sentDevice = -1;
+  lastLocalDevice = -1;
+  localGamepadId = -1;
   for (int s = 0; s < 2; s++) {
     teamBg[s] = 0;
     teamGrid[s] = 0;
@@ -51,46 +42,12 @@ NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2P
   background->LoadImage("media/menu/backgrounds/black.png");
   background->Show();
 
-  phaseCaption = new Gui2Caption(windowManager, "caption_network_lobby_phase", 35, 5, 30, 3, "");
-  this->AddView(phaseCaption);
-  phaseCaption->Show();
-
-  side1Caption = new Gui2Caption(windowManager, "caption_network_lobby_side1", 0, 0, 28, 3, "HOME");
-  side2Caption = new Gui2Caption(windowManager, "caption_network_lobby_side2", 0, 0, 28, 3, "AWAY");
-  side1Caption->SetPosition(25 - side1Caption->GetTextWidthPercent() * 0.5, 10);
-  side2Caption->SetPosition(75 - side2Caption->GetTextWidthPercent() * 0.5, 10);
-  this->AddView(side1Caption);
-  side1Caption->Show();
-  this->AddView(side2Caption);
-  side2Caption->Show();
-
-  team1Caption = new Gui2Caption(windowManager, "caption_network_lobby_team1", 0, 0, 28, 3, "");
-  team2Caption = new Gui2Caption(windowManager, "caption_network_lobby_team2", 0, 0, 28, 3, "");
-  this->AddView(team1Caption);
-  team1Caption->Hide();
-  this->AddView(team2Caption);
-  team2Caption->Hide();
-
-  for (int i = 0; i < net_maxPlayers; i++) {
-    Gui2Image *image = new Gui2Image(windowManager, "image_network_lobby_player" + int_to_str(i), 0, 0, 14, 10);
-    this->AddView(image);
-    image->LoadImage("media/menu/controller/controller_small.png");
-    image->Hide();
-
-    Gui2Caption *name = new Gui2Caption(windowManager, "caption_network_lobby_name" + int_to_str(i), 0, 0, 28, 3, "");
-    this->AddView(name);
-    name->Hide();
-
-    Gui2Image *ready = new Gui2Image(windowManager, "image_network_lobby_ready" + int_to_str(i), 0, 0, 3, 3);
-    this->AddView(ready);
-    ready->Hide();
-
-    playerImages.push_back(image);
-    playerNames.push_back(name);
-    playerReadyIcons.push_back(ready);
-    playerReadyState.push_back(false);
-    playerDeviceState.push_back(-1);
-  }
+  homePanelCaption = new Gui2Caption(windowManager, "caption_net_homepanel", 19, 20, 28, 3, "HOME");
+  awayPanelCaption = new Gui2Caption(windowManager, "caption_net_awaypanel", 51, 20, 28, 3, "AWAY");
+  this->AddView(homePanelCaption);
+  homePanelCaption->Hide();
+  this->AddView(awayPanelCaption);
+  awayPanelCaption->Hide();
 
   helpCaption = new Gui2Caption(windowManager, "caption_network_lobby_help", 20, 88, 60, 3, "");
   this->AddView(helpCaption);
@@ -149,181 +106,6 @@ void NetworkLobbyPage::SendAction(int type, int side, int value, int value2) {
   }
 }
 
-int NetworkLobbyPage::SideOffset(int side) {
-  if (side == e_NetSide_Home) return -1;
-  if (side == e_NetSide_Away) return 1;
-  return 0;
-}
-
-int NetworkLobbyPage::SpatialIndex(int side) {
-  if (side == e_NetSide_Home) return 0;
-  if (side == e_NetSide_Spectator) return 1;
-  return 2;
-}
-
-int NetworkLobbyPage::SideFromSpatialIndex(int spatial) {
-  if (spatial <= 0) return e_NetSide_Home;
-  if (spatial >= 2) return e_NetSide_Away;
-  return e_NetSide_Spectator;
-}
-
-void NetworkLobbyPage::ChangeSide(int delta) {
-  NetLobbyState state = GetState();
-  uint32_t localId = GetLocalPlayerId();
-
-  const NetLobbyPlayer *local = 0;
-  for (unsigned int i = 0; i < state.players.size(); i++) {
-    if (state.players.at(i).id == localId) { local = &state.players.at(i); break; }
-  }
-
-  int currentSide = local ? local->side : e_NetSide_Spectator;
-  int spatial = SpatialIndex(currentSide) + delta;
-  if (spatial < 0) spatial = 0;
-  if (spatial > 2) spatial = 2;
-  SendAction(e_NetLobbyAction_SetSide, SideFromSpatialIndex(spatial), 0);
-}
-
-void NetworkLobbyPage::ToggleReady() {
-  NetLobbyState state = GetState();
-  uint32_t localId = GetLocalPlayerId();
-
-  bool ready = false;
-  for (unsigned int i = 0; i < state.players.size(); i++) {
-    if (state.players.at(i).id == localId) { ready = state.players.at(i).ready; break; }
-  }
-  SendAction(e_NetLobbyAction_SetReady, 0, ready ? 0 : 1);
-}
-
-int NetworkLobbyPage::FindLocalGamepadId() {
-  const std::vector<IHIDevice*> &controllers = GetControllers();
-  for (unsigned int i = 1; i < controllers.size(); i++) {
-    if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Gamepad) {
-      return static_cast<HIDGamepad*>(controllers.at(i))->GetGamepadID();
-    }
-  }
-  return -1;
-}
-
-bool NetworkLobbyPage::GamepadPresent(int id) {
-  if (id < 0) return false;
-  const std::vector<IHIDevice*> &controllers = GetControllers();
-  for (unsigned int i = 1; i < controllers.size(); i++) {
-    if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Gamepad &&
-        static_cast<HIDGamepad*>(controllers.at(i))->GetGamepadID() == id) {
-      return true;
-    }
-  }
-  return false;
-}
-
-void NetworkLobbyPage::ConfigureTeamsInput() {
-  NetLobbyState state = GetState();
-  uint32_t localId = GetLocalPlayerId();
-
-  bool chooser = (GetChooserSide(localId) >= 0);
-  int device = 0;
-  for (unsigned int i = 0; i < state.players.size(); i++) {
-    if (state.players.at(i).id == localId) { device = state.players.at(i).device; break; }
-  }
-
-  deviceLostSent = false;
-
-  if (chooser && device == 1) {
-    localGamepadId = FindLocalGamepadId();
-    GetMenuTask()->DisableKeyboard();
-    GetMenuTask()->SetActiveJoystickID(localGamepadId);
-  } else {
-    localGamepadId = -1;
-    GetMenuTask()->EnableKeyboard();
-    GetMenuTask()->SetActiveJoystickID(-1);
-  }
-}
-
-void NetworkLobbyPage::RestoreInput() {
-  GetMenuTask()->EnableKeyboard();
-  GetMenuTask()->SetActiveJoystickID(0);
-}
-
-void NetworkLobbyPage::DrawPixelLine(boost::intrusive_ptr<Image2D> img, int x0, int y0, int x1, int y1, const Vector3 &color) {
-  int dx = abs(x1 - x0);
-  int dy = -abs(y1 - y0);
-  int sx = x0 < x1 ? 1 : -1;
-  int sy = y0 < y1 ? 1 : -1;
-  int err = dx + dy;
-  while (true) {
-    img->PutPixel(x0, y0, color);
-    if (x0 == x1 && y0 == y1) break;
-    int e2 = 2 * err;
-    if (e2 >= dy) { err += dy; x0 += sx; }
-    if (e2 <= dx) { err += dx; y0 += sy; }
-  }
-}
-
-void NetworkLobbyPage::SetReadyIndicator(int slot, bool ready) {
-  if (playerReadyState.at(slot) == ready) {
-    if (ready) playerReadyIcons.at(slot)->Show();
-    return;
-  }
-  playerReadyState.at(slot) = ready;
-
-  Gui2Image *icon = playerReadyIcons.at(slot);
-  if (!ready) { icon->Hide(); return; }
-
-  boost::intrusive_ptr<Image2D> img = icon->GetImage2D();
-  int w = int(round(img->GetSize().coords[0]));
-  int h = int(round(img->GetSize().coords[1]));
-  img->DrawRectangle(0, 0, w, h, Vector3(0, 0, 0), 0);
-
-  Vector3 green(0.0f, 200.0f, 0.0f);
-  Vector3 white(255.0f, 255.0f, 255.0f);
-  int cx = w / 2;
-  int cy = h / 2;
-  int r = (w < h ? w : h) / 2 - 1;
-  for (int y = 0; y < h; y++) {
-    int dyy = y - cy;
-    int d = r * r - dyy * dyy;
-    if (d >= 0) {
-      int halfW = (int)floor(sqrt((real)d));
-      img->DrawRectangle(cx - halfW, y, halfW * 2, 1, green);
-    }
-  }
-  int x0 = cx - int(r * 0.5);
-  int y0 = cy;
-  int x1 = cx - int(r * 0.1);
-  int y1 = cy + int(r * 0.4);
-  int x2 = cx + int(r * 0.6);
-  int y2 = cy - int(r * 0.4);
-  DrawPixelLine(img, x0, y0, x1, y1, white);
-  DrawPixelLine(img, x1, y1, x2, y2, white);
-  img->OnChange();
-  icon->Show();
-}
-
-void NetworkLobbyPage::HideSlot(int slot) {
-  playerImages.at(slot)->Hide();
-  playerNames.at(slot)->Hide();
-  playerReadyIcons.at(slot)->Hide();
-  playerReadyState.at(slot) = false;
-  playerDeviceState.at(slot) = -1;
-}
-
-void NetworkLobbyPage::SetSidePhaseVisible(bool on) {
-  if (on) {
-    background->Show();
-    phaseCaption->Show();
-    side1Caption->Show();
-    side2Caption->Show();
-    helpCaption->Show();
-  } else {
-    background->Hide();
-    phaseCaption->Hide();
-    side1Caption->Hide();
-    side2Caption->Hide();
-    helpCaption->Hide();
-    for (int i = 0; i < net_maxPlayers; i++) HideSlot(i);
-  }
-}
-
 int NetworkLobbyPage::FirstCountryIndex(Gui2IconSelector *selector) {
   // countries are added after the special "National Teams" entry
   return selector->FindEntryIndex("national") >= 0 ? 1 : 0;
@@ -367,19 +149,13 @@ void NetworkLobbyPage::BuildTeamPanels() {
 
     AddCountries(countrySelect[s]);
     countrySelect[s]->SetSelectedEntry(FirstCountryIndex(countrySelect[s]));
-    leagueSelect[s]->SetDrawOutline(true);
-    teamSelect[s]->SetDrawOutline(true);
 
-    teamBg[s]->Hide();
-    teamGrid[s]->Hide();
+    teamBg[s]->Show();
+    teamGrid[s]->Show();
   }
 
-  homePanelCaption = new Gui2Caption(windowManager, "caption_net_homepanel", 19, 20, 28, 3, "HOME");
-  awayPanelCaption = new Gui2Caption(windowManager, "caption_net_awaypanel", 51, 20, 28, 3, "AWAY");
-  this->AddView(homePanelCaption);
-  homePanelCaption->Hide();
-  this->AddView(awayPanelCaption);
-  awayPanelCaption->Hide();
+  homePanelCaption->Show();
+  awayPanelCaption->Show();
 
   teamsBuilt = true;
 }
@@ -547,6 +323,56 @@ void NetworkLobbyPage::OnReadyClicked(int side) {
   SendAction(e_NetLobbyAction_SetTeamReady, side, ready ? 0 : 1);
 }
 
+int NetworkLobbyPage::FindLocalGamepadId() {
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+  for (unsigned int i = 1; i < controllers.size(); i++) {
+    if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Gamepad) {
+      return static_cast<HIDGamepad*>(controllers.at(i))->GetGamepadID();
+    }
+  }
+  return -1;
+}
+
+bool NetworkLobbyPage::GamepadPresent(int id) {
+  if (id < 0) return false;
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+  for (unsigned int i = 1; i < controllers.size(); i++) {
+    if (controllers.at(i)->GetDeviceType() == e_HIDeviceType_Gamepad &&
+        static_cast<HIDGamepad*>(controllers.at(i))->GetGamepadID() == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void NetworkLobbyPage::ConfigureTeamsInput() {
+  NetLobbyState state = GetState();
+  uint32_t localId = GetLocalPlayerId();
+
+  bool chooser = (GetChooserSide(localId) >= 0);
+  int device = 0;
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (state.players.at(i).id == localId) { device = state.players.at(i).device; break; }
+  }
+
+  deviceLostSent = false;
+
+  if (chooser && device == 1) {
+    localGamepadId = FindLocalGamepadId();
+    GetMenuTask()->DisableKeyboard();
+    GetMenuTask()->SetActiveJoystickID(localGamepadId);
+  } else {
+    localGamepadId = -1;
+    GetMenuTask()->EnableKeyboard();
+    GetMenuTask()->SetActiveJoystickID(-1);
+  }
+}
+
+void NetworkLobbyPage::RestoreInput() {
+  GetMenuTask()->EnableKeyboard();
+  GetMenuTask()->SetActiveJoystickID(0);
+}
+
 void NetworkLobbyPage::Process() {
   Gui2View::Process();
 
@@ -568,183 +394,74 @@ void NetworkLobbyPage::Process() {
   }
 
   NetLobbyState state = GetState();
-  uint32_t localId = GetLocalPlayerId();
 
-  // Resume mode (opened over a paused match): keep the lobby in the Sides phase
-  // and, once everyone confirmed, rebind controllers on the host and resume.
-  if (resumeOnClose && !resumeModeSet) {
-    resumeModeSet = true;
-    if (IsHost()) {
-      boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-      if (server) server->SetSideSelectMode(true);
-    }
-  }
-
-  if (resumeOnClose) {
-    // Leave when side-select mode came and went — on the host too, otherwise a
-    // client's cancel wouldn't close the host's screen (and vice versa). Do NOT
-    // key this off Match::GetPause(): a reconnecting client builds its Match
-    // after the host paused, so its pause flag may lag (caused flicker before).
-    if (state.sideSelect) sawSideSelect = true;
-    if (sawSideSelect && !state.sideSelect) {
-      GoBack();
-      return;
-    }
-
-    if (IsHost()) {
-      bool allReady = !state.players.empty();
-      for (unsigned int i = 0; i < state.players.size(); i++) {
-        if (!state.players.at(i).ready) { allReady = false; break; }
-      }
-      if (allReady && !resumeTriggered) {
-        resumeTriggered = true;
-        boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-        if (server) server->SetSideSelectMode(false);
-        GetGameTask()->RebindNetworkControllers();
-        GoBack();
-        return;
-      }
-    } else {
-      // Safety net: the host resumed without clearing the flag.
-      Match *m = GetGameTask()->GetMatch();
-      if (m && !m->GetPause()) {
-        GoBack();
-        return;
-      }
-    }
-  }
-
-  if (!teamsBuilt) BuildTeamPanels();
-
-  bool teams = (state.phase == e_NetLobbyPhase_Teams);
-  if (teams != teamsVisible) {
-    teamsVisible = teams;
-    SetSidePhaseVisible(!teams);
-    if (teams) {
-      teamBg[0]->Show();
-      teamBg[1]->Show();
-      teamGrid[0]->Show();
-      teamGrid[1]->Show();
-      homePanelCaption->Show();
-      awayPanelCaption->Show();
-      int cs = GetChooserSide(localId);
-      if (cs >= 0) countrySelect[cs]->SetFocus();
-      else this->SetFocus();
-      ConfigureTeamsInput();
-    } else {
-      teamBg[0]->Hide();
-      teamBg[1]->Hide();
-      teamGrid[0]->Hide();
-      teamGrid[1]->Hide();
-      homePanelCaption->Hide();
-      awayPanelCaption->Hide();
-      this->SetFocus();
-      RestoreInput();
-    }
-  }
-
-  if (teams) {
-    ApplyTeamState();
-
-    for (unsigned int i = 0; i < state.players.size(); i++) {
-      if (state.players.at(i).id == localId && state.players.at(i).device == 1) {
-        if (!deviceLostSent && !GamepadPresent(localGamepadId)) {
-          deviceLostSent = true;
-          SendAction(e_NetLobbyAction_DeviceLost, 0, 0);
-        }
-        break;
-      }
-    }
-
-    // Both teams chosen and confirmed by their choosers -> the host starts.
-    if (IsHost() && !matchStartTriggered &&
-        state.teamReady[0] && state.teamReady[1] &&
-        state.teamId[0] > 0 && state.teamId[1] > 0) {
-      StartHostMatch(state.teamId[0], state.teamId[1]);
-    }
+  // A join/leave or a device loss drops the lobby back to the side phase: the
+  // shared SideSelectPage takes over from here.
+  if (state.phase != e_NetLobbyPhase_Teams) {
+    CreatePage(e_PageID_SideSelect);
     return;
   }
 
-  phaseCaption->SetCaption("choose your side");
-
-  for (int i = 0; i < net_maxPlayers; i++) {
-    if (i >= (int)state.players.size()) { HideSlot(i); continue; }
-
-    const NetLobbyPlayer &player = state.players.at(i);
-    int x = 43 + SideOffset(player.side) * 25;
-    int y = 20 + i * 15;
-
-    if (playerDeviceState.at(i) != player.device) {
-      playerDeviceState.at(i) = player.device;
-      playerImages.at(i)->LoadImage(player.device == 1 ?
-          "media/menu/controller/controller_small.png" :
-          "media/menu/controller/keyboard_small.png");
-    }
-
-    playerImages.at(i)->SetPosition(x, y);
-    playerImages.at(i)->Show();
-
-    std::string name = (player.id == localId ? "> " : "") + player.name;
-    playerNames.at(i)->SetCaption(name);
-    playerNames.at(i)->SetPosition(x + 7 - playerNames.at(i)->GetTextWidthPercent() * 0.5, y + 10);
-    playerNames.at(i)->Show();
-
-    playerReadyIcons.at(i)->SetPosition(x + 5.5, y + 13);
-    SetReadyIndicator(i, player.ready);
+  if (!teamsBuilt) {
+    BuildTeamPanels();
+    int cs = GetChooserSide(GetLocalPlayerId());
+    if (cs >= 0) countrySelect[cs]->SetFocus();
+    else this->SetFocus();
+    ConfigureTeamsInput();
+    lastLocalDevice = -1;
   }
 
-  helpCaption->SetCaption("Left/Right: side    Enter: ready    Esc: leave");
+  // Switch menu input to the device the local peer last used (keyboard/gamepad),
+  // also when it changed after the panels were built.
+  uint32_t localId = GetLocalPlayerId();
+  int localDevice = 0;
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (state.players.at(i).id == localId) { localDevice = state.players.at(i).device; break; }
+  }
+  if (localDevice != lastLocalDevice) {
+    lastLocalDevice = localDevice;
+    ConfigureTeamsInput();
+  }
+
+  ApplyTeamState();
+
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (state.players.at(i).id == GetLocalPlayerId() && state.players.at(i).device == 1) {
+      if (!deviceLostSent && !GamepadPresent(localGamepadId)) {
+        deviceLostSent = true;
+        SendAction(e_NetLobbyAction_DeviceLost, 0, 0);
+      }
+      break;
+    }
+  }
+
+  // Both teams chosen and confirmed by their choosers -> the host starts.
+  if (IsHost() && !matchStartTriggered &&
+      state.teamReady[0] && state.teamReady[1] &&
+      state.teamId[0] > 0 && state.teamId[1] > 0) {
+    StartHostMatch(state.teamId[0], state.teamId[1]);
+  }
 }
 
 void NetworkLobbyPage::ProcessKeyboardEvent(KeyboardEvent *event) {
+  // Remember the last used device so the match binds the right one (same
+  // inference the side-selection screen uses).
   if (sentDevice != 0) {
     sentDevice = 0;
     SendAction(e_NetLobbyAction_SetDevice, 0, 0);
   }
-
-  NetLobbyState state = GetState();
-
   if (event->GetKeyOnce(SDLK_ESCAPE)) {
     Leave();
     return;
   }
-
-  if (state.phase != e_NetLobbyPhase_Sides) return;
-
-  if (event->GetKeyOnce(SDLK_LEFT)) ChangeSide(-1);
-  else if (event->GetKeyOnce(SDLK_RIGHT)) ChangeSide(1);
-  else if (event->GetKeyOnce(SDLK_RETURN)) ToggleReady();
 }
 
 void NetworkLobbyPage::ProcessJoystickEvent(JoystickEvent *event) {
+  // Team selectors handle their own joystick input via focus; here we only
+  // record that this peer is playing with a gamepad.
   if (sentDevice != 1) {
     sentDevice = 1;
     SendAction(e_NetLobbyAction_SetDevice, 0, 1);
-  }
-
-  NetLobbyState state = GetState();
-  if (state.phase != e_NetLobbyPhase_Sides) return;
-
-  unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
-  const std::vector<IHIDevice*> &controllers = GetControllers();
-  for (unsigned int i = 1; i < controllers.size(); i++) {
-    if (controllers.at(i)->GetDeviceType() != e_HIDeviceType_Gamepad) continue;
-    HIDGamepad *gamepad = static_cast<HIDGamepad*>(controllers.at(i));
-    int joyID = gamepad->GetGamepadID();
-
-    if (now_ms - lastGamepadSideChange_ms > 250) {
-      if (gamepad->GetButtonValue(e_ButtonFunction_Left) > 0.5f) {
-        ChangeSide(-1);
-        lastGamepadSideChange_ms = now_ms;
-      } else if (gamepad->GetButtonValue(e_ButtonFunction_Right) > 0.5f) {
-        ChangeSide(1);
-        lastGamepadSideChange_ms = now_ms;
-      }
-    }
-
-    if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A))) {
-      ToggleReady();
-    }
   }
 }
 
@@ -753,31 +470,6 @@ void NetworkLobbyPage::ProcessWindowingEvent(WindowingEvent *event) {
 }
 
 void NetworkLobbyPage::Leave() {
-  if (resumeOnClose) {
-    // Cancel keeps the current setup and simply resumes the match (the freed
-    // side is taken over by AI / the remaining human).
-    if (IsHost()) {
-      boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-      if (server) server->SetSideSelectMode(false);
-      // Apply chosen sides but keep the match paused: leaving side selection
-      // returns to the pause menu, it does not resume the game.
-      GetGameTask()->ApplyNetworkControllers();
-      GoBack();
-    } else {
-      // Ask the host to cancel; Process() closes this page once sideSelect turns
-      // false, so every peer resumes together. Do not GoBack here, or the
-      // overlay would immediately re-open while the flag is still set.
-      boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-      if (client) {
-        NetLobbyAction action;
-        action.type = e_NetLobbyAction_RequestSideSelect;
-        action.value = 0; // cancel
-        client->SendLobbyAction(action);
-      }
-    }
-    return;
-  }
-
   if (IsHost()) {
     boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
     if (server) server->Stop();

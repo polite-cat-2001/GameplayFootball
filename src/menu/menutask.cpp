@@ -173,6 +173,7 @@ void MenuTask::ProcessPhase() {
   }
 
   UpdateNetworkOverlay();
+  UpdateGamepadMissingOverlay();
 
   menuAction = e_MenuAction_None;
 }
@@ -188,7 +189,7 @@ void MenuTask::UpdateNetworkOverlay() {
   if (session->GetState() != e_NetMatchPhaseState_SideSelect) return;
 
   const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
-  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_NetworkLobby) return;
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_SideSelect) return;
 
   Properties properties;
   properties.SetBool("isInGame", true);
@@ -198,9 +199,62 @@ void MenuTask::UpdateNetworkOverlay() {
   // leave the previous page in the root and leak it.
   Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
   if (topPage) {
-    topPage->CreatePage((int)e_PageID_NetworkLobby, properties, 0);
+    topPage->CreatePage((int)e_PageID_SideSelect, properties, 0);
   } else {
-    windowManager->GetPageFactory()->CreatePage((int)e_PageID_NetworkLobby, properties, 0);
+    windowManager->GetPageFactory()->CreatePage((int)e_PageID_SideSelect, properties, 0);
+  }
+}
+
+void MenuTask::UpdateGamepadMissingOverlay() {
+  // The game thread rescans gamepads each tick (GameTask::ProcessPhase), which
+  // runs after MenuTask::Process, so this sees the previous tick's controller
+  // list — a frame of lag, fine for a check already rate-limited to 1 s.
+  Match *match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
+  if (!match) return;
+
+  // A network match handles roster/device changes through the mirrored side
+  // screen (host authority); a local controller-select overlay must not appear.
+  if (GetNetServer() || GetNetClient()) return;
+
+  unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
+  if (now_ms - lastGamepadCheckTime_ms <= 1000) return;
+  lastGamepadCheckTime_ms = now_ms;
+
+  bool anyGamerDeviceMissing = false;
+  const std::vector<SideSelection> sides = GetControllerSetup();
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+  for (unsigned int i = 0; i < sides.size(); i++) {
+    if (sides.at(i).side == 0) continue;
+    if (sides.at(i).joystickID == 0) continue; // keyboard
+    bool found = false;
+    for (unsigned int c = 1; c < controllers.size(); c++) {
+      if (static_cast<HIDGamepad*>(controllers.at(c))->GetJoystickID() == sides.at(i).joystickID) { found = true; break; }
+    }
+    if (!found) { anyGamerDeviceMissing = true; break; }
+  }
+
+  // only open the window if it is not already on top of the page stack
+  bool controllerSelectOpen = false;
+  const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_SideSelect) controllerSelectOpen = true;
+  if (!anyGamerDeviceMissing || controllerSelectOpen) return;
+
+  // pause the match (unless it is already paused) and show controller select on
+  // top. If we paused it ourselves, mark resumeOnClose so the window resumes the
+  // match when it closes.
+  bool wasPaused = match->GetPause();
+  if (!wasPaused) match->Pause(true);
+  Properties csProps;
+  csProps.SetBool("isInGame", true);
+  csProps.SetBool("resumeOnClose", !wasPaused);
+  // open through the top page (Gui2Page::CreatePage) so the current page is
+  // properly replaced in the stack; opening via the page factory directly would
+  // leave the previous page in the root and leak it.
+  Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
+  if (topPage) {
+    topPage->CreatePage((int)e_PageID_SideSelect, csProps, 0);
+  } else {
+    windowManager->GetPageFactory()->CreatePage((int)e_PageID_SideSelect, csProps, 0);
   }
 }
 

@@ -87,6 +87,12 @@ class MenuTask : public Gui2Task {
     // selection overlay. GameTask no longer touches the GUI.
     void UpdateNetworkOverlay();
 
+    // Menu-layer reaction to a local gamepad disappearing mid-match: pause and
+    // open the side/device selection overlay. GameTask no longer touches the GUI.
+    void UpdateGamepadMissingOverlay();
+
+    unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
+
     e_MenuAction menuAction;
 
     Lockable<QueuedFixture> queuedFixture; // todo: we can probably unlock this stuff

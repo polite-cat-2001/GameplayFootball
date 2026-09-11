@@ -5,7 +5,7 @@
 #include "mainmenu.hpp"
 
 #include "../main.hpp"
-#include "controllerselect.hpp"
+#include "sideselect.hpp"
 #include "settings.hpp"
 #include "credits.hpp"
 #include "network/network.hpp"
@@ -160,7 +160,7 @@ void MainMenuPage::GoControllerSelect() {
   pageData.properties->Set("selectedButtonID", 0);
   Properties properties;
   properties.SetBool("isInGame", false);
-  windowManager->GetPageFactory()->CreatePage((int)e_PageID_ControllerSelect, properties, 0);
+  windowManager->GetPageFactory()->CreatePage((int)e_PageID_SideSelect, properties, 0);
 
   delete this;
 }

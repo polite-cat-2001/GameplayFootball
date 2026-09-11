@@ -133,7 +133,7 @@ void NetworkHostPage::OpenLobby() {
   GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
   GetMenuTask()->SetNetServer(server);
 
-  CreatePage(e_PageID_NetworkLobby);
+  CreatePage(e_PageID_SideSelect);
 }
 
 void NetworkHostPage::GoBack() {
@@ -228,7 +228,7 @@ void NetworkJoinPage::Process() {
 
   if (client->GetState() == e_NetConnectionState_Connected) {
     connecting = false;
-    CreatePage(e_PageID_NetworkLobby);
+    CreatePage(e_PageID_SideSelect);
   } else if (client->GetState() == e_NetConnectionState_Disconnected) {
     connecting = false;
     std::string reason = client->GetServerHello().reasonText;
