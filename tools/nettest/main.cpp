@@ -118,21 +118,68 @@ static bool TestHandshake(uint16_t port) {
                 response.accepted, response.reasonText.c_str());
   });
 
+  NetLobbyState latestLobby;
+  bool gotLobby = false;
+  client.sig_OnLobbyState.connect([&](const NetLobbyState &state) {
+    latestLobby = state;
+    gotLobby = true;
+  });
+
   client.Connect(NetAddress("127.0.0.1", port));
 
   for (int i = 0; i < 50 && !(serverGotHello && clientGotHello); i++) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  client.Disconnect();
-  server.Stop();
-
   if (!(serverGotHello && clientGotHello && serverAccepted && clientAccepted)) {
     std::printf("FAIL: handshake incomplete (serverGotHello=%d clientGotHello=%d serverAccepted=%d clientAccepted=%d)\n",
                 serverGotHello, clientGotHello, serverAccepted, clientAccepted);
+    client.Disconnect();
+    server.Stop();
     return false;
   }
-  return true;
+
+  bool ok = true;
+  bool sideApplied = false;
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_SetSide;
+  action.side = e_NetSide_Home;
+  client.SendLobbyAction(action);
+
+  for (int i = 0; i < 50 && !sideApplied; i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (!gotLobby) continue;
+    for (unsigned int p = 0; p < latestLobby.players.size(); p++) {
+      if (latestLobby.players.at(p).id == client.GetPlayerId() &&
+          latestLobby.players.at(p).side == e_NetSide_Home) {
+        sideApplied = true;
+      }
+    }
+  }
+
+  if (!sideApplied) {
+    std::printf("FAIL: lobby side not applied (playerId=%u gotLobby=%d)\n", client.GetPlayerId(), gotLobby);
+    ok = false;
+  }
+
+  NetLobbyState serverState = server.GetLobbyState();
+  bool serverSeesSide = false;
+  for (unsigned int p = 0; p < serverState.players.size(); p++) {
+    if (serverState.players.at(p).id == client.GetPlayerId() &&
+        serverState.players.at(p).side == e_NetSide_Home) {
+      serverSeesSide = true;
+    }
+  }
+  if (!serverSeesSide) {
+    std::printf("FAIL: server lobby state missing client side\n");
+    ok = false;
+  } else {
+    std::printf("lobby: side applied on server and client (revision %u)\n", serverState.revision);
+  }
+
+  client.Disconnect();
+  server.Stop();
+  return ok;
 }
 
 int main(int argc, char **argv) {

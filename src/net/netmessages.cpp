@@ -37,3 +37,65 @@ NetServerHello ReadServerHello(NetBuffer &buffer) {
   hello.sessionId = buffer.GetU32();
   return hello;
 }
+
+void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
+  buffer.PutU32(state.revision);
+  buffer.PutU8((uint8_t)state.phase);
+  buffer.PutU32((uint32_t)state.players.size());
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    const NetLobbyPlayer &player = state.players.at(i);
+    buffer.PutU32(player.id);
+    buffer.PutString(player.name);
+    buffer.PutU8((uint8_t)player.side);
+    buffer.PutBool(player.ready);
+    buffer.PutBool(player.isHost);
+    buffer.PutU32((uint32_t)player.ping_ms);
+  }
+  for (int side = 0; side < 2; side++) {
+    buffer.PutU32((uint32_t)state.teamId[side]);
+    buffer.PutU32(state.chooser[side]);
+    buffer.PutU32((uint32_t)state.teamCursor[side]);
+    buffer.PutU32((uint32_t)state.listScroll[side]);
+  }
+}
+
+NetLobbyState ReadLobbyState(NetBuffer &buffer) {
+  NetLobbyState state;
+  state.revision = buffer.GetU32();
+  state.phase = (int)buffer.GetU8();
+  uint32_t playerCount = buffer.GetU32();
+  state.players.resize(playerCount);
+  for (unsigned int i = 0; i < playerCount; i++) {
+    NetLobbyPlayer &player = state.players.at(i);
+    player.id = buffer.GetU32();
+    player.name = buffer.GetString();
+    player.side = (int)buffer.GetU8();
+    player.ready = buffer.GetBool();
+    player.isHost = buffer.GetBool();
+    player.ping_ms = (int)buffer.GetU32();
+  }
+  for (int side = 0; side < 2; side++) {
+    state.teamId[side] = (int)buffer.GetU32();
+    state.chooser[side] = buffer.GetU32();
+    state.teamCursor[side] = (int)buffer.GetU32();
+    state.listScroll[side] = (int)buffer.GetU32();
+  }
+  return state;
+}
+
+void WriteLobbyAction(NetBuffer &buffer, const NetLobbyAction &action) {
+  buffer.PutU8((uint8_t)action.type);
+  buffer.PutU32(action.playerId);
+  buffer.PutU32((uint32_t)action.side);
+  buffer.PutU32((uint32_t)action.value);
+}
+
+NetLobbyAction ReadLobbyAction(NetBuffer &buffer) {
+  NetLobbyAction action;
+  action.type = (int)buffer.GetU8();
+  action.playerId = buffer.GetU32();
+  action.side = (int)buffer.GetU32();
+  action.value = (int)buffer.GetU32();
+  return action;
+}
+

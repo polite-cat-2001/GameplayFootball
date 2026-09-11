@@ -7,6 +7,7 @@
 #include <boost/thread.hpp>
 
 #include <atomic>
+#include <string>
 #include <vector>
 
 #include "netmessages.hpp"
@@ -25,7 +26,11 @@ class NetServer {
     bool IsRunning() const { return running.load(); }
     uint16_t GetPort() const { return port; }
 
+    NetLobbyState GetLobbyState();
+    void ApplyLobbyAction(const NetLobbyAction &action);
+
     boost::signals2::signal<void(const NetClientHello &, const NetServerHello &)> sig_OnHandshake;
+    boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
   private:
     friend class NetServerConnection;
@@ -34,7 +39,11 @@ class NetServer {
     void DoAccept();
     void HandleAccept(boost::shared_ptr<NetServerConnection> connection, const boost::system::error_code &error);
     void HandleClientHello(boost::shared_ptr<NetServerConnection> connection, const NetClientHello &hello);
+    void HandleLobbyAction(boost::shared_ptr<NetServerConnection> connection, const NetLobbyAction &action);
     void RemoveConnection(boost::shared_ptr<NetServerConnection> connection);
+    void RemovePlayer(uint32_t playerId);
+    void BroadcastLobbyState();
+    void RecomputeChoppers();
 
     uint16_t port;
     std::atomic<bool> running;
@@ -46,6 +55,9 @@ class NetServer {
     boost::mutex connectionsMutex;
     std::vector<boost::shared_ptr<NetServerConnection> > connections;
     uint32_t nextSessionId;
+
+    boost::mutex lobbyMutex;
+    NetLobbyState lobbyState;
 };
 
 #endif

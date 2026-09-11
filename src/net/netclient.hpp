@@ -24,14 +24,21 @@ class NetClient {
     bool IsRunning() const { return running.load(); }
     e_NetConnectionState GetState() const { return state.load(); }
     const NetServerHello &GetServerHello() const { return serverHello; }
+    const NetLobbyState &GetLobbyState() const { return lobbyState; }
+    uint32_t GetPlayerId() const { return playerId; }
+
+    void SendLobbyAction(const NetLobbyAction &action);
 
     boost::signals2::signal<void(const NetServerHello &)> sig_OnHandshake;
+    boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
   private:
     void Run();
     void DoConnect(const std::string &ip, uint16_t port);
     void HandleConnect(const boost::system::error_code &error);
     void SendClientHello();
+    void SendMessage(e_NetMessageType type, NetBuffer &body);
+    void Enqueue(boost::shared_ptr<std::vector<uint8_t> > packet);
     void ReadHeader();
     void HandleHeader(const boost::system::error_code &error);
     void HandleBody(const boost::system::error_code &error);
@@ -54,6 +61,8 @@ class NetClient {
     std::deque<boost::shared_ptr<std::vector<uint8_t> > > writeQueue;
 
     NetServerHello serverHello;
+    NetLobbyState lobbyState;
+    uint32_t playerId;
 };
 
 #endif

@@ -80,9 +80,12 @@ void NetClient::SendClientHello() {
 
   NetBuffer body;
   WriteClientHello(body, hello);
+  SendMessage(e_NetMessage_ClientHello, body);
+}
 
+void NetClient::SendMessage(e_NetMessageType type, NetBuffer &body) {
   boost::shared_ptr<std::vector<uint8_t> > payload = boost::make_shared<std::vector<uint8_t> >();
-  payload->push_back((uint8_t)e_NetMessage_ClientHello);
+  payload->push_back((uint8_t)type);
   payload->insert(payload->end(), body.Data().begin(), body.Data().end());
 
   boost::shared_ptr<std::vector<uint8_t> > packet = boost::make_shared<std::vector<uint8_t> >();
@@ -90,9 +93,19 @@ void NetClient::SendClientHello() {
   NetWriteU32LE(&packet->at(0), (uint32_t)payload->size());
   std::copy(payload->begin(), payload->end(), packet->begin() + kHeaderSize);
 
+  boost::asio::post(socket.get_executor(), boost::bind(&NetClient::Enqueue, this, packet));
+}
+
+void NetClient::Enqueue(boost::shared_ptr<std::vector<uint8_t> > packet) {
   bool writeInProgress = !writeQueue.empty();
   writeQueue.push_back(packet);
   if (!writeInProgress) DoWrite();
+}
+
+void NetClient::SendLobbyAction(const NetLobbyAction &action) {
+  NetBuffer body;
+  WriteLobbyAction(body, action);
+  SendMessage(e_NetMessage_LobbyAction, body);
 }
 
 void NetClient::ReadHeader() {
@@ -118,18 +131,22 @@ void NetClient::HandleBody(const boost::system::error_code &error) {
     buffer.ResetRead();
     Dispatch(type, buffer);
   }
-  if (state.load() == e_NetConnectionState_Handshaking) ReadHeader();
+  if (state.load() != e_NetConnectionState_Disconnected) ReadHeader();
 }
 
 void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   if (type == e_NetMessage_ServerHello) {
     serverHello = ReadServerHello(buffer);
+    playerId = serverHello.sessionId;
     state.store(serverHello.accepted ? e_NetConnectionState_Connected : e_NetConnectionState_Disconnected);
     if (!serverHello.accepted) {
       boost::system::error_code error;
       socket.close(error);
     }
     sig_OnHandshake(serverHello);
+  } else if (type == e_NetMessage_LobbyState) {
+    lobbyState = ReadLobbyState(buffer);
+    sig_OnLobbyState(lobbyState);
   }
 }
 
