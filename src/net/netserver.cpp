@@ -348,7 +348,6 @@ void NetServer::SetSideSelectMode(bool on) {
     sideSelectCancelPending = false;
   }
   BroadcastLobbyState();
-  sig_OnLobbyState(GetLobbyState());
 }
 
 void NetServer::RecomputeResumeReady() {
@@ -373,7 +372,6 @@ void NetServer::ResetResumeVotes() {
     sideSelectCancelPending = false;
   }
   BroadcastLobbyState();
-  sig_OnLobbyState(GetLobbyState());
 }
 
 bool NetServer::ConsumeAllResumeReady() {
@@ -488,8 +486,6 @@ void NetServer::HandleClientHello(boost::shared_ptr<NetServerConnection> connect
     connection->SendMessage(e_NetMessage_Catalog, catalogBuffer);
     BroadcastLobbyState();
   }
-
-  sig_OnHandshake(hello, response);
 }
 
 void NetServer::HandleLobbyAction(boost::shared_ptr<NetServerConnection> connection, const NetLobbyAction &action) {
@@ -683,7 +679,6 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
 
   if (changed) {
     BroadcastLobbyState();
-    sig_OnLobbyState(GetLobbyState());
   }
 }
 
@@ -744,7 +739,6 @@ void NetServer::RemovePlayer(uint32_t playerId) {
   }
 
   BroadcastLobbyState();
-  sig_OnLobbyState(GetLobbyState());
 }
 
 void NetServer::BroadcastLobbyState() {
@@ -823,5 +817,4 @@ void NetServer::SetHostName(const std::string &name) {
     lobbyState.revision++;
   }
   BroadcastLobbyState();
-  sig_OnLobbyState(GetLobbyState());
 }

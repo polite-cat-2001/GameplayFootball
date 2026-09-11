@@ -6,7 +6,11 @@
 
 #include "base/math/vector3.hpp"
 
-const int net_protocolVersion = 1;
+// Bump on any wire-format / message-semantics change. Both peers are already
+// gated by the build hash, but this makes the protocol revision explicit.
+// v2: LobbyState sideSelect/resumeReady, MatchEnvironment kits, Snapshot maxRtt,
+//     NetKeepalive, NetMatchSession pause/side-select semantics.
+const int net_protocolVersion = 2;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

@@ -240,18 +240,22 @@ void NetClient::HandleBody(const boost::system::error_code &error) {
 
 void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   if (type == e_NetMessage_ServerHello) {
-    serverHello = ReadServerHello(buffer);
-    playerId = serverHello.sessionId;
-    state.store(serverHello.accepted ? e_NetConnectionState_Connected : e_NetConnectionState_Disconnected);
-    if (!serverHello.accepted) {
+    NetServerHello hello = ReadServerHello(buffer);
+    {
+      boost::mutex::scoped_lock lock(stateMutex);
+      serverHello = hello;
+    }
+    playerId.store(hello.sessionId);
+    state.store(hello.accepted ? e_NetConnectionState_Connected : e_NetConnectionState_Disconnected);
+    if (!hello.accepted) {
       boost::system::error_code error;
       socket.close(error);
     }
-    sig_OnHandshake(serverHello);
   } else if (type == e_NetMessage_LobbyState) {
+    boost::mutex::scoped_lock lock(stateMutex);
     lobbyState = ReadLobbyState(buffer);
-    sig_OnLobbyState(lobbyState);
   } else if (type == e_NetMessage_Catalog) {
+    boost::mutex::scoped_lock lock(stateMutex);
     catalog = ReadCatalog(buffer);
   } else if (type == e_NetMessage_MatchSetup) {
     boost::mutex::scoped_lock lock(pendingMutex);
@@ -322,12 +326,30 @@ bool NetClient::ConsumePauseState(bool &out) {
 }
 
 void NetClient::Fail(const e_NetRejectReason reason, const std::string &reasonText) {
-  serverHello = NetServerHello();
-  serverHello.accepted = false;
-  serverHello.reason = reason;
-  serverHello.reasonText = reasonText;
+  NetServerHello hello;
+  hello.accepted = false;
+  hello.reason = reason;
+  hello.reasonText = reasonText;
+  {
+    boost::mutex::scoped_lock lock(stateMutex);
+    serverHello = hello;
+  }
   state.store(e_NetConnectionState_Disconnected);
-  sig_OnHandshake(serverHello);
+}
+
+NetServerHello NetClient::GetServerHello() const {
+  boost::mutex::scoped_lock lock(stateMutex);
+  return serverHello;
+}
+
+NetLobbyState NetClient::GetLobbyState() const {
+  boost::mutex::scoped_lock lock(stateMutex);
+  return lobbyState;
+}
+
+std::vector<NetCatalogEntry> NetClient::GetCatalog() const {
+  boost::mutex::scoped_lock lock(stateMutex);
+  return catalog;
 }
 
 void NetClient::DoWrite() {

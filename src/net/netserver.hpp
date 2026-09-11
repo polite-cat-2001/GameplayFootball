@@ -3,7 +3,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/signals2.hpp>
 #include <boost/thread.hpp>
 
 #include <atomic>
@@ -78,14 +77,11 @@ class NetServer {
     void ResetResumeVotes();
     bool ConsumeAllResumeReady();
 
-    // A peer cancelled side selection; the host resumes the match as-is.
+    // A peer left side selection; the host applies sides and stays paused.
     bool ConsumeSideSelectCancel();
 
     // Send one control message to a single peer (host -> one client).
     void SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body);
-
-    boost::signals2::signal<void(const NetClientHello &, const NetServerHello &)> sig_OnHandshake;
-    boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
   private:
     friend class NetServerConnection;

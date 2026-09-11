@@ -3,7 +3,6 @@
 
 #include <boost/asio.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/signals2.hpp>
 #include <boost/thread.hpp>
 
 #include <atomic>
@@ -24,10 +23,12 @@ class NetClient {
     void Disconnect();
     bool IsRunning() const { return running.load(); }
     e_NetConnectionState GetState() const { return state.load(); }
-    const NetServerHello &GetServerHello() const { return serverHello; }
-    const NetLobbyState &GetLobbyState() const { return lobbyState; }
-    const std::vector<NetCatalogEntry> &GetCatalog() const { return catalog; }
-    uint32_t GetPlayerId() const { return playerId; }
+    // Copies on purpose: these are written by the io thread, read by the game /
+    // menu thread. Returning references would race (netclient.cpp used to do so).
+    NetServerHello GetServerHello() const;
+    NetLobbyState GetLobbyState() const;
+    std::vector<NetCatalogEntry> GetCatalog() const;
+    uint32_t GetPlayerId() const { return playerId.load(); }
 
     // Round-trip time to the host (-1 until the first ping is echoed).
     int GetRtt_ms() const { return rtt_ms.load(); }
@@ -47,9 +48,6 @@ class NetClient {
     bool ConsumeEnvironment(NetMatchEnvironment &environment);
     bool ConsumePauseState(bool &paused);
     bool ConsumeReplayStop();
-
-    boost::signals2::signal<void(const NetServerHello &)> sig_OnHandshake;
-    boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
   private:
     void Run();
@@ -92,11 +90,14 @@ class NetClient {
     std::vector<uint8_t> body;
     std::deque<boost::shared_ptr<std::vector<uint8_t> > > writeQueue;
 
+    // serverHello/lobbyState/catalog are written on the io thread; stateMutex
+    // serializes access with the game/menu thread (getters return copies).
+    mutable boost::mutex stateMutex;
     NetServerHello serverHello;
     NetLobbyState lobbyState;
     std::vector<NetCatalogEntry> catalog;
     std::string playerName;
-    uint32_t playerId;
+    std::atomic<uint32_t> playerId;
 
     boost::mutex pendingMutex;
     bool matchStartPending;

@@ -35,7 +35,7 @@ IHIDevice *FindLocalDevice(int deviceType) {
 }
 
 int GetLocalDeviceType(boost::shared_ptr<NetClient> client) {
-  const NetLobbyState &lobby = client->GetLobbyState();
+  NetLobbyState lobby = client->GetLobbyState();
   uint32_t localId = client->GetPlayerId();
   for (unsigned int i = 0; i < lobby.players.size(); i++) {
     if (lobby.players.at(i).id == localId) return lobby.players.at(i).device;
