@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "base/math/vector3.hpp"
 
@@ -10,7 +11,9 @@
 // gated by the build hash, but this makes the protocol revision explicit.
 // v2: LobbyState sideSelect/resumeReady, MatchEnvironment kits, Snapshot maxRtt,
 //     NetKeepalive, NetMatchSession pause/side-select semantics.
-const int net_protocolVersion = 2;
+// v3: UDP realtime channel (input/snapshot) + client snapshot interpolation.
+// v4: per-player animation blend state (smooth/smoothFactor) in snapshots.
+const int net_protocolVersion = 4;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
@@ -19,11 +22,11 @@ const int net_disconnectTimeout_ms = 5000;
 const int net_snapshotRate_hz = 100;
 const int net_inputRate_hz = 100;
 // Interpolation buffer B: the client renders this far behind the newest
-// snapshot so a late packet can be smoothed over. Adds to both the host and the
-// client input delay so every peer's input is applied at the same instant.
-// Zero while snapshots are rendered "hold last" at 100 Hz over TCP; raise this
-// together with actual snapshot interpolation.
-const int net_interpolationBuffer_ms = 0;
+// snapshot so a late/lost datagram can be smoothed over. 0 = off: the client
+// holds the newest snapshot ("hold last", like the old TCP path) and packet
+// loss costs at most one tick. >0 blends two snapshots at (now - B); host then
+// carries +B in its input delay (client does not, it already renders B behind).
+const int net_interpolationBuffer_ms = 40;
 
 struct NetAddress {
   NetAddress() : port(0) {}
@@ -64,6 +67,19 @@ struct NetInputFrame {
 
   uint32_t buttons;
   blunted::Vector3 direction;
+};
+
+// A snapshot datagram as received by the client: raw payload bytes plus the
+// host's own snapshot time (the fixed-rate timeline used for interpolation) and
+// the client-steady-clock arrival time (diagnostics / buffer warm-up).
+struct NetRawSnapshot {
+  NetRawSnapshot() : recvTime_ms(0), hostTime_ms(0) {}
+  NetRawSnapshot(unsigned long recvTime_ms, unsigned long hostTime_ms, const std::vector<uint8_t> &bytes)
+      : recvTime_ms(recvTime_ms), hostTime_ms(hostTime_ms), bytes(bytes) {}
+
+  unsigned long recvTime_ms;
+  unsigned long hostTime_ms;
+  std::vector<uint8_t> bytes;
 };
 
 #endif

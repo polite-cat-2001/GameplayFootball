@@ -1,5 +1,6 @@
 #include "matchsnapshot.hpp"
 
+#include <cmath>
 #include <map>
 
 #include "onthepitch/match.hpp"
@@ -19,6 +20,8 @@ void CapturePlayerPose(PlayerBase *player, int team, int slot, int ownerId, cons
   out.animID = (iter != animIDs.end()) ? iter->second : -1;
   out.frameNum = applyBuffer.frameNum;
   out.noPos = applyBuffer.noPos;
+  out.smooth = applyBuffer.smooth;
+  out.smoothFactor = applyBuffer.smoothFactor;
   out.position = applyBuffer.position;
   out.orientation = applyBuffer.orientation;
 }
@@ -83,6 +86,8 @@ void WriteSnapshotPlayer(NetBuffer &buffer, const SnapshotPlayer &player) {
   buffer.PutU32((uint32_t)player.animID);
   buffer.PutU32((uint32_t)player.frameNum);
   buffer.PutBool(player.noPos);
+  buffer.PutBool(player.smooth);
+  buffer.PutFloat(player.smoothFactor);
   buffer.PutVector3(player.position);
   buffer.PutFloat(player.orientation);
 }
@@ -95,6 +100,8 @@ SnapshotPlayer ReadSnapshotPlayer(NetBuffer &buffer) {
   player.animID = (int)buffer.GetU32();
   player.frameNum = (int)buffer.GetU32();
   player.noPos = buffer.GetBool();
+  player.smooth = buffer.GetBool();
+  player.smoothFactor = buffer.GetFloat();
   player.position = buffer.GetVector3();
   player.orientation = buffer.GetFloat();
   return player;
@@ -185,7 +192,7 @@ void ApplySnapshotPose(PlayerBase *player, const SnapshotPlayer &pose, const std
   if (pose.animID < 0 || pose.animID >= (int)animTable.size()) return;
   Animation *animation = animTable.at(pose.animID);
   if (!animation) return;
-  player->SetRemotePose(animation, pose.frameNum, pose.position, (radian)pose.orientation, pose.noPos);
+  player->SetRemotePose(animation, pose.frameNum, pose.position, (radian)pose.orientation, pose.noPos, pose.smooth, pose.smoothFactor);
 }
 
 int ApplySnapshot(Match *match, const Snapshot &snapshot, const std::vector<Animation*> &animTable) {
@@ -217,4 +224,66 @@ int ApplySnapshot(Match *match, const Snapshot &snapshot, const std::vector<Anim
 
   match->GetBall()->SetRemoteState(snapshot.ballPosition, snapshot.ballOrientation);
   return applied;
+}
+
+namespace {
+const SnapshotPlayer *FindPose(const std::vector<SnapshotPlayer> &poses, int team, int slot) {
+  for (unsigned int i = 0; i < poses.size(); i++) {
+    if (poses.at(i).team == team && poses.at(i).slot == slot) return &poses.at(i);
+  }
+  return 0;
+}
+
+float LerpAngle(float from, float to, float t) {
+  const float kPi = 3.14159265358979f;
+  float delta = to - from;
+  while (delta > kPi) delta -= 2.0f * kPi;
+  while (delta < -kPi) delta += 2.0f * kPi;
+  return from + delta * t;
+}
+
+void BlendPoses(std::vector<SnapshotPlayer> &newer, const std::vector<SnapshotPlayer> &older, float t,
+                const std::vector<Animation*> *animTable) {
+  for (unsigned int i = 0; i < newer.size(); i++) {
+    SnapshotPlayer &pb = newer.at(i);
+    const SnapshotPlayer *pa = FindPose(older, pb.team, pb.slot);
+    if (!pa) continue;
+    // Frame numbers only make sense within one animation; a different animation
+    // snaps to the newer pose (the base), position/orientation still blend.
+    if (pa->animID == pb.animID && pb.animID >= 0) {
+      Animation *animation = 0;
+      if (animTable && pb.animID < (int)animTable->size()) animation = animTable->at(pb.animID);
+      const int frameCount = animation ? animation->GetFrameCount() : 0;
+      if (frameCount > 0 && pb.frameNum < pa->frameNum) {
+        // The animation looped: interpolate forward through the wrap so the
+        // cycle keeps playing in the right direction.
+        int delta = pb.frameNum - pa->frameNum + frameCount;
+        int frame = (pa->frameNum + (int)std::lround(delta * t)) % frameCount;
+        if (frame < 0) frame += frameCount;
+        pb.frameNum = frame;
+      } else if (pb.frameNum >= pa->frameNum) {
+        pb.frameNum = (int)std::lround(pa->frameNum + (pb.frameNum - pa->frameNum) * t);
+      }
+      // else: no table / unknown count and a smaller frame -> snap to newer.
+    }
+    // Position is only comparable when both snapshots use it the same way
+    // (noPos toggles between "animation carries position" and "basePos does").
+    if (pa->noPos == pb.noPos) {
+      pb.position = pa->position + (pb.position - pa->position) * t;
+    }
+    pb.orientation = LerpAngle(pa->orientation, pb.orientation, t);
+  }
+}
+}
+
+Snapshot BlendSnapshots(const Snapshot &a, const Snapshot &b, float t, const std::vector<Animation*> *animTable) {
+  Snapshot out = b; // discrete state (score, phase, message, pause) from the newer
+  BlendPoses(out.players, a.players, t, animTable);
+  BlendPoses(out.officials, a.officials, t, animTable);
+  out.ballPosition = a.ballPosition + (b.ballPosition - a.ballPosition) * t;
+  out.ballOrientation = a.ballOrientation.GetSlerped(t, b.ballOrientation);
+  out.cameraNodePosition = a.cameraNodePosition + (b.cameraNodePosition - a.cameraNodePosition) * t;
+  out.cameraOrientation = a.cameraOrientation.GetSlerped(t, b.cameraOrientation);
+  out.cameraNodeOrientation = a.cameraNodeOrientation.GetSlerped(t, b.cameraNodeOrientation);
+  return out;
 }

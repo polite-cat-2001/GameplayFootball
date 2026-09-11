@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <string>
 #include <thread>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "net/netclient.hpp"
 #include "net/netdata.hpp"
 #include "net/netmessages.hpp"
+#include "net/nethiddevice.hpp"
 #include "net/netserver.hpp"
 
 // ---------------------------------------------------------------------------
@@ -347,6 +349,53 @@ static void TestDisconnect(uint16_t port) {
         "disconnect: player not removed from lobby");
 }
 
+static bool SnapshotsContain(std::deque<NetRawSnapshot> &snaps, uint32_t marker) {
+  for (unsigned int i = 0; i < snaps.size(); i++) {
+    NetBuffer buffer;
+    buffer.Data() = snaps.at(i).bytes;
+    buffer.ResetRead();
+    if (!buffer.Failed() && buffer.Remaining() >= 4 && buffer.GetU32() == marker) return true;
+  }
+  return false;
+}
+
+static void TestUdpRealtime(uint16_t port) {
+  NetPair pair(port);
+  if (!pair.Connect()) { CHECK(false, "udp: connect failed"); return; }
+
+  uint32_t clientId = pair.client.GetPlayerId();
+
+  // The client announces itself over UDP (Hello); the host must learn the
+  // endpoint, after which snapshots take the UDP path.
+  CHECK(WaitFor([&]() { return pair.server.HasUdpEndpoint(clientId); }),
+        "udp: host did not learn the client endpoint");
+
+  // A snapshot broadcast from the host reaches the client's snapshot buffer.
+  const uint32_t marker = 0x1234ABCD;
+  NetBuffer snapshotBody;
+  snapshotBody.PutU32(marker);
+  bool gotSnapshot = WaitFor([&]() {
+    pair.server.BroadcastSnapshot(snapshotBody);
+    std::deque<NetRawSnapshot> snaps;
+    pair.client.DrainSnapshots(snaps);
+    return SnapshotsContain(snaps, marker);
+  }, 3000, 20);
+  CHECK(gotSnapshot, "udp: snapshot not received by client");
+
+  // Client input over UDP reaches the host's virtual HID device.
+  boost::shared_ptr<NetHIDDevice> device = pair.server.GetHIDevice(clientId);
+  CHECK(device != 0, "udp: no host HID device for client");
+  NetInputFrame frame;
+  frame.buttons = (1u << e_ButtonFunction_ShortPass);
+  frame.direction = Vector3(1.0f, 0.0f, 0.0f);
+  pair.client.SendInputFrame(frame);
+  bool gotInput = WaitFor([&]() {
+    if (device) device->Process();
+    return device && device->GetButton(e_ButtonFunction_ShortPass);
+  }, 3000, 20);
+  CHECK(gotInput, "udp: client input not applied on host");
+}
+
 static void TestKeepaliveRtt(uint16_t port) {
   NetPair pair(port);
   if (!pair.Connect()) { CHECK(false, "rtt: connect failed"); return; }
@@ -369,6 +418,7 @@ int main(int argc, char **argv) {
   TestResumeVote(basePort + 3);
   TestDisconnect(basePort + 4);
   TestKeepaliveRtt(basePort + 5);
+  TestUdpRealtime(basePort + 6);
 
   if (g_failures == 0) {
     std::printf("PASS (%d checks)\n", g_checks);

@@ -44,7 +44,10 @@ class NetClient {
     // "consume" reads so the game thread can never lose an event by polling twice.
     bool ConsumeMatchSetup(NetMatchSetup &setup);
     bool ConsumeAnimationTable(std::vector<std::string> &names);
-    bool ConsumeSnapshot(std::vector<uint8_t> &bytes);
+    // Moves every snapshot received since the last call (UDP, with a TCP
+    // fallback until the host learns our UDP endpoint) to the caller. Each entry
+    // carries the local steady-clock arrival time for interpolation.
+    void DrainSnapshots(std::deque<NetRawSnapshot> &out);
     bool ConsumeEnvironment(NetMatchEnvironment &environment);
     bool ConsumePauseState(bool &paused);
     bool ConsumeReplayStop();
@@ -57,6 +60,11 @@ class NetClient {
     void SendPing();
     void SendPong(uint32_t echoSeq);
     void HandleKeepalive(const NetKeepalive &keepalive);
+    void StartUdp();
+    void StartUdpReceive();
+    void HandleUdpReceive(const boost::system::error_code &error, std::size_t bytesTransferred);
+    void SendUdpHello();
+    void DoSendUdp(boost::shared_ptr<std::vector<uint8_t> > packet);
     void DoConnect(const std::string &ip, uint16_t port);
     void HandleConnect(const boost::system::error_code &error);
     void SendClientHello();
@@ -76,6 +84,13 @@ class NetClient {
     boost::asio::io_context ioContext;
     boost::asio::ip::tcp::socket socket;
     boost::asio::ip::tcp::resolver resolver;
+    boost::shared_ptr<boost::asio::ip::udp::socket> udpSocket;
+    boost::asio::ip::udp::endpoint hostUdpEndpoint;
+    bool hostUdpResolved = false;
+    std::vector<uint8_t> udpRecvBuffer;
+    boost::asio::ip::udp::endpoint udpSenderEndpoint;
+    std::atomic<bool> udpReady{false}; // received at least one snapshot over UDP
+    uint32_t inputSeq = 0;
     boost::shared_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type> > workGuard;
     boost::thread ioThread;
     boost::shared_ptr<boost::asio::steady_timer> pingTimer;
@@ -104,8 +119,7 @@ class NetClient {
     NetMatchSetup matchSetup;
     bool animationTablePending;
     std::vector<std::string> animationTable;
-    bool snapshotPending;
-    std::vector<uint8_t> snapshot;
+    std::deque<NetRawSnapshot> snapshotBuffer; // guarded by pendingMutex
     bool environmentPending;
     NetMatchEnvironment environment;
     bool pauseStatePending;

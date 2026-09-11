@@ -49,6 +49,7 @@ struct ReplayBallTouchesNetFrame {
 
 class NetBuffer;
 struct NetMatchEnvironment;
+struct Snapshot;
 
 struct ReplaySpatial {
   ReplaySpatial(int frameCount) {
@@ -139,8 +140,12 @@ class Match {
     int GetLocalPeerId() const { return localPeerId; }
     void ResolveRemoteAnimTable(const std::vector<std::string> &names);
     bool HasRemoteAnimTable() const { return remoteAnimTableReady; }
+    // Host index order; used by client interpolation for animation loop lengths.
+    const std::vector<Animation*> &GetRemoteAnimTable() const { return remoteAnimTable; }
     void CaptureRemoteSnapshot(NetBuffer &buffer);
     void ApplyRemoteSnapshot(NetBuffer &buffer);
+    // Same, for a snapshot already decoded by the client's interpolation buffer.
+    void ApplyRemoteSnapshot(const Snapshot &snapshot);
     // Host's max client RTT, mirrored in snapshots. The client uses it to delay
     // its input by the same amount the host delays its own.
     int GetRemoteMaxRtt_ms() const { return remoteMaxRtt_ms; }

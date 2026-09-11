@@ -736,13 +736,21 @@ void HumanoidBase::PreparePutBuffers(unsigned long snapshotTime_ms) {
 
   // display humanoids farther away from action at half FPS
   buf_LowDetailMode = false;
-  if (!player->GetExternalController() && !match->GetPause()) {
+  // The host excludes the human-controlled player from low detail; a remote
+  // client has no external controller bound, so treat the locally owned player
+  // as that one via the snapshot's ownerId.
+  bool controlledLocally = player->GetExternalController() != 0;
+  if (match->IsRemotePresentation() && player->GetRemoteOwnerId() == match->GetLocalPeerId()) controlledLocally = true;
+  if (!controlledLocally && !match->GetPause()) {
     Vector3 focusPos = match->GetBall()->Predict(100).Get2D();
     if (match->GetDesignatedPossessionPlayer()) {
       focusPos = focusPos * 0.5f + match->GetDesignatedPossessionPlayer()->GetPosition() * 0.5f;
     }
 
-    if ((spatialState.position - focusPos).GetLength() > 14.0f) buf_LowDetailMode = true;
+    // spatialState is only maintained by Process() (host); the client uses the
+    // interpolated snapshot pose so the wrong players don't drop to half FPS.
+    Vector3 selfPos = match->IsRemotePresentation() ? animApplyBuffer.position.Get2D() : spatialState.position;
+    if ((selfPos - focusPos).GetLength() > 14.0f) buf_LowDetailMode = true;
   }
 
 }
@@ -803,15 +811,19 @@ void HumanoidBase::Put() {
   UpdateFullbodyNodes();
 }
 
-void HumanoidBase::SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos) {
+void HumanoidBase::SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos,
+                                 bool smooth, float smoothFactor) {
   if (!anim) return;
   animApplyBuffer.anim = anim;
   animApplyBuffer.frameNum = frameNum;
   animApplyBuffer.position = position;
   animApplyBuffer.orientation = orientation;
   animApplyBuffer.noPos = noPos;
-  animApplyBuffer.smooth = false;
-  animApplyBuffer.smoothFactor = 1.0f;
+  // Mirror the host's blend state: without the limb-rotation smoothing in
+  // Animation::Apply the client snaps to raw keyframes, and a hardcoded 1.0
+  // would make animation switches blend differently than the host (0.6).
+  animApplyBuffer.smooth = smooth;
+  animApplyBuffer.smoothFactor = smoothFactor;
   animApplyBuffer.offsets.clear();
 }
 

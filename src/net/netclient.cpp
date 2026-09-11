@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include "netassets.hpp"
+#include "netudp.hpp"
 
 namespace {
 const size_t kHeaderSize = 4;
@@ -25,7 +26,6 @@ NetClient::NetClient()
       playerId(0),
       matchStartPending(false),
       animationTablePending(false),
-      snapshotPending(false),
       environmentPending(false),
       pauseStatePending(false),
       pauseState(false),
@@ -59,6 +59,12 @@ void NetClient::Disconnect() {
   }
   boost::system::error_code error;
   socket.close(error);
+  if (udpSocket) {
+    // Close but keep the object alive: a posted DoSendUdp may still hold a copy.
+    udpSocket->close(error);
+  }
+  hostUdpResolved = false;
+  udpReady.store(false);
   if (workGuard) workGuard->reset();
   ioContext.stop();
   if (ioThread.joinable()) ioThread.join();
@@ -82,9 +88,73 @@ void NetClient::HandleConnect(const boost::system::error_code &error) {
   if (error) { Fail(e_NetReject_Unknown, "connection failed"); return; }
   lastPacketTime_ms.store(SteadyNow_ms());
   state.store(e_NetConnectionState_Handshaking);
+  StartUdp();
   SendClientHello();
   StartPingTimer();
   ReadHeader();
+}
+
+void NetClient::StartUdp() {
+  boost::system::error_code error;
+  boost::asio::ip::tcp::endpoint remote = socket.remote_endpoint(error);
+  if (error) return; // still handshaking; snapshots fall back to TCP
+
+  udpSocket = boost::make_shared<boost::asio::ip::udp::socket>(ioContext);
+  udpSocket->open(boost::asio::ip::udp::v4(), error);
+  if (error) { udpSocket.reset(); return; }
+  // Bind explicitly to an ephemeral port: async_receive_from on an unbound
+  // socket is unreliable, and binding first also makes the endpoint stable
+  // (learned by the host from our Hello).
+  udpSocket->bind(boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0), error);
+  if (error) { udpSocket->close(); udpSocket.reset(); return; }
+  hostUdpEndpoint = boost::asio::ip::udp::endpoint(remote.address(), remote.port());
+  hostUdpResolved = true;
+  StartUdpReceive();
+  SendUdpHello();
+}
+
+void NetClient::StartUdpReceive() {
+  if (!udpSocket) return;
+  udpRecvBuffer.resize(2048);
+  udpSocket->async_receive_from(boost::asio::buffer(udpRecvBuffer), udpSenderEndpoint,
+      boost::bind(&NetClient::HandleUdpReceive, this, boost::asio::placeholders::error,
+                  boost::asio::placeholders::bytes_transferred));
+}
+
+void NetClient::HandleUdpReceive(const boost::system::error_code &error, std::size_t bytesTransferred) {
+  if (!running.load()) return;
+  if (error) { StartUdpReceive(); return; }
+
+  uint8_t type = 0;
+  uint32_t sessionId = 0, seq = 0;
+  if (bytesTransferred > net_udpHeaderSize &&
+      NetReadUdpHeader(udpRecvBuffer.data(), bytesTransferred, type, sessionId, seq) &&
+      type == e_NetUdpType_Snapshot) {
+    std::vector<uint8_t> payload(udpRecvBuffer.begin() + net_udpHeaderSize, udpRecvBuffer.begin() + bytesTransferred);
+    // Snapshot payload starts with matchTime_ms then actualTime_ms (host clock).
+    unsigned long hostTime = payload.size() >= 8 ? (unsigned long)NetReadU32LE(payload.data() + 4) : 0;
+    boost::mutex::scoped_lock lock(pendingMutex);
+    snapshotBuffer.push_back(NetRawSnapshot(SteadyNow_ms(), hostTime, payload));
+    while (snapshotBuffer.size() > 64) snapshotBuffer.pop_front();
+    udpReady.store(true);
+  }
+
+  StartUdpReceive();
+}
+
+void NetClient::SendUdpHello() {
+  if (!udpSocket || !hostUdpResolved) return;
+  boost::shared_ptr<std::vector<uint8_t> > packet = boost::make_shared<std::vector<uint8_t> >();
+  NetWriteUdpHeader(*packet, e_NetUdpType_Hello, playerId.load(), 0);
+  boost::asio::post(socket.get_executor(), boost::bind(&NetClient::DoSendUdp, this, packet));
+}
+
+void NetClient::DoSendUdp(boost::shared_ptr<std::vector<uint8_t> > packet) {
+  if (!udpSocket || !hostUdpResolved) return;
+  udpSocket->async_send_to(boost::asio::buffer(*packet), hostUdpEndpoint,
+      [packet](const boost::system::error_code &, std::size_t) {
+        (void)packet; // keeps the buffer alive until the async send completes
+      });
 }
 
 void NetClient::StartPingTimer() {
@@ -101,6 +171,7 @@ void NetClient::HandlePingTimer(const boost::system::error_code &error) {
   if (error || !running.load()) return;
 
   SendPing();
+  if (!udpReady.load()) SendUdpHello(); // keep trying until a UDP snapshot arrives
 
   if (SteadyNow_ms() - lastPacketTime_ms.load() > (unsigned long)net_disconnectTimeout_ms) {
     Fail(e_NetReject_Unknown, "host timed out");
@@ -190,7 +261,16 @@ void NetClient::SendLobbyAction(const NetLobbyAction &action) {
 void NetClient::SendInputFrame(const NetInputFrame &frame) {
   NetBuffer body;
   WriteInputFrame(body, frame);
-  SendMessage(e_NetMessage_InputFrame, body);
+
+  if (udpSocket && hostUdpResolved) {
+    boost::shared_ptr<std::vector<uint8_t> > packet = boost::make_shared<std::vector<uint8_t> >();
+    NetWriteUdpHeader(*packet, e_NetUdpType_Input, playerId.load(), ++inputSeq);
+    packet->insert(packet->end(), body.Data().begin(), body.Data().end());
+    boost::asio::post(socket.get_executor(), boost::bind(&NetClient::DoSendUdp, this, packet));
+  }
+  // Until the first UDP snapshot confirms the channel, also feed the reliable
+  // TCP path so input is never lost to a firewall dropping UDP.
+  if (!udpReady.load()) SendMessage(e_NetMessage_InputFrame, body);
 }
 
 void NetClient::SendPauseRequest(bool paused) {
@@ -266,9 +346,13 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
     animationTable = ReadAnimationTable(buffer);
     animationTablePending = true;
   } else if (type == e_NetMessage_Snapshot) {
+    // TCP-fallback snapshots (before the host learned our UDP endpoint) share
+    // the same queue as the UDP ones.
+    const std::vector<uint8_t> &data = buffer.Data();
+    unsigned long hostTime = data.size() >= 8 ? (unsigned long)NetReadU32LE(data.data() + 4) : 0;
     boost::mutex::scoped_lock lock(pendingMutex);
-    snapshot.assign(buffer.Data().begin(), buffer.Data().end());
-    snapshotPending = true;
+    snapshotBuffer.push_back(NetRawSnapshot(SteadyNow_ms(), hostTime, std::vector<uint8_t>(data.begin(), data.end())));
+    while (snapshotBuffer.size() > 64) snapshotBuffer.pop_front();
   } else if (type == e_NetMessage_MatchEnvironment) {
     boost::mutex::scoped_lock lock(pendingMutex);
     environment = ReadMatchEnvironment(buffer);
@@ -301,12 +385,10 @@ bool NetClient::ConsumeAnimationTable(std::vector<std::string> &names) {
   return true;
 }
 
-bool NetClient::ConsumeSnapshot(std::vector<uint8_t> &bytes) {
+void NetClient::DrainSnapshots(std::deque<NetRawSnapshot> &out) {
   boost::mutex::scoped_lock lock(pendingMutex);
-  if (!snapshotPending) return false;
-  bytes = snapshot;
-  snapshotPending = false;
-  return true;
+  out.insert(out.end(), snapshotBuffer.begin(), snapshotBuffer.end());
+  snapshotBuffer.clear();
 }
 
 bool NetClient::ConsumeEnvironment(NetMatchEnvironment &out) {

@@ -1316,7 +1316,10 @@ void Match::CaptureRemoteSnapshot(NetBuffer &buffer) {
 }
 
 void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
-  const Snapshot snapshot = ReadSnapshot(buffer);
+  ApplyRemoteSnapshot(ReadSnapshot(buffer));
+}
+
+void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   remoteMaxRtt_ms = snapshot.maxRtt_ms;
 
   matchTime_ms = snapshot.matchTime_ms;

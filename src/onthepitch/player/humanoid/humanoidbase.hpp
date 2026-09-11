@@ -252,7 +252,8 @@ class HumanoidBase {
     // Remote presentation: the client does not simulate, it replays the host's
     // per-frame pose (animation + frame + world position/orientation) directly.
     const AnimApplyBuffer &GetAnimApplyBuffer() const { return animApplyBuffer; }
-    void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos);
+    void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos,
+                       bool smooth = true, float smoothFactor = 1.0f);
 
     virtual void ResetSituation(const Vector3 &focusPos);
 

@@ -60,10 +60,18 @@ class NetMatchSession {
     void ProcessClient(Match *match);
     void HandleRosterChanges(Match *match);
     bool SideSelectActive() const;
+    void ApplyInterpolatedSnapshot(Match *match);
 
     Match *match; // borrowed from GameTask
     boost::shared_ptr<DelayedHIDDevice> hostInputDelay;
     std::deque<NetInputFrame> clientInputQueue;
+    std::deque<NetRawSnapshot> snapshotQueue; // client: decoded pending snapshots
+    // Fixed-rate playout clock (client): advances with real time and is gently
+    // pulled toward (newest host snapshot time - B). Decoupled from packet
+    // arrival jitter, which would otherwise show up as shaky playback.
+    double renderHostTime;
+    unsigned long lastRenderClock_ms;
+    bool renderClockInit;
     unsigned long lastSnapshotTime_ms;
 };
 

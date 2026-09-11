@@ -20,7 +20,7 @@ namespace blunted { class Animation; }
 // and may be offset (e.g. after a local match). team 0/1 = Home/Away squad slot;
 // team 2 = officials (referee, linesman north, linesman south).
 struct SnapshotPlayer {
-  SnapshotPlayer() : team(-1), slot(-1), ownerId(-1), animID(-1), frameNum(0), noPos(false), orientation(0) {}
+  SnapshotPlayer() : team(-1), slot(-1), ownerId(-1), animID(-1), frameNum(0), noPos(false), smooth(true), smoothFactor(1.0f), orientation(0) {}
 
   int team;
   int slot;
@@ -28,6 +28,10 @@ struct SnapshotPlayer {
   int animID;
   int frameNum;
   bool noPos;
+  // Animation blend state, so the client reproduces the host's transitions
+  // (e.g. smoothFactor 0.6 on an animation switch) instead of always 1.0.
+  bool smooth;
+  float smoothFactor;
   blunted::Vector3 position;
   float orientation;
 };
@@ -96,5 +100,14 @@ Snapshot ReadSnapshot(NetBuffer &buffer);
 // skipped rather than fatal, so a partial snapshot still presents something.
 // Returns the number of poses actually applied (diagnostics).
 int ApplySnapshot(Match *match, const Snapshot &snapshot, const std::vector<blunted::Animation*> &animTable);
+
+// Blends two decoded snapshots for client-side interpolation: `a` is the older,
+// `b` the newer, `t` in [0,1]. Discrete state (score, phase, message, animation
+// ids, pause) comes from `b` so it never lags; continuous transforms (position,
+// orientation, animation frame, ball, camera) are interpolated when both
+// snapshots carry the entity (frameNum only when the animation id matches).
+// `animTable` (optional, host index order) lets frameNum interpolate across an
+// animation loop using its frame count; without it a looped frame snaps.
+Snapshot BlendSnapshots(const Snapshot &a, const Snapshot &b, float t, const std::vector<blunted::Animation*> *animTable = 0);
 
 #endif

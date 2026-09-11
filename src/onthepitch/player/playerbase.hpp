@@ -63,8 +63,9 @@ class PlayerBase {
     boost::intrusive_ptr<Node> GetFullbodyNode() { return humanoid->GetFullbodyNode(); }
 
     const AnimApplyBuffer &GetAnimApplyBuffer() const { return humanoid->GetAnimApplyBuffer(); }
-    void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos) {
-      humanoid->SetRemotePose(anim, frameNum, position, orientation, noPos);
+  void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos,
+                     bool smooth = true, float smoothFactor = 1.0f) {
+    humanoid->SetRemotePose(anim, frameNum, position, orientation, noPos, smooth, smoothFactor);
     }
 
     // Remote presentation: peer controlling this player per the host snapshot

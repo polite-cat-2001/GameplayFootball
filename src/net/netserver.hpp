@@ -6,6 +6,7 @@
 #include <boost/thread.hpp>
 
 #include <atomic>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,14 @@ class NetServer {
 
     // Reliable broadcast on the control channel. Safe to call from any thread.
     void BroadcastMessage(e_NetMessageType type, NetBuffer &body);
+
+    // Realtime snapshot on the UDP channel; peers whose UDP endpoint is not yet
+    // known get it on the reliable TCP channel instead. Any thread.
+    void BroadcastSnapshot(NetBuffer &body);
+
+    // True once a UDP datagram (Hello / input) from that peer has been seen, so
+    // snapshots go over UDP. Diagnostics/tests.
+    bool HasUdpEndpoint(uint32_t sessionId);
 
     // One virtual input device per connected client, created on handshake.
     boost::shared_ptr<NetHIDDevice> GetHIDevice(uint32_t sessionId);
@@ -90,6 +99,10 @@ class NetServer {
     void StartPingTimer();
     void SchedulePingTimer();
     void HandlePingTimer(const boost::system::error_code &error);
+    void StartUdp();
+    void StartUdpReceive();
+    void HandleUdpReceive(const boost::system::error_code &error, std::size_t bytesTransferred);
+    void DoSendUdp(boost::shared_ptr<std::vector<uint8_t> > packet, const boost::asio::ip::udp::endpoint &endpoint);
     void DoAccept();
     void HandleAccept(boost::shared_ptr<NetServerConnection> connection, const boost::system::error_code &error);
     void HandleClientHello(boost::shared_ptr<NetServerConnection> connection, const NetClientHello &hello);
@@ -107,9 +120,17 @@ class NetServer {
     std::atomic<bool> running;
     boost::asio::io_context ioContext;
     boost::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor;
+    boost::shared_ptr<boost::asio::ip::udp::socket> udpSocket;
+    std::vector<uint8_t> udpRecvBuffer;
+    boost::asio::ip::udp::endpoint udpSenderEndpoint;
     boost::shared_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type> > workGuard;
     boost::thread ioThread;
     boost::shared_ptr<boost::asio::steady_timer> pingTimer;
+
+    boost::mutex udpMutex;
+    std::map<uint32_t, boost::asio::ip::udp::endpoint> udpEndpoints; // session -> client UDP address
+    std::map<uint32_t, uint32_t> udpLastInputSeq;                    // session -> last applied input seq
+    uint32_t snapshotSeq = 0;
 
     boost::mutex connectionsMutex;
     std::vector<boost::shared_ptr<NetServerConnection> > connections;

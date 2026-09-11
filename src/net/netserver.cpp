@@ -11,6 +11,7 @@
 
 #include "netassets.hpp"
 #include "nethiddevice.hpp"
+#include "netudp.hpp"
 
 #include "base/utils.hpp"
 
@@ -216,6 +217,7 @@ bool NetServer::Start() {
   workGuard = boost::shared_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type> >(
       new boost::asio::executor_work_guard<boost::asio::io_context::executor_type>(boost::asio::make_work_guard(ioContext)));
   running.store(true);
+  StartUdp();
   DoAccept();
   StartPingTimer();
   ioThread = boost::thread(boost::bind(&NetServer::Run, this));
@@ -234,6 +236,18 @@ void NetServer::Stop() {
   if (acceptor) {
     boost::system::error_code error;
     acceptor->close(error);
+  }
+
+  if (udpSocket) {
+    // Close but keep the object alive: a posted DoSendUdp on the io thread may
+    // still hold a copy. The socket is freed with the server.
+    boost::system::error_code error;
+    udpSocket->close(error);
+  }
+  {
+    boost::mutex::scoped_lock lock(udpMutex);
+    udpEndpoints.clear();
+    udpLastInputSeq.clear();
   }
 
   {
@@ -258,6 +272,110 @@ void NetServer::Stop() {
 
 void NetServer::Run() {
   ioContext.run();
+}
+
+void NetServer::StartUdp() {
+  boost::system::error_code error;
+  udpSocket = boost::make_shared<boost::asio::ip::udp::socket>(ioContext);
+  udpSocket->open(boost::asio::ip::udp::v4(), error);
+  if (error) { udpSocket.reset(); return; }
+  udpSocket->set_option(boost::asio::socket_base::reuse_address(true), error);
+  udpSocket->bind(boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port), error);
+  if (error) { udpSocket->close(); udpSocket.reset(); return; }
+  StartUdpReceive();
+}
+
+void NetServer::StartUdpReceive() {
+  if (!udpSocket) return;
+  udpRecvBuffer.resize(2048);
+  udpSocket->async_receive_from(boost::asio::buffer(udpRecvBuffer), udpSenderEndpoint,
+      boost::bind(&NetServer::HandleUdpReceive, this, boost::asio::placeholders::error,
+                  boost::asio::placeholders::bytes_transferred));
+}
+
+void NetServer::HandleUdpReceive(const boost::system::error_code &error, std::size_t bytesTransferred) {
+  if (!running.load()) return;
+  if (error) { StartUdpReceive(); return; } // e.g. WSAECONNRESET from a peers' ICMP
+
+  uint8_t type = 0;
+  uint32_t sessionId = 0, seq = 0;
+  if (bytesTransferred >= net_udpHeaderSize &&
+      NetReadUdpHeader(udpRecvBuffer.data(), bytesTransferred, type, sessionId, seq)) {
+    if (type == e_NetUdpType_Hello || type == e_NetUdpType_Input) {
+      // Learn the client's UDP endpoint from the datagram itself (no NAT here:
+      // direct LAN / Hamachi). Even a retransmitted Hello just refreshes it.
+      {
+        boost::mutex::scoped_lock lock(udpMutex);
+        udpEndpoints[sessionId] = udpSenderEndpoint;
+      }
+      if (type == e_NetUdpType_Input) {
+        bool fresh = false;
+        {
+          boost::mutex::scoped_lock lock(udpMutex);
+          std::map<uint32_t, uint32_t>::iterator iter = udpLastInputSeq.find(sessionId);
+          if (iter == udpLastInputSeq.end() || seq >= iter->second) {
+            udpLastInputSeq[sessionId] = seq;
+            fresh = true;
+          }
+        }
+        if (fresh) {
+          NetBuffer buffer;
+          buffer.Data().assign(udpRecvBuffer.begin() + net_udpHeaderSize, udpRecvBuffer.begin() + bytesTransferred);
+          buffer.ResetRead();
+          NetInputFrame frame = ReadInputFrame(buffer);
+          boost::shared_ptr<NetHIDDevice> device = GetHIDevice(sessionId);
+          if (device) device->SetInput(frame);
+        }
+      }
+    }
+  }
+
+  StartUdpReceive();
+}
+
+void NetServer::DoSendUdp(boost::shared_ptr<std::vector<uint8_t> > packet, const boost::asio::ip::udp::endpoint &endpoint) {
+  if (!udpSocket) return;
+  udpSocket->async_send_to(boost::asio::buffer(*packet), endpoint,
+      [packet](const boost::system::error_code &, std::size_t) {
+        (void)packet; // keeps the buffer alive until the async send completes
+      });
+}
+
+bool NetServer::HasUdpEndpoint(uint32_t sessionId) {
+  boost::mutex::scoped_lock lock(udpMutex);
+  return udpEndpoints.find(sessionId) != udpEndpoints.end();
+}
+
+void NetServer::BroadcastSnapshot(NetBuffer &body) {
+  std::vector<boost::shared_ptr<NetServerConnection> > current;
+  {
+    boost::mutex::scoped_lock lock(connectionsMutex);
+    current = connections;
+  }
+  if (current.empty()) return;
+
+  const uint32_t seq = ++snapshotSeq;
+  const std::vector<uint8_t> &payload = body.Data();
+
+  for (unsigned int i = 0; i < current.size(); i++) {
+    uint32_t sessionId = current.at(i)->GetSessionId();
+    boost::asio::ip::udp::endpoint endpoint;
+    bool hasEndpoint = false;
+    {
+      boost::mutex::scoped_lock lock(udpMutex);
+      std::map<uint32_t, boost::asio::ip::udp::endpoint>::iterator iter = udpEndpoints.find(sessionId);
+      if (iter != udpEndpoints.end()) { endpoint = iter->second; hasEndpoint = true; }
+    }
+    if (hasEndpoint) {
+      boost::shared_ptr<std::vector<uint8_t> > packet = boost::make_shared<std::vector<uint8_t> >();
+      NetWriteUdpHeader(*packet, e_NetUdpType_Snapshot, sessionId, seq);
+      packet->insert(packet->end(), payload.begin(), payload.end());
+      boost::asio::post(ioContext, boost::bind(&NetServer::DoSendUdp, this, packet, endpoint));
+    } else {
+      // No UDP datagram from this peer yet: keep it fed over reliable TCP.
+      current.at(i)->SendMessage(e_NetMessage_Snapshot, body);
+    }
+  }
 }
 
 void NetServer::StartPingTimer() {
@@ -708,6 +826,12 @@ void NetServer::RemoveConnection(boost::shared_ptr<NetServerConnection> connecti
   if (device) {
     boost::mutex::scoped_lock lock(retiredMutex);
     retiredDevices.push_back(device);
+  }
+
+  {
+    boost::mutex::scoped_lock lock(udpMutex);
+    udpEndpoints.erase(playerId);
+    udpLastInputSeq.erase(playerId);
   }
 
   if (running.load() && playerId != 0) {

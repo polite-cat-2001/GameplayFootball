@@ -120,6 +120,74 @@ int main(int argc, char **argv) {
     CHECK(snapshot.maxRtt_ms == 0, "snapshot maxRtt should be 0 without clients");
   }
 
+  // Client-side interpolation: discrete state comes from the newer snapshot,
+  // continuous transforms blend at t; frameNum only blends within one anim.
+  {
+    Snapshot older;
+    Snapshot newer;
+    older.ballPosition = Vector3(0, 0, 0);
+    newer.ballPosition = Vector3(10, 0, 0);
+    SnapshotPlayer pa;
+    pa.team = 0;
+    pa.slot = 0;
+    pa.animID = 1;
+    pa.frameNum = 0;
+    pa.position = Vector3(0, 0, 0);
+    SnapshotPlayer pb = pa;
+    pb.frameNum = 10;
+    pb.position = Vector3(10, 0, 0);
+    older.players.push_back(pa);
+    newer.players.push_back(pb);
+    newer.score[0] = 3;
+
+    Snapshot mid = BlendSnapshots(older, newer, 0.5f);
+    CHECK(mid.ballPosition.GetDistance(Vector3(5, 0, 0)) < 1e-4f, "blend ball midpoint mismatch");
+    CHECK(mid.players.at(0).position.GetDistance(Vector3(5, 0, 0)) < 1e-4f, "blend player midpoint mismatch");
+    CHECK(mid.players.at(0).frameNum == 5, "blend frame midpoint mismatch");
+    CHECK(mid.score[0] == 3, "blend should keep newer discrete state");
+
+    newer.players.at(0).animID = 2; // different animation: frame snaps to newer
+    Snapshot snapped = BlendSnapshots(older, newer, 0.5f);
+    CHECK(snapped.players.at(0).frameNum == 10, "blend should snap frame across animations");
+  }
+
+  // Snapshot carries the host's animation blend state, and the position is not
+  // blended across a noPos change.
+  {
+    Snapshot s;
+    SnapshotPlayer p;
+    p.team = 0;
+    p.slot = 0;
+    p.animID = 1;
+    p.frameNum = 4;
+    p.smooth = true;
+    p.smoothFactor = 0.6f;
+    p.noPos = true;
+    p.position = Vector3(1, 2, 3);
+    s.players.push_back(p);
+
+    NetBuffer buffer;
+    WriteSnapshot(buffer, s);
+    buffer.ResetRead();
+    Snapshot restored = ReadSnapshot(buffer);
+    CHECK(!buffer.Failed(), "snapshot blend-state buffer failed");
+    CHECK(restored.players.size() == 1 &&
+          restored.players.at(0).smooth == true &&
+          restored.players.at(0).smoothFactor == 0.6f &&
+          restored.players.at(0).noPos == true,
+          "snapshot blend-state round-trip mismatch");
+
+    Snapshot older = s;
+    older.players.at(0).position = Vector3(-5, 0, 0);
+    older.players.at(0).noPos = false;
+    Snapshot newer = s;
+    newer.players.at(0).position = Vector3(5, 0, 0);
+    newer.players.at(0).noPos = true;
+    Snapshot merged = BlendSnapshots(older, newer, 0.5f);
+    CHECK(merged.players.at(0).position.GetDistance(Vector3(5, 0, 0)) < 1e-4f,
+          "position must snap (not blend) across a noPos change");
+  }
+
   // --- network setup: host server + one raw client peer ---------------------
   boost::shared_ptr<NetServer> server = boost::make_shared<NetServer>(port);
   if (!server->Start()) { std::printf("FAIL: server could not bind %u\n", (unsigned int)port); ::exit(1); }

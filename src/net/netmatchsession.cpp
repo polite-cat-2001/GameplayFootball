@@ -5,6 +5,7 @@
 #include "blunted.hpp"
 
 #include "delayedhiddevice.hpp"
+#include "matchsnapshot.hpp"
 #include "netclient.hpp"
 #include "netmessages.hpp"
 #include "nethiddevice.hpp"
@@ -17,7 +18,16 @@
 
 #include "utils/animation.hpp"
 
+#include <chrono>
+
 namespace {
+// Snapshots are timestamped on the io thread and rendered on the game thread;
+// both use this same steady clock.
+unsigned long SteadyNow_ms() {
+  return (unsigned long)std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 // Lobby 'device' field: 0 = keyboard, 1 = gamepad. Returns the local HID device
 // to bind (host) or to sample for InputFrame (client).
 IHIDevice *FindLocalDevice(int deviceType) {
@@ -44,7 +54,7 @@ int GetLocalDeviceType(boost::shared_ptr<NetClient> client) {
 }
 }
 
-NetMatchSession::NetMatchSession() : match(0), lastSnapshotTime_ms(0) {
+NetMatchSession::NetMatchSession() : match(0), renderHostTime(0), lastRenderClock_ms(0), renderClockInit(false), lastSnapshotTime_ms(0) {
 }
 
 NetMatchSession::~NetMatchSession() {
@@ -66,6 +76,10 @@ void NetMatchSession::StartMatch(Match *match) {
   this->match = match;
   lastSnapshotTime_ms = 0;
   clientInputQueue.clear();
+  snapshotQueue.clear();
+  renderHostTime = 0;
+  lastRenderClock_ms = 0;
+  renderClockInit = false;
   hostInputDelay.reset();
 
   if (IsClient()) return; // the caller already put the Match in remote mode
@@ -93,6 +107,8 @@ void NetMatchSession::StartMatch(Match *match) {
 void NetMatchSession::StopMatch() {
   match = 0;
   clientInputQueue.clear();
+  snapshotQueue.clear();
+  renderClockInit = false;
   hostInputDelay.reset();
 }
 
@@ -284,7 +300,11 @@ void NetMatchSession::ProcessClient(Match *match) {
 
     int rtt_ms = client->GetRtt_ms();
     if (rtt_ms < 0) rtt_ms = 0;
-    int delay_ms = match->GetRemoteMaxRtt_ms() + net_interpolationBuffer_ms - rtt_ms / 2;
+    // No interpolation buffer here: the client already renders B behind, so a
+    // reaction to the same visible moment is inherently B late. The host carries
+    // the +B instead, so both reactions land at the same sim time. Adding B here
+    // too would pay it twice and make the client's own input feel 120 ms worse.
+    int delay_ms = match->GetRemoteMaxRtt_ms() - rtt_ms / 2;
     if (delay_ms < 0) delay_ms = 0;
     int delayTicks = (delay_ms + 5) / 10;
 
@@ -302,13 +322,77 @@ void NetMatchSession::ProcessClient(Match *match) {
     if (client->ConsumeAnimationTable(names)) match->ResolveRemoteAnimTable(names);
   }
   if (match->HasRemoteAnimTable()) {
-    std::vector<uint8_t> bytes;
-    if (client->ConsumeSnapshot(bytes)) {
-      NetBuffer buffer;
-      buffer.Data().assign(bytes.begin(), bytes.end());
-      buffer.ResetRead();
-      match->ApplyRemoteSnapshot(buffer);
-    }
+    std::deque<NetRawSnapshot> incoming;
+    client->DrainSnapshots(incoming);
+    for (unsigned int i = 0; i < incoming.size(); i++) snapshotQueue.push_back(incoming.at(i));
+    while (snapshotQueue.size() > 128) snapshotQueue.pop_front();
+    ApplyInterpolatedSnapshot(match);
+  }
+}
+
+void NetMatchSession::ApplyInterpolatedSnapshot(Match *match) {
+  if (snapshotQueue.empty()) return;
+
+  // Fixed-rate playout clock. The host's actualTime_ms advances regularly, so
+  // using it (instead of packet arrival times) removes network jitter from the
+  // playback speed. renderHostTime advances with the real clock and is gently
+  // pulled toward (newest host time - B).
+  const unsigned long now = SteadyNow_ms();
+  const double newestHost = (double)snapshotQueue.back().hostTime_ms;
+  if (!renderClockInit) {
+    renderClockInit = true;
+    renderHostTime = newestHost - (double)net_interpolationBuffer_ms;
+  } else {
+    renderHostTime += (double)(now - lastRenderClock_ms);
+  }
+  lastRenderClock_ms = now;
+
+  const double desired = newestHost - (double)net_interpolationBuffer_ms;
+  if (renderHostTime > desired) {
+    renderHostTime = desired; // never render past the newest received state
+  } else if (renderHostTime < desired - 100.0) {
+    renderHostTime += (desired - renderHostTime) * 0.10; // fell far behind: catch up
+  } else {
+    renderHostTime += (desired - renderHostTime) * 0.02; // gentle drift correction
+  }
+
+  // Keep the front just before renderHostTime, so front/at(1) bracket it.
+  while (snapshotQueue.size() > 2 && (double)snapshotQueue.at(1).hostTime_ms <= renderHostTime) {
+    snapshotQueue.pop_front();
+  }
+
+  const double frontHost = (double)snapshotQueue.front().hostTime_ms;
+  const double backHost = (double)snapshotQueue.back().hostTime_ms;
+
+  NetBuffer bufferA;
+  bufferA.Data() = snapshotQueue.front().bytes;
+  bufferA.ResetRead();
+  const Snapshot a = ReadSnapshot(bufferA);
+
+  if (snapshotQueue.size() >= 2 && frontHost <= renderHostTime && backHost > renderHostTime) {
+    NetBuffer bufferB;
+    bufferB.Data() = snapshotQueue.at(1).bytes;
+    bufferB.ResetRead();
+    const Snapshot b = ReadSnapshot(bufferB);
+
+    const double secondHost = (double)snapshotQueue.at(1).hostTime_ms;
+    const double span = secondHost - frontHost;
+    float t = span > 0.0 ? (float)((renderHostTime - frontHost) / span) : 0.0f;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    match->ApplyRemoteSnapshot(BlendSnapshots(a, b, t, &match->GetRemoteAnimTable()));
+    return;
+  }
+
+  if (backHost <= renderHostTime) {
+    // Behind all buffered data (gap / match start): hold the newest.
+    NetBuffer bufferB;
+    bufferB.Data() = snapshotQueue.back().bytes;
+    bufferB.ResetRead();
+    match->ApplyRemoteSnapshot(ReadSnapshot(bufferB));
+  } else {
+    // Ahead of all buffered data: hold the oldest.
+    match->ApplyRemoteSnapshot(a);
   }
 }
 
