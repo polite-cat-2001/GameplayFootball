@@ -913,3 +913,16 @@ realtime). Полный дизайн, сообщения и таблицы со�
 (пир задерживает ввод: хост `2U`, клиент `2U - u_i`), лимит 2 человека на команду
 (макс 4 пира), зритель — штатная камера, keepalive 500 мс / таймаут 5 с, реконнект
 как новый игрок, порт `27015` на TCP+UDP.
+
+## [2026-09-11] feat | LAN: транспорт и handshake (Task 2)
+Модуль `src/net` получил TCP control-канал на `boost::asio` и handshake. Формат кадра —
+4 байта длины (LE) + `[тип|тело]`, асинхронные read/write и очередь записи. `ClientHello`
+несёт protocol/build/dataVersion/dataHash/animationHash/имя; сервер сверяет и отвечает
+`ServerHello{accepted, reason}` (причины: proto/build/data/anims mismatch и др.). Build-хеш —
+git short-хеш из CMake; data version/hash — из `databases/default/manifest.json`; animation
+hash — SHA-1 листинга `media/animations`. Добавлены `netbuffer`, `netmessages`, `netassets`,
+`netserver`/`NetServerConnection`, `netclient`; `netlib` линкует `Boost::filesystem` и
+`ws2_32` (Windows). Headless smoke-тест `tools/nettest` поднимает сервер и клиент на
+localhost — `PASS`. Детерминизм Windows x86 (`7134def2...`) не сдвинулся. Вики: новая
+страница [[сеть]] (+ [[константы]], [[архитектура]], index). Следующее — Task 3 (каталог и
+сериализация данных).
