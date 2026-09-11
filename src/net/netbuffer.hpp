@@ -8,6 +8,9 @@
 #include "base/math/vector3.hpp"
 #include "base/math/quaternion.hpp"
 
+void NetWriteU32LE(uint8_t *bytes, uint32_t value);
+uint32_t NetReadU32LE(const uint8_t *bytes);
+
 class NetBuffer {
 
   public:

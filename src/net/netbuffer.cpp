@@ -2,6 +2,20 @@
 
 #include <cstring>
 
+void NetWriteU32LE(uint8_t *bytes, uint32_t value) {
+  bytes[0] = (uint8_t)(value & 0xFF);
+  bytes[1] = (uint8_t)((value >> 8) & 0xFF);
+  bytes[2] = (uint8_t)((value >> 16) & 0xFF);
+  bytes[3] = (uint8_t)((value >> 24) & 0xFF);
+}
+
+uint32_t NetReadU32LE(const uint8_t *bytes) {
+  return (uint32_t)bytes[0] |
+         ((uint32_t)bytes[1] << 8) |
+         ((uint32_t)bytes[2] << 16) |
+         ((uint32_t)bytes[3] << 24);
+}
+
 void NetBuffer::PutU8(uint8_t value) {
   data.push_back(value);
 }

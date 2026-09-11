@@ -15,6 +15,18 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
 
 project(GameplayFootball)
 
+# Build identifier shipped in the LAN handshake so peers with different binaries
+# (or different data) refuse to play together instead of desyncing silently.
+execute_process(
+        COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GAMEPLAYFOOTBALL_BUILD_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+if(NOT GAMEPLAYFOOTBALL_BUILD_HASH)
+  set(GAMEPLAYFOOTBALL_BUILD_HASH "unknown")
+endif()
+
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -284,12 +296,16 @@ add_library(datalib STATIC
 apply_common_includes(datalib)
 add_library(netlib STATIC
         src/net/netbuffer.cpp
+        src/net/netmessages.cpp
+        src/net/netassets.cpp
         src/net/netserver.cpp
         src/net/netclient.cpp)
 apply_common_includes(netlib)
+target_link_libraries(netlib PUBLIC Boost::filesystem)
 if(WIN32)
   target_link_libraries(netlib PUBLIC ws2_32)
 endif()
+target_compile_definitions(netlib PRIVATE GAMEPLAYFOOTBALL_BUILD_HASH="${GAMEPLAYFOOTBALL_BUILD_HASH}")
 add_library(gamecontextlib STATIC src/gamecontext.cpp)
 apply_common_includes(gamecontextlib)
 
@@ -350,3 +366,9 @@ else()
   target_link_libraries(determinism_runner PRIVATE ${LIBRARIES})
 endif()
 copy_data_post_build(determinism_runner)
+
+# Headless smoke test for the LAN transport handshake (server + client in one process).
+add_executable(nettest tools/nettest/main.cpp)
+apply_common_includes(nettest)
+target_link_libraries(nettest PRIVATE netlib blunted2)
+copy_data_post_build(nettest)
