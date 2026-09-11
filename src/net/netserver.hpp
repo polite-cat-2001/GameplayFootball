@@ -14,6 +14,7 @@
 #include "nettypes.hpp"
 
 class NetServerConnection;
+class NetHIDDevice;
 
 class NetServer {
 
@@ -33,6 +34,21 @@ class NetServer {
     std::vector<NetCatalogEntry> GetCatalog();
     void SetHostName(const std::string &name);
 
+    // Reliable broadcast on the control channel. Safe to call from any thread.
+    void BroadcastMessage(e_NetMessageType type, NetBuffer &body);
+
+    // One virtual input device per connected client, created on handshake.
+    boost::shared_ptr<NetHIDDevice> GetHIDevice(uint32_t sessionId);
+    std::vector<boost::shared_ptr<NetHIDDevice> > GetHIDevices();
+
+    // Any peer may request pause; the host applies and broadcasts the state.
+    void BroadcastPause(bool paused);
+    bool ConsumePauseRequest(bool &paused);
+
+    // Any peer skipping a replay tells the host, which broadcasts it to all.
+    void BroadcastReplayStop();
+    bool ConsumeReplayStop();
+
     boost::signals2::signal<void(const NetClientHello &, const NetServerHello &)> sig_OnHandshake;
     boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
 
@@ -44,6 +60,9 @@ class NetServer {
     void HandleAccept(boost::shared_ptr<NetServerConnection> connection, const boost::system::error_code &error);
     void HandleClientHello(boost::shared_ptr<NetServerConnection> connection, const NetClientHello &hello);
     void HandleLobbyAction(boost::shared_ptr<NetServerConnection> connection, const NetLobbyAction &action);
+    void HandleInputFrame(boost::shared_ptr<NetServerConnection> connection, const NetInputFrame &frame);
+    void HandlePauseRequest(bool paused);
+    void HandleReplayStop();
     void RemoveConnection(boost::shared_ptr<NetServerConnection> connection);
     void RemovePlayer(uint32_t playerId);
     void BroadcastLobbyState();
@@ -63,6 +82,13 @@ class NetServer {
     boost::mutex lobbyMutex;
     NetLobbyState lobbyState;
     std::vector<NetCatalogEntry> catalog;
+
+    boost::mutex pauseMutex;
+    bool pauseRequestPending;
+    bool pauseRequestState;
+
+    boost::mutex replayMutex;
+    bool replayStopPending;
 };
 
 #endif

@@ -15,7 +15,15 @@ NetClient::NetClient()
     : running(false),
       state(e_NetConnectionState_Disconnected),
       socket(ioContext),
-      resolver(ioContext) {
+      resolver(ioContext),
+      playerId(0),
+      matchStartPending(false),
+      animationTablePending(false),
+      snapshotPending(false),
+      environmentPending(false),
+      pauseStatePending(false),
+      pauseState(false),
+      replayStopPending(false) {
 }
 
 NetClient::~NetClient() {
@@ -108,6 +116,30 @@ void NetClient::SendLobbyAction(const NetLobbyAction &action) {
   SendMessage(e_NetMessage_LobbyAction, body);
 }
 
+void NetClient::SendInputFrame(const NetInputFrame &frame) {
+  NetBuffer body;
+  WriteInputFrame(body, frame);
+  SendMessage(e_NetMessage_InputFrame, body);
+}
+
+void NetClient::SendPauseRequest(bool paused) {
+  NetBuffer body;
+  body.PutBool(paused);
+  SendMessage(e_NetMessage_PauseRequest, body);
+}
+
+void NetClient::SendReplayStop() {
+  NetBuffer body;
+  SendMessage(e_NetMessage_ReplayStop, body);
+}
+
+bool NetClient::ConsumeReplayStop() {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!replayStopPending) return false;
+  replayStopPending = false;
+  return true;
+}
+
 void NetClient::ReadHeader() {
   boost::asio::async_read(socket, boost::asio::buffer(header, kHeaderSize),
       boost::bind(&NetClient::HandleHeader, this, boost::asio::placeholders::error));
@@ -149,7 +181,70 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
     sig_OnLobbyState(lobbyState);
   } else if (type == e_NetMessage_Catalog) {
     catalog = ReadCatalog(buffer);
+  } else if (type == e_NetMessage_MatchSetup) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    matchSetup = ReadMatchSetup(buffer);
+    matchStartPending = true;
+  } else if (type == e_NetMessage_AnimationTable) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    animationTable = ReadAnimationTable(buffer);
+    animationTablePending = true;
+  } else if (type == e_NetMessage_Snapshot) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    snapshot.assign(buffer.Data().begin(), buffer.Data().end());
+    snapshotPending = true;
+  } else if (type == e_NetMessage_MatchEnvironment) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    environment = ReadMatchEnvironment(buffer);
+    environmentPending = true;
+  } else if (type == e_NetMessage_PauseState) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    pauseState = buffer.GetBool();
+    pauseStatePending = true;
+  } else if (type == e_NetMessage_ReplayStop) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    replayStopPending = true;
   }
+}
+
+bool NetClient::ConsumeMatchSetup(NetMatchSetup &setup) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!matchStartPending) return false;
+  setup = matchSetup;
+  matchStartPending = false;
+  return true;
+}
+
+bool NetClient::ConsumeAnimationTable(std::vector<std::string> &names) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!animationTablePending) return false;
+  names = animationTable;
+  animationTablePending = false;
+  return true;
+}
+
+bool NetClient::ConsumeSnapshot(std::vector<uint8_t> &bytes) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!snapshotPending) return false;
+  bytes = snapshot;
+  snapshotPending = false;
+  return true;
+}
+
+bool NetClient::ConsumeEnvironment(NetMatchEnvironment &out) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!environmentPending) return false;
+  out = environment;
+  environmentPending = false;
+  return true;
+}
+
+bool NetClient::ConsumePauseState(bool &out) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (!pauseStatePending) return false;
+  out = pauseState;
+  pauseStatePending = false;
+  return true;
 }
 
 void NetClient::Fail(const e_NetRejectReason reason, const std::string &reasonText) {

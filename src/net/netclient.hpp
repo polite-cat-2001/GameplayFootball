@@ -31,6 +31,18 @@ class NetClient {
     void SetPlayerName(const std::string &name) { playerName = name; }
 
     void SendLobbyAction(const NetLobbyAction &action);
+    void SendInputFrame(const NetInputFrame &frame);
+    void SendPauseRequest(bool paused);
+    void SendReplayStop();
+
+    // Match startup and realtime snapshot intake. All of these are one-shot
+    // "consume" reads so the game thread can never lose an event by polling twice.
+    bool ConsumeMatchSetup(NetMatchSetup &setup);
+    bool ConsumeAnimationTable(std::vector<std::string> &names);
+    bool ConsumeSnapshot(std::vector<uint8_t> &bytes);
+    bool ConsumeEnvironment(NetMatchEnvironment &environment);
+    bool ConsumePauseState(bool &paused);
+    bool ConsumeReplayStop();
 
     boost::signals2::signal<void(const NetServerHello &)> sig_OnHandshake;
     boost::signals2::signal<void(const NetLobbyState &)> sig_OnLobbyState;
@@ -68,6 +80,19 @@ class NetClient {
     std::vector<NetCatalogEntry> catalog;
     std::string playerName;
     uint32_t playerId;
+
+    boost::mutex pendingMutex;
+    bool matchStartPending;
+    NetMatchSetup matchSetup;
+    bool animationTablePending;
+    std::vector<std::string> animationTable;
+    bool snapshotPending;
+    std::vector<uint8_t> snapshot;
+    bool environmentPending;
+    NetMatchEnvironment environment;
+    bool pauseStatePending;
+    bool pauseState;
+    bool replayStopPending;
 };
 
 #endif

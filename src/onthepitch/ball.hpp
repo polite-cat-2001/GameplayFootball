@@ -66,6 +66,21 @@ class Ball {
     BallSpatialInfo CalculatePrediction(); // returns momentum in 10ms
     Vector3 GetPositionBuffer() { return buf_positionBuffer.GetValue(EnvironmentManager::GetInstance().GetTime_ms()); }
 
+    // Authoritative ball state, straight from Process() (host capture) or from a
+    // remote snapshot (client apply).
+    Vector3 GetStatePosition() const { return positionBuffer; }
+    Quaternion GetStateOrientation() const { return orientationBuffer; }
+    void SetRemoteState(const Vector3 &position, const Quaternion &orientation) {
+      positionBuffer = position;
+      orientationBuffer = orientation;
+      // Predict() is used by the camera and low-detail logic on the client too,
+      // so keep the whole prediction array pinned to the remote ball.
+      for (unsigned int i = 0; i < ballPredictionSize_ms / 10; i++) predictions[i] = position;
+      orientPrediction = orientation;
+      previousPosition = position;
+      momentum = Vector3(0);
+    }
+
     bool BallTouchesNet() { return ballTouchesNet; }
     Vector3 GetAveragePosition(unsigned int duration_ms) const;
 

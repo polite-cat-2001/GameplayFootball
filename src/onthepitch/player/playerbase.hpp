@@ -62,6 +62,16 @@ class PlayerBase {
     boost::intrusive_ptr<Node> GetHumanoidNode() { return humanoid->GetHumanoidNode(); }
     boost::intrusive_ptr<Node> GetFullbodyNode() { return humanoid->GetFullbodyNode(); }
 
+    const AnimApplyBuffer &GetAnimApplyBuffer() const { return humanoid->GetAnimApplyBuffer(); }
+    void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos) {
+      humanoid->SetRemotePose(anim, frameNum, position, orientation, noPos);
+    }
+
+    // Remote presentation: peer controlling this player per the host snapshot
+    // (-1 = AI), used to highlight only the local peer's selected players.
+    int GetRemoteOwnerId() const { return remoteOwnerId; }
+    void SetRemoteOwnerId(int ownerId) { remoteOwnerId = ownerId; }
+
     float GetDecayingPositionOffsetLength() { return humanoid->GetDecayingPositionOffsetLength(); }
 
     virtual void Process();
@@ -110,6 +120,8 @@ class PlayerBase {
     IController *externalController;
 
     bool isActive;
+
+    int remoteOwnerId;
 
     unsigned long lastTouchTime_ms;
     e_TouchType lastTouchType;

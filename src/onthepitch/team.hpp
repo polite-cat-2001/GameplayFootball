@@ -44,12 +44,15 @@ class Team {
     void DeleteHumanGamers();
     e_PlayerColor GetPlayerColor(int playerID);
     bool IsHumanControlled(int playerID);
+    // Peer controlling this player, or -1 if AI. 0 = local host, sessionId = client.
+    int GetControllingPeerId(int playerID);
 
     bool HasPossession() const;
     bool HasUniquePossession() const;
     int GetTimeNeededToGetToBall_ms() const;
     signed int GetBestPossessionPlayerID();
     Player *GetDesignatedTeamPossessionPlayer() { return designatedTeamPossessionPlayer; }
+    void SetDesignatedTeamPossessionPlayer(Player *player) { designatedTeamPossessionPlayer = player; }
     Player *GetBestPossessionPlayer();
     float GetTeamPossessionAmount() const;
     float GetFadingTeamPossessionAmount() const;

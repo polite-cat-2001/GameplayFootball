@@ -12,7 +12,7 @@ const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
 const int net_keepaliveInterval_ms = 500;
 const int net_disconnectTimeout_ms = 5000;
-const int net_snapshotRate_hz = 40;
+const int net_snapshotRate_hz = 100;
 const int net_inputRate_hz = 100;
 
 struct NetAddress {
@@ -30,12 +30,15 @@ enum e_NetMessageType {
   e_NetMessage_LobbyAction,
   e_NetMessage_LobbyState,
   e_NetMessage_MatchSetup,
+  e_NetMessage_AnimationTable,
+  e_NetMessage_MatchEnvironment,
   e_NetMessage_SetupAck,
   e_NetMessage_InputFrame,
   e_NetMessage_Snapshot,
   e_NetMessage_ReliableEvent,
   e_NetMessage_PauseRequest,
   e_NetMessage_PauseState,
+  e_NetMessage_ReplayStop,
   e_NetMessage_Keepalive
 };
 

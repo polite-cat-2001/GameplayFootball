@@ -91,6 +91,8 @@ class GameTask : public IUserTask {
     boost::mutex matchLifetimeMutex;
 
   protected:
+    void SetupNetworkControllers(Match *target);
+
     Match *match;
     MenuScene *menuScene;
 
@@ -100,6 +102,7 @@ class GameTask : public IUserTask {
     boost::shared_ptr<Scene3D> scene3D;
 
     unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
+    unsigned long lastNetSnapshotTime_ms = 0; // rate-limit host snapshot broadcast
 
 };
 

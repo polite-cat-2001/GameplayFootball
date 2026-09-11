@@ -26,6 +26,11 @@
 #include "menu/pagefactory.hpp"
 #include "menu/startmatch/loadingmatch.hpp"
 
+#include "../net/matchsnapshot.hpp"
+#include "../net/netclient.hpp"
+#include "../net/netmessages.hpp"
+#include "../net/netserver.hpp"
+
 const unsigned int replaySize_ms = 10000;
 const unsigned int camPosSize = 150;//180; //130
 
@@ -48,6 +53,12 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   resetNetting = false;
   nettingHasChanged = false;
+
+  remotePresentation = false;
+  remoteAnimTableReady = false;
+  pauseMenuRequested = false;
+  extendedReplayFired = false;
+  localPeerId = 0;
 
   matchDurationFactor = GetConfiguration()->GetReal("match_duration", 1.0) * 0.2f + 0.05f;
   matchDifficulty = GetConfiguration()->GetReal("match_difficulty", 0.8f);
@@ -490,6 +501,42 @@ void Match::Exit() {
   sig_OnExitedMatch(this);
 }
 
+void Match::Pause(bool doPause) {
+  if (remotePresentation) {
+    // Thin client: the host arbitrates pause. Apply locally for UI feedback and
+    // request it from the host; the PauseState broadcast confirms/corrects us.
+    boost::shared_ptr<NetClient> client = menuTask->GetNetClient();
+    if (client) client->SendPauseRequest(doPause);
+    pause = doPause;
+    pauseMenuRequested = doPause;
+    return;
+  }
+
+  pause = doPause;
+  pauseMenuRequested = doPause;
+  boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
+  if (server) server->BroadcastPause(doPause);
+}
+
+bool Match::ConsumeReplayStop() {
+  if (remotePresentation) {
+    boost::shared_ptr<NetClient> client = menuTask->GetNetClient();
+    return client && client->ConsumeReplayStop();
+  }
+  boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
+  return server && server->ConsumeReplayStop();
+}
+
+void Match::BroadcastReplayStop() {
+  if (remotePresentation) {
+    boost::shared_ptr<NetClient> client = menuTask->GetNetClient();
+    if (client) client->SendReplayStop();
+  } else {
+    boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
+    if (server) server->BroadcastReplayStop();
+  }
+}
+
 void Match::SetRandomSunParams() {
 
   if (Verbose()) printf("setting random sun params\n");
@@ -521,6 +568,25 @@ void Match::SetRandomSunParams() {
   if (Verbose()) randomAddition.Print();
 
   static_pointer_cast<Light>(sunNode->GetObject("sun"))->SetColor(sunColor * brightness);
+}
+
+void Match::GetCameraState(Quaternion &outCameraOrientation, Quaternion &outNodeOrientation, Vector3 &outNodePosition, float &outFov, float &outNearCap, float &outFarCap) {
+  outCameraOrientation = cameraOrientation;
+  outNodeOrientation = cameraNodeOrientation;
+  outNodePosition = cameraNodePosition;
+  outFov = cameraFOV;
+  outNearCap = cameraNearCap;
+  outFarCap = cameraFarCap;
+}
+
+void Match::GetSunParams(Vector3 &position, Vector3 &color) {
+  position = sunNode->GetObject("sun")->GetPosition();
+  color = static_pointer_cast<Light>(sunNode->GetObject("sun"))->GetColor();
+}
+
+void Match::SetSunParams(const Vector3 &position, const Vector3 &color) {
+  sunNode->GetObject("sun")->SetPosition(position);
+  static_pointer_cast<Light>(sunNode->GetObject("sun"))->SetColor(color);
 }
 
 void Match::RandomizeAdboards(boost::intrusive_ptr<Node> stadiumNode) {
@@ -734,6 +800,8 @@ void Match::SetCameraParams(float zoom, float height, float fov, float angleFact
 void Match::UpdateIngameCamera() {
   // camera
 
+  if (!IsGoalScored()) extendedReplayFired = false;
+
   float fov;
   float zoom;
   float height;
@@ -846,13 +914,40 @@ void Match::UpdateIngameCamera() {
     cameraNearCap = 1;
     cameraFarCap = 220;
 
-    if (goalScoredTimer == 6000) {
+    if (goalScoredTimer >= 6000 && !extendedReplayFired) {
+      extendedReplayFired = true;
       pause = true;
       sig_OnExtendedReplayMoment(this);
     }
   }
 }
 
+
+void Match::UpdateIngameCameraStartEffect() {
+  unsigned int zoomTime = 2000;
+  unsigned int startTime = 0;
+  if (actualTime_ms < zoomTime + startTime) { // nice effect at the start
+
+    Quaternion initialOrientation = QUATERNION_IDENTITY;
+    initialOrientation.SetAngleAxis(0.0f * pi, Vector3(1, 0, 0));
+    Quaternion zOrientation = QUATERNION_IDENTITY;
+    initialOrientation = zOrientation * initialOrientation;
+
+    Vector3 initialPosition = Vector3(0.0f, 0.0f, 60.0);
+
+    int subTime = clamp(actualTime_ms - startTime, 0, zoomTime);
+    float bias = subTime / (float)(zoomTime);
+    bias *= pi;
+    bias = sin(bias - 0.5f * pi) * -0.5f + 0.5f;
+
+    cameraOrientation = cameraOrientation.GetSlerped(bias, QUATERNION_IDENTITY);
+    cameraNodeOrientation = cameraNodeOrientation.GetSlerped(bias, initialOrientation);
+    cameraNodePosition = cameraNodePosition * (1.0f - bias) + initialPosition * bias;
+    cameraFOV = cameraFOV * (1.0f - bias) + 40 * bias;
+    cameraNearCap = cameraNearCap * (1.0f - bias) + 2.0f * bias;
+
+  }
+}
 
 // THE SPICE
 
@@ -902,6 +997,9 @@ void Match::ProcessState(EnvState *state) {
 }
 
 void Match::Process() {
+
+  // Thin LAN client: the host is authoritative, so never simulate locally.
+  if (remotePresentation) return;
 
   // Simulation time is advanced internally (10 ms per Process call); it is not
   // tied to the real-time clock, which makes headless runs deterministic.
@@ -1100,31 +1198,9 @@ void Match::Process() {
 
   if (autoUpdateIngameCamera) UpdateIngameCamera();
 
-  if (!pause) {
-    unsigned int zoomTime = 2000;
-    unsigned int startTime = 0;
-    if (actualTime_ms < zoomTime + startTime) { // nice effect at the start
+  if (!pause) UpdateIngameCameraStartEffect();
 
-      Quaternion initialOrientation = QUATERNION_IDENTITY;
-      initialOrientation.SetAngleAxis(0.0f * pi, Vector3(1, 0, 0));
-      Quaternion zOrientation = QUATERNION_IDENTITY;
-      initialOrientation = zOrientation * initialOrientation;
-
-      Vector3 initialPosition = Vector3(0.0f, 0.0f, 60.0);
-
-      int subTime = clamp(actualTime_ms - startTime, 0, zoomTime);
-      float bias = subTime / (float)(zoomTime);
-      bias *= pi;
-      bias = sin(bias - 0.5f * pi) * -0.5f + 0.5f;
-
-      cameraOrientation = cameraOrientation.GetSlerped(bias, QUATERNION_IDENTITY);
-      cameraNodeOrientation = cameraNodeOrientation.GetSlerped(bias, initialOrientation);
-      cameraNodePosition = cameraNodePosition * (1.0f - bias) + initialPosition * bias;
-      cameraFOV = cameraFOV * (1.0f - bias) + 40 * bias;
-      cameraNearCap = cameraNearCap * (1.0f - bias) + 2.0f * bias;
-
-    }
-  } // end if !pause
+  // end if !pause
 
 
   // tactics debug
@@ -1180,6 +1256,108 @@ void Match::Process() {
     positionLogFile << bla.c_str();
   }
 
+  iterations.Lock();
+  iterations.data++;
+  iterations.Unlock();
+}
+
+void Match::ResolveRemoteAnimTable(const std::vector<std::string> &names) {
+  std::map<std::string, std::vector<Animation*> > byName;
+  const std::vector<Animation*> &animations = anims->GetAnimations();
+  for (unsigned int i = 0; i < animations.size(); i++) {
+    byName[animations.at(i)->GetName()].push_back(animations.at(i));
+  }
+
+  std::map<std::string, unsigned int> used;
+  remoteAnimTable.assign(names.size(), 0);
+  for (unsigned int i = 0; i < names.size(); i++) {
+    std::vector<Animation*> &candidates = byName[names.at(i)];
+    unsigned int &index = used[names.at(i)];
+    if (index < candidates.size()) remoteAnimTable.at(i) = candidates.at(index++);
+  }
+
+  remoteAnimTableReady = true;
+}
+
+void Match::CaptureRemoteSnapshot(NetBuffer &buffer) {
+  WriteSnapshot(buffer, CaptureSnapshot(this));
+}
+
+void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
+  const Snapshot snapshot = ReadSnapshot(buffer);
+
+  matchTime_ms = snapshot.matchTime_ms;
+  actualTime_ms = snapshot.actualTime_ms;
+  matchPhase = (e_MatchPhase)snapshot.matchPhase;
+  inPlay = snapshot.inPlay;
+  inSetPiece = snapshot.inSetPiece;
+  // Possession drives the camera's attacking-direction shift; Process() (which
+  // normally maintains it) doesn't run on the client.
+  bestPossessionTeamID = snapshot.bestPossessionTeamID;
+  for (int t = 0; t < 2; t++) {
+    teams[t]->SetFadingTeamPossessionAmount((snapshot.bestPossessionTeamID == t) ? 1.5f : 0.5f);
+  }
+  goalScored = snapshot.goalScored;
+  goalScoredTimer = snapshot.goalScoredTimer;
+  // Replay trigger used to live in UpdateIngameCamera (host only); on a client
+  // the camera is host-driven, so fire it from the synced goal state instead.
+  if (!goalScored) extendedReplayFired = false;
+  if (goalScored && goalScoredTimer >= 6000 && !extendedReplayFired) {
+    extendedReplayFired = true;
+    pause = true;
+    sig_OnExtendedReplayMoment(this);
+  }
+  matchData->SetGoalCount(0, snapshot.score[0]);
+  matchData->SetGoalCount(1, snapshot.score[1]);
+  if (scoreboard) {
+    scoreboard->SetGoalCount(0, snapshot.score[0]);
+    scoreboard->SetGoalCount(1, snapshot.score[1]);
+  }
+
+  ApplySnapshot(this, snapshot, remoteAnimTable);
+
+  // Possession players drive the name captions; without Process() those fields
+  // are frozen on the client, so point them at the action.
+  const Vector3 ballPos = ball->GetStatePosition();
+  Player *closestPlayer = 0;
+  float closestDistance = 0.0f;
+  Player *closestByTeam[2] = {0, 0};
+  float distanceByTeam[2] = {0.0f, 0.0f};
+  std::vector<Player*> players;
+  GetAllTeamPlayers(0, players);
+  GetAllTeamPlayers(1, players);
+  for (unsigned int i = 0; i < players.size(); i++) {
+    if (!players.at(i)->IsActive()) continue;
+    float distance = (players.at(i)->GetPosition() - ballPos).GetLength();
+    if (!closestPlayer || distance < closestDistance) {
+      closestPlayer = players.at(i);
+      closestDistance = distance;
+    }
+    int teamID = players.at(i)->GetTeamID();
+    if (!closestByTeam[teamID] || distance < distanceByTeam[teamID]) {
+      closestByTeam[teamID] = players.at(i);
+      distanceByTeam[teamID] = distance;
+    }
+  }
+  if (closestPlayer) designatedPossessionPlayer = closestPlayer;
+  for (int t = 0; t < 2; t++) {
+    if (closestByTeam[t]) teams[t]->SetDesignatedTeamPossessionPlayer(closestByTeam[t]);
+  }
+
+  // The camera is computed on the host and shipped in the snapshot, so every
+  // peer shows the exact same view (following the ball). During a replay the
+  // local replay camera drives it instead (autoUpdateIngameCamera is false).
+  if (autoUpdateIngameCamera) {
+    cameraOrientation = snapshot.cameraOrientation;
+    cameraNodeOrientation = snapshot.cameraNodeOrientation;
+    cameraNodePosition = snapshot.cameraNodePosition;
+    cameraFOV = snapshot.cameraFOV;
+    cameraNearCap = snapshot.cameraNearCap;
+    cameraFarCap = snapshot.cameraFarCap;
+  }
+
+  // A remote match never runs Process(), so advance the iteration counter here:
+  // FetchPutBuffers/Put use it to know that there is something worth drawing.
   iterations.Lock();
   iterations.data++;
   iterations.Unlock();
@@ -1355,9 +1533,11 @@ void Match::Put() {
     }
 
 
-    UpdateGoalNetting(GetBall()->BallTouchesNet());
+    if (!remotePresentation) UpdateGoalNetting(GetBall()->BallTouchesNet());
 
-    // replay
+    // Record replay frames on every peer. A thin client records its own
+    // snapshot-driven motion so it can play the (goal) replay locally; the
+    // goals are triggered on all peers and skipping is synced separately.
     CaptureReplayFrame(fetchedbuf_actualTime_ms + fetchedbuf_timeDelta);
 
     if (GetDebugMode() == e_DebugMode_AI) GetDebugOverlay()->OnChange();

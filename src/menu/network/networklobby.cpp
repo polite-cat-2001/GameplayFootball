@@ -24,6 +24,7 @@ NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2P
 
   teamsBuilt = false;
   teamsVisible = false;
+  matchStartTriggered = false;
   sentDevice = -1;
   lastGamepadSideChange_ms = 0;
   localGamepadId = -1;
@@ -552,6 +553,14 @@ void NetworkLobbyPage::Process() {
       CreatePage(e_PageID_NetworkMenu);
       return;
     }
+
+    // The host starts the match: build the same Match from the streamed setup.
+    NetMatchSetup setup;
+    if (client->ConsumeMatchSetup(setup)) {
+      GetMenuTask()->SetTeamIDs(int_to_str(setup.teamId[0]), int_to_str(setup.teamId[1]));
+      CreatePage(e_PageID_LoadingMatch);
+      return;
+    }
   }
 
   NetLobbyState state = GetState();
@@ -597,6 +606,13 @@ void NetworkLobbyPage::Process() {
         }
         break;
       }
+    }
+
+    // Both teams chosen and confirmed by their choosers -> the host starts.
+    if (IsHost() && !matchStartTriggered &&
+        state.teamReady[0] && state.teamReady[1] &&
+        state.teamId[0] > 0 && state.teamId[1] > 0) {
+      StartHostMatch(state.teamId[0], state.teamId[1]);
     }
     return;
   }
@@ -699,4 +715,21 @@ void NetworkLobbyPage::Leave() {
     GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
   }
   CreatePage(e_PageID_NetworkMenu);
+}
+
+void NetworkLobbyPage::StartHostMatch(int team0, int team1) {
+  matchStartTriggered = true;
+
+  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+  if (server) {
+    NetMatchSetup setup;
+    setup.teamId[0] = team0;
+    setup.teamId[1] = team1;
+    NetBuffer buffer;
+    WriteMatchSetup(buffer, setup);
+    server->BroadcastMessage(e_NetMessage_MatchSetup, buffer);
+  }
+
+  GetMenuTask()->SetTeamIDs(int_to_str(team0), int_to_str(team1));
+  CreatePage(e_PageID_LoadingMatch);
 }

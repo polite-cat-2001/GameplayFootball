@@ -249,6 +249,11 @@ class HumanoidBase {
 
     void SetKit(boost::intrusive_ptr < Resource<Surface> > newKit);
 
+    // Remote presentation: the client does not simulate, it replays the host's
+    // per-frame pose (animation + frame + world position/orientation) directly.
+    const AnimApplyBuffer &GetAnimApplyBuffer() const { return animApplyBuffer; }
+    void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos);
+
     virtual void ResetSituation(const Vector3 &focusPos);
 
   protected:

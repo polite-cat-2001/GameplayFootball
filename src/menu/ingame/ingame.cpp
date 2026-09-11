@@ -19,7 +19,11 @@ IngamePage::IngamePage(Gui2WindowManager *windowManager, const Gui2PageData &pag
 
   teamID = pageData.properties->GetInt("teamID", 0);
 
-  GetGameTask()->GetMatch()->Pause(true);
+  // Only the peer that opened the menu initiates the pause; peers that open it
+  // because a PauseState arrived are already paused.
+  if (GetGameTask()->GetMatch() && !GetGameTask()->GetMatch()->GetPause()) {
+    GetGameTask()->GetMatch()->Pause(true);
+  }
 
   Gui2Root *root = windowManager->GetRoot();
 
@@ -95,6 +99,16 @@ void IngamePage::GoPreQuit() {
   CreatePage(e_PageID_PreQuit);
 }
 
+
+void IngamePage::Process() {
+  Gui2Page::Process();
+
+  // A peer can resume the match from elsewhere (network PauseState): close the
+  // menu here too so it disappears on every PC.
+  if (GetGameTask()->GetMatch() && !GetGameTask()->GetMatch()->GetPause()) {
+    GoBack();
+  }
+}
 
 void IngamePage::ProcessWindowingEvent(WindowingEvent *event) {
   if (event->IsEscape()) {

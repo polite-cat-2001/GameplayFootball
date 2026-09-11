@@ -130,4 +130,57 @@ std::vector<NetCatalogEntry> ReadCatalog(NetBuffer &buffer) {
   return catalog;
 }
 
+void WriteMatchSetup(NetBuffer &buffer, const NetMatchSetup &setup) {
+  buffer.PutU32((uint32_t)setup.teamId[0]);
+  buffer.PutU32((uint32_t)setup.teamId[1]);
+}
+
+NetMatchSetup ReadMatchSetup(NetBuffer &buffer) {
+  NetMatchSetup setup;
+  setup.teamId[0] = (int)buffer.GetU32();
+  setup.teamId[1] = (int)buffer.GetU32();
+  return setup;
+}
+
+void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names) {
+  buffer.PutU32((uint32_t)names.size());
+  for (unsigned int i = 0; i < names.size(); i++) {
+    buffer.PutString(names.at(i));
+  }
+}
+
+std::vector<std::string> ReadAnimationTable(NetBuffer &buffer) {
+  std::vector<std::string> names;
+  uint32_t count = buffer.GetU32();
+  names.resize(count);
+  for (unsigned int i = 0; i < count; i++) {
+    names.at(i) = buffer.GetString();
+  }
+  return names;
+}
+
+void WriteInputFrame(NetBuffer &buffer, const NetInputFrame &frame) {
+  buffer.PutU32(frame.buttons);
+  buffer.PutVector3(frame.direction);
+}
+
+NetInputFrame ReadInputFrame(NetBuffer &buffer) {
+  NetInputFrame frame;
+  frame.buttons = buffer.GetU32();
+  frame.direction = buffer.GetVector3();
+  return frame;
+}
+
+void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment) {
+  buffer.PutVector3(environment.sunPosition);
+  buffer.PutVector3(environment.sunColor);
+}
+
+NetMatchEnvironment ReadMatchEnvironment(NetBuffer &buffer) {
+  NetMatchEnvironment environment;
+  environment.sunPosition = buffer.GetVector3();
+  environment.sunColor = buffer.GetVector3();
+  return environment;
+}
+
 

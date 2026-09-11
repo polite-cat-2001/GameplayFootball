@@ -47,6 +47,8 @@ struct ReplayBallTouchesNetFrame {
   bool ballTouchesNet;
 };
 
+class NetBuffer;
+
 struct ReplaySpatial {
   ReplaySpatial(int frameCount) {
     frames = boost::circular_buffer<ReplaySpatialFrame>(frameCount);
@@ -109,6 +111,9 @@ class Match {
     void Exit();
 
     void SetRandomSunParams();
+    void GetSunParams(Vector3 &position, Vector3 &color);
+    void GetCameraState(Quaternion &cameraOrientation, Quaternion &nodeOrientation, Vector3 &nodePosition, float &fov, float &nearCap, float &farCap);
+    void SetSunParams(const Vector3 &position, const Vector3 &color);
     void RandomizeAdboards(boost::intrusive_ptr<Node> stadiumNode);
     void UpdateControllerSetup();
     void SpamMessage(const std::string &msg, int time_ms = 3000);
@@ -122,13 +127,32 @@ class Match {
 
     boost::shared_ptr<AnimCollection> GetAnimCollection() { return anims; }
 
+    // Remote presentation (thin LAN client): no simulation, poses arrive as
+    // snapshots and are replayed through the normal Put pipeline.
+    void SetRemotePresentation(bool on) { remotePresentation = on; }
+    bool IsRemotePresentation() const { return remotePresentation; }
+    void SetLocalPeerId(int id) { localPeerId = id; }
+    int GetLocalPeerId() const { return localPeerId; }
+    void ResolveRemoteAnimTable(const std::vector<std::string> &names);
+    bool HasRemoteAnimTable() const { return remoteAnimTableReady; }
+    void CaptureRemoteSnapshot(NetBuffer &buffer);
+    void ApplyRemoteSnapshot(NetBuffer &buffer);
+
     const MentalImage *GetMentalImage(int history_ms);
     void UpdateLatestMentalImageBallPredictions();
 
     void ResetSituation(const Vector3 &focusPos);
 
-    void Pause(bool doPause) { pause = doPause; }
+    void Pause(bool doPause);
+    void SetPauseFromNetwork(bool doPause) { pause = doPause; pauseMenuRequested = doPause; }
     bool GetPause() { return pause; }
+    // True when the game should show the in-game pause menu on this peer (manual
+    // or peer-requested pause; not set by automatic goal replays).
+    bool GetPauseMenuRequested() const { return pauseMenuRequested; }
+
+    // Replay skip sync (host broadcasts; clients route through the host).
+    bool ConsumeReplayStop();
+    void BroadcastReplayStop();
     void SetMatchPhase(e_MatchPhase newMatchPhase);
     e_MatchPhase GetMatchPhase() const { return matchPhase; }
 
@@ -164,6 +188,7 @@ class Match {
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
     unsigned long GetIterations() const { return iterations.GetData(); }
+    unsigned long GetGoalScoredTimer() const { return goalScoredTimer; }
     unsigned long GetMatchTime_ms() const { return matchTime_ms; }
     unsigned long GetActualTime_ms() const { return actualTime_ms; }
 
@@ -229,6 +254,7 @@ class Match {
     boost::signals2::signal<void(Match*)> sig_OnExitedMatch;
 
   protected:
+    void UpdateIngameCameraStartEffect();
     void GetReplaySpatials(std::list < boost::intrusive_ptr<Spatial> > &spatials);
     void CaptureReplayFrame(unsigned long replayTime_ms);
     bool CheckForGoal(signed int side);
@@ -377,6 +403,14 @@ class Match {
     //std::vector<MissingAnim> missingAnims;
 
     float matchDifficulty;
+
+    // remote presentation
+    bool remotePresentation;
+    bool remoteAnimTableReady;
+    bool pauseMenuRequested;
+    bool extendedReplayFired;
+    int localPeerId;
+    std::vector<Animation*> remoteAnimTable;
 };
 
 #endif

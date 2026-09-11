@@ -354,11 +354,22 @@ void Player::PreparePutBuffers(unsigned long snapshotTime_ms) {
 
   PlayerBase::PreparePutBuffers(snapshotTime_ms);
 
-  if (GetDebugMode() == e_DebugMode_Off) {
-    buf_nameCaptionShowCondition = team->IsHumanControlled(id);
-    if (team->GetHumanGamerCount() == 0) buf_nameCaptionShowCondition = team->GetDesignatedTeamPossessionPlayer() == this;
-  }
   e_PlayerColor playerColor = team->GetPlayerColor(id);
+  if (GetDebugMode() == e_DebugMode_Off) {
+    // Blue/colored: players controlled by the local peer (host's own gamers
+    // locally; on a client, players the snapshot tagged with its session id).
+    // Grey: this team's designated possession player (the opponent's selected
+    // player or whoever is on the ball) when it is not locally controlled.
+    int controllingOwner = match->IsRemotePresentation() ? remoteOwnerId : team->GetControllingPeerId(id);
+    bool locallyControlled = (controllingOwner >= 0 && controllingOwner == match->GetLocalPeerId());
+    bool teamDesignated = (team->GetDesignatedTeamPossessionPlayer() == this);
+    buf_nameCaptionShowCondition = locallyControlled || teamDesignated;
+    if (locallyControlled) {
+      if (match->IsRemotePresentation()) playerColor = e_PlayerColor_Blue;
+    } else if (buf_nameCaptionShowCondition) {
+      playerColor = e_PlayerColor_Default;
+    }
+  }
   switch (playerColor) {
     case e_PlayerColor_Green:
       buf_playerColor = Vector3(100, 255, 140);

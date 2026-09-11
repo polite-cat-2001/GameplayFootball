@@ -18,6 +18,7 @@ int PlayerBase::playerCount = 0;
 
 PlayerBase::PlayerBase(Match *match, PlayerData *playerData) : match(match), playerData(playerData), id(playerCount++), humanoid(0), controller(0), externalController(0), isActive(false) {
   debug = false;
+  remoteOwnerId = -1;
   lastTouchTime_ms = 0;
   lastTouchType = e_TouchType_None;
   fatigueFactorInv = 1.0;

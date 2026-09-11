@@ -40,6 +40,7 @@ class ReplayPage : public Gui2Page {
 
     bool autoRun;
     bool stayInReplay;
+    bool stopFromNetwork;
 
 };
 

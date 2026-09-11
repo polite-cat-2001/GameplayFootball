@@ -75,6 +75,20 @@ void GamePage::Process() {
     GetGameTask()->matchLifetimeMutex.unlock();
   }
 
+  // No replay page is open here: discard any stray replay-skip so it can't
+  // immediately close the next replay a peer opens.
+  if (match && match->ConsumeReplayStop()) {
+  }
+
+  // Pause is peer-equal: when any peer pauses the (network) match, every peer
+  // shows the in-game pause menu, not just a frozen picture.
+  if (match && match->GetPauseMenuRequested()) {
+    Properties properties;
+    properties.Set("teamID", 0);
+    CreatePage((int)e_PageID_Ingame, properties);
+    return;
+  }
+
 }
 
 void GamePage::GoShortReplayPage() {

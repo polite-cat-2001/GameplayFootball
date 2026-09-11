@@ -35,6 +35,7 @@ class HumanGamer {
     Player *GetSelectedPlayer() const { return selectedPlayer; }
     void SetSelectedPlayerID(int id);
     IHIDevice *GetHIDevice() { return hid; }
+    unsigned int GetOwnerId() const { return hid->GetOwnerId(); }
     HumanController *GetHumanController() { return controller; }
 
     e_PlayerColor GetPlayerColor() const { return playerColor; }

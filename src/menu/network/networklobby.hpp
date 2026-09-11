@@ -63,6 +63,8 @@ class NetworkLobbyPage : public Gui2Page {
     int FindLocalGamepadId();
     bool GamepadPresent(int id);
 
+    void StartHostMatch(int team0, int team1);
+
     Gui2Image *background;
     Gui2Caption *phaseCaption;
     Gui2Caption *side1Caption;
@@ -83,6 +85,7 @@ class NetworkLobbyPage : public Gui2Page {
 
     bool teamsBuilt;
     bool teamsVisible;
+    bool matchStartTriggered;
     bool defaultSent[2];
     Gui2Image *teamBg[2];
     Gui2Grid *teamGrid[2];

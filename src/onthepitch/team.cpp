@@ -192,6 +192,13 @@ bool Team::IsHumanControlled(int playerID) {
   return false;
 }
 
+int Team::GetControllingPeerId(int playerID) {
+  for (unsigned int h = 0; h < humanGamers.size(); h++) {
+    if (humanGamers.at(h)->GetSelectedPlayerID() == playerID) return (int)humanGamers.at(h)->GetOwnerId();
+  }
+  return -1;
+}
+
 bool Team::HasPossession() const {
   return hasPossession;
 }

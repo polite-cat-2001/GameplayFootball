@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "netbuffer.hpp"
+#include "nettypes.hpp"
 
 enum e_NetRejectReason {
   e_NetReject_None = 0,
@@ -135,6 +136,36 @@ struct NetCatalogEntry {
 
 void WriteCatalog(NetBuffer &buffer, const std::vector<NetCatalogEntry> &catalog);
 std::vector<NetCatalogEntry> ReadCatalog(NetBuffer &buffer);
+
+// Sent by the host when the lobby is done: the client builds the same Match from
+// these team ids (v1 relies on the identical database enforced by the handshake).
+struct NetMatchSetup {
+  NetMatchSetup() { teamId[0] = -1; teamId[1] = -1; }
+
+  int teamId[2];
+};
+
+void WriteMatchSetup(NetBuffer &buffer, const NetMatchSetup &setup);
+NetMatchSetup ReadMatchSetup(NetBuffer &buffer);
+
+// Host animation collection listing, in host index order. The client resolves
+// each name to its own Animation* so snapshots can carry a compact animID.
+void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names);
+std::vector<std::string> ReadAnimationTable(NetBuffer &buffer);
+
+// Client -> host per-tick input: button bitmask (e_ButtonFunction) + direction.
+void WriteInputFrame(NetBuffer &buffer, const NetInputFrame &frame);
+NetInputFrame ReadInputFrame(NetBuffer &buffer);
+
+// Visual match environment (sun light) so lighting matches on the thin client.
+struct NetMatchEnvironment {
+  NetMatchEnvironment() {}
+  blunted::Vector3 sunPosition;
+  blunted::Vector3 sunColor;
+};
+
+void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment);
+NetMatchEnvironment ReadMatchEnvironment(NetBuffer &buffer);
 
 #endif
 

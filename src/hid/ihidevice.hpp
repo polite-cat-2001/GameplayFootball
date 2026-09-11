@@ -73,6 +73,9 @@ class IHIDevice {
     e_HIDeviceType GetDeviceType() const { return deviceType; }
     std::string GetIdentifier() const { return identifier; }
 
+    // Peer that owns this input (0 = local host, sessionId for network clients).
+    virtual unsigned int GetOwnerId() const { return 0; }
+
   protected:
     e_HIDeviceType deviceType;
     std::string identifier;

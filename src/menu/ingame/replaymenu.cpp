@@ -32,6 +32,7 @@ ReplayPage::ReplayPage(Gui2WindowManager *windowManager, const Gui2PageData &pag
   modifierValue = 0.0f;
   autoRun = false;
   stayInReplay = true;
+  stopFromNetwork = false;
 
   sig_OnClose.connect(boost::bind(&ReplayPage::OnClose, this));
 
@@ -61,6 +62,10 @@ void ReplayPage::OnClose() {
   match->SetAutoUpdateIngameCamera(true);
 
   if (stayInReplay) match->Pause(false); // todo: handle gracefully instead of using stayInReplay :p only unpause when started from gamepage instead of ingame page
+
+  // A skip on any peer closes the replay on every peer. If this close was
+  // itself triggered by such a message, don't echo it back.
+  if (!stopFromNetwork) match->BroadcastReplayStop();
 }
 
 void ReplayPage::Autorun(int replayHistoryOffset_ms, bool stayInReplay) {
@@ -73,6 +78,13 @@ void ReplayPage::Autorun(int replayHistoryOffset_ms, bool stayInReplay) {
 }
 
 void ReplayPage::Process() {
+  // Another peer skipped the replay: close it here too.
+  if (match->ConsumeReplayStop()) {
+    stopFromNetwork = true;
+    GoBack();
+    return;
+  }
+
   if (autoRun) {
     Vector3 direction;
     direction.coords[0] = 0.5f;

@@ -715,8 +715,11 @@ void HumanoidBase::Process() {
 
 void HumanoidBase::PreparePutBuffers(unsigned long snapshotTime_ms) {
 
-  // offsets
-  CalculateGeomOffsets(); // todo: in a perfect world, we don't want to do cpu intensive and/or stuff that uses a lot of mutex locking in this here function
+  // offsets. Skip on a remote client: CalculateGeomOffsets() is simulation-derived
+  // (uses currentMentalImage, spatialState) which don't exist without Process().
+  if (!match->IsRemotePresentation()) {
+    CalculateGeomOffsets(); // todo: in a perfect world, we don't want to do cpu intensive and/or stuff that uses a lot of mutex locking in this here function
+  }
 
   buf_animApplyBuffer = animApplyBuffer;
   buf_animApplyBuffer.snapshotTime_ms = snapshotTime_ms;
@@ -798,6 +801,18 @@ void HumanoidBase::Put() {
   humanoidNode->RecursiveUpdateSpatialData(e_SpatialDataType_Both);
 
   UpdateFullbodyNodes();
+}
+
+void HumanoidBase::SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos) {
+  if (!anim) return;
+  animApplyBuffer.anim = anim;
+  animApplyBuffer.frameNum = frameNum;
+  animApplyBuffer.position = position;
+  animApplyBuffer.orientation = orientation;
+  animApplyBuffer.noPos = noPos;
+  animApplyBuffer.smooth = false;
+  animApplyBuffer.smoothFactor = 1.0f;
+  animApplyBuffer.offsets.clear();
 }
 
 void HumanoidBase::CalculateGeomOffsets() {

@@ -8,6 +8,7 @@
 #include <deque>
 
 #include "netassets.hpp"
+#include "nethiddevice.hpp"
 
 #include "base/utils.hpp"
 
@@ -25,6 +26,9 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
 
     uint32_t GetSessionId() const { return sessionId; }
     void SetSessionId(uint32_t id) { sessionId = id; }
+
+    boost::shared_ptr<NetHIDDevice> GetHIDevice() const { return hidDevice; }
+    void SetHIDevice(boost::shared_ptr<NetHIDDevice> device) { hidDevice = device; }
 
     void Start() { ReadHeader(); }
 
@@ -83,6 +87,13 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
       } else if (type == e_NetMessage_LobbyAction) {
         NetLobbyAction action = ReadLobbyAction(buffer);
         server->HandleLobbyAction(shared_from_this(), action);
+      } else if (type == e_NetMessage_InputFrame) {
+        NetInputFrame frame = ReadInputFrame(buffer);
+        server->HandleInputFrame(shared_from_this(), frame);
+      } else if (type == e_NetMessage_PauseRequest) {
+        server->HandlePauseRequest(buffer.GetBool());
+      } else if (type == e_NetMessage_ReplayStop) {
+        server->HandleReplayStop();
       }
     }
 
@@ -101,12 +112,13 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
     boost::asio::ip::tcp::socket socket;
     NetServer *server;
     uint32_t sessionId;
+    boost::shared_ptr<NetHIDDevice> hidDevice;
     uint8_t header[kHeaderSize];
     std::vector<uint8_t> body;
     std::deque<boost::shared_ptr<std::vector<uint8_t> > > writeQueue;
 };
 
-NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1) {
+NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1), pauseRequestPending(false), pauseRequestState(false), replayStopPending(false) {
 }
 
 NetServer::~NetServer() {
@@ -230,6 +242,7 @@ void NetServer::HandleClientHello(boost::shared_ptr<NetServerConnection> connect
 
   if (response.accepted) {
     connection->SetSessionId(response.sessionId);
+    connection->SetHIDevice(boost::make_shared<NetHIDDevice>("net_client_" + blunted::int_to_str(response.sessionId), e_HIDeviceType_Keyboard, response.sessionId));
 
     boost::mutex::scoped_lock lock(lobbyMutex);
     NetLobbyPlayer player;
@@ -266,6 +279,69 @@ void NetServer::HandleLobbyAction(boost::shared_ptr<NetServerConnection> connect
   NetLobbyAction attributed = action;
   attributed.playerId = connection->GetSessionId();
   ApplyLobbyAction(attributed);
+}
+
+void NetServer::HandleInputFrame(boost::shared_ptr<NetServerConnection> connection, const NetInputFrame &frame) {
+  boost::shared_ptr<NetHIDDevice> device = connection->GetHIDevice();
+  if (device) device->SetInput(frame);
+}
+
+boost::shared_ptr<NetHIDDevice> NetServer::GetHIDevice(uint32_t sessionId) {
+  boost::mutex::scoped_lock lock(connectionsMutex);
+  for (unsigned int i = 0; i < connections.size(); i++) {
+    if (connections.at(i)->GetSessionId() == sessionId) return connections.at(i)->GetHIDevice();
+  }
+  return boost::shared_ptr<NetHIDDevice>();
+}
+
+void NetServer::HandlePauseRequest(bool paused) {
+  boost::mutex::scoped_lock lock(pauseMutex);
+  pauseRequestPending = true;
+  pauseRequestState = paused;
+}
+
+bool NetServer::ConsumePauseRequest(bool &paused) {
+  boost::mutex::scoped_lock lock(pauseMutex);
+  if (!pauseRequestPending) return false;
+  paused = pauseRequestState;
+  pauseRequestPending = false;
+  return true;
+}
+
+void NetServer::BroadcastPause(bool paused) {
+  NetBuffer buffer;
+  buffer.PutBool(paused);
+  BroadcastMessage(e_NetMessage_PauseState, buffer);
+}
+
+void NetServer::HandleReplayStop() {
+  {
+    boost::mutex::scoped_lock lock(replayMutex);
+    replayStopPending = true;
+  }
+  BroadcastReplayStop();
+}
+
+void NetServer::BroadcastReplayStop() {
+  NetBuffer buffer;
+  BroadcastMessage(e_NetMessage_ReplayStop, buffer);
+}
+
+bool NetServer::ConsumeReplayStop() {
+  boost::mutex::scoped_lock lock(replayMutex);
+  if (!replayStopPending) return false;
+  replayStopPending = false;
+  return true;
+}
+
+std::vector<boost::shared_ptr<NetHIDDevice> > NetServer::GetHIDevices() {
+  std::vector<boost::shared_ptr<NetHIDDevice> > devices;
+  boost::mutex::scoped_lock lock(connectionsMutex);
+  for (unsigned int i = 0; i < connections.size(); i++) {
+    boost::shared_ptr<NetHIDDevice> device = connections.at(i)->GetHIDevice();
+    if (device) devices.push_back(device);
+  }
+  return devices;
 }
 
 void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
@@ -452,6 +528,18 @@ void NetServer::SetCatalog(const std::vector<NetCatalogEntry> &catalog) {
 std::vector<NetCatalogEntry> NetServer::GetCatalog() {
   boost::mutex::scoped_lock lock(lobbyMutex);
   return catalog;
+}
+
+void NetServer::BroadcastMessage(e_NetMessageType type, NetBuffer &body) {
+  std::vector<boost::shared_ptr<NetServerConnection> > current;
+  {
+    boost::mutex::scoped_lock lock(connectionsMutex);
+    current = connections;
+  }
+
+  for (unsigned int i = 0; i < current.size(); i++) {
+    current.at(i)->SendMessage(type, body);
+  }
 }
 
 void NetServer::SetHostName(const std::string &name) {
