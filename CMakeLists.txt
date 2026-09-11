@@ -282,10 +282,18 @@ add_library(datalib STATIC
         src/data/playerdata.cpp
         src/data/teamdata.cpp)
 apply_common_includes(datalib)
+add_library(netlib STATIC
+        src/net/netbuffer.cpp
+        src/net/netserver.cpp
+        src/net/netclient.cpp)
+apply_common_includes(netlib)
+if(WIN32)
+  target_link_libraries(netlib PUBLIC ws2_32)
+endif()
 add_library(gamecontextlib STATIC src/gamecontext.cpp)
 apply_common_includes(gamecontextlib)
 
-set(LIBRARIES gamelib hidlib menulib datalib leaguelib gamecontextlib blunted2)
+set(LIBRARIES gamelib hidlib menulib datalib leaguelib netlib gamecontextlib blunted2)
 
 # Build the game as a GUI application (WIN32 subsystem) so no console window
 # appears on Windows. Turn it off to keep a console for stdout/stderr debugging.
