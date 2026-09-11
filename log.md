@@ -949,3 +949,16 @@ data-классов. `QueryTeamCatalog` (`src/data/teamcatalog.cpp`, `datalib`) 
 API потокобезопасен. `tools/nettest` теперь прогоняет и лобби-обмен (клиент выбирает
 сторону, сервер и клиент видят её) — `PASS`; детерминизм `7134def2...` не сдвинулся.
 Следующее — Task 4b: UI-страницы (host/join/IP+порт, зеркальный экран выбора).
+
+## [2026-09-11] feat | LAN: UI меню сети (Task 4b)
+Новые страницы `src/menu/network/`: `NetworkMenuPage` (Host/Join/Back), `NetworkHostPage`
+(порт+имя → `NetServer` + каталог), `NetworkJoinPage` (IP+порт+имя → `NetClient`, опрос
+состояния/ошибок), `NetworkLobbyPage` (рисует канонический `LobbyState`, ввод → `LobbyAction`:
+фаза Sides — сторона/Ready, фаза Teams — курсор/подтверждение команды). Кнопка «Network» в
+главном меню, страницы зарегистрированы в `PageFactory`. Сессия `NetServer`/`NetClient`
+живёт в `MenuTask`. Каталог команд хост шлёт клиентам сообщением `Catalog` после handshake
+(`NetServer::SetCatalog`/`NetClient::GetCatalog`), чтобы выбор команды работал на клиенте без
+его БД. Попутно починен Windows-конфликт `winsock2.h`/`windows.h` (asio падал с «WinSock.h
+has already been included»): `defines.hpp` включает `winsock2.h` до `windows.h`, а файлы с
+прямым `windows.h` — тоже. Сборка ок, `nettest` `PASS`, детерминизм `7134def2...` не
+сдвинулся. Вики [[сеть]] и [[архитектура]] обновлены. Следующее — Task 5 (снапшоты).
