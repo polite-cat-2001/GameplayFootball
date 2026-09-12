@@ -36,6 +36,9 @@ namespace blunted {
       virtual void SetToggleable(bool toggleable) { this->toggleable = toggleable; }
       virtual bool IsToggled() { return this->toggled; }
       virtual void SetToggled(bool onOff) { this->toggled = onOff; Redraw(); }
+      // When true, a toggled button draws without any background fill (used for
+      // the LAN Ready button: pressing it drops the highlight to show it latched).
+      virtual void SetUncolorWhenToggled(bool on) { this->uncolorWhenToggled = on; }
       virtual void SetActive(bool onOff) { this->active = onOff; if (onOff) SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1)); else SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2)); Redraw(); }
 
       virtual void ProcessWindowingEvent(WindowingEvent *event);
@@ -58,6 +61,7 @@ namespace blunted {
       bool toggleable;
       bool toggled;
       bool active;
+      bool uncolorWhenToggled = false;
 
       Vector3 color;
 

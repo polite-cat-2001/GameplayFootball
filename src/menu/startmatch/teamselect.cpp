@@ -170,7 +170,7 @@ TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   grid1->Show();
 
   AddCountries(countrySelect1);
-  countrySelect1->SetSelectedEntry(1); // skip "National Teams", start at first country
+  countrySelect1->SetSelectedEntry(0); // default: "National Teams"
   SetupCompetitionSelect1();
 
   this->AddView(p2);
@@ -217,7 +217,7 @@ void TeamSelectPage::FocusCompetitionSelect2() {
   if (!team2Initialized) {
     team2Initialized = true;
     AddCountries(countrySelect2);
-    countrySelect2->SetSelectedEntry(1); // skip "National Teams", start at first country
+    countrySelect2->SetSelectedEntry(0); // default: "National Teams"
     SetupCompetitionSelect2();
   }
 

@@ -21,6 +21,7 @@
 #include "visualoptions.hpp"
 #include "network/network.hpp"
 #include "network/networklobby.hpp"
+#include "network/networkmatchoptions.hpp"
 #include "league/league.hpp"
 #include "league/league_calendar.hpp"
 #include "league/league_forward.hpp"
@@ -167,6 +168,10 @@ Gui2Page *PageFactory::CreatePage(const Gui2PageData &pageData) {
 
     case e_PageID_NetworkLobby:
       page = new NetworkLobbyPage(windowManager, pageData);
+      break;
+
+    case e_PageID_NetworkMatchOptions:
+      page = new NetworkMatchOptionsPage(windowManager, pageData);
       break;
 
 

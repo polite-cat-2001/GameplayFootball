@@ -19,7 +19,6 @@
 NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
   teamsBuilt = false;
-  matchStartTriggered = false;
   deviceLostSent = false;
   sentDevice = -1;
   lastLocalDevice = -1;
@@ -106,11 +105,6 @@ void NetworkLobbyPage::SendAction(int type, int side, int value, int value2) {
   }
 }
 
-int NetworkLobbyPage::FirstCountryIndex(Gui2IconSelector *selector) {
-  // countries are added after the special "National Teams" entry
-  return selector->FindEntryIndex("national") >= 0 ? 1 : 0;
-}
-
 void NetworkLobbyPage::SelectEntryById(Gui2IconSelector *selector, int id) {
   int index = selector->FindEntryIndex(int_to_str(id));
   if (index >= 0) selector->SetSelectedEntry(index);
@@ -129,6 +123,9 @@ void NetworkLobbyPage::BuildTeamPanels() {
     teamSelect[s] = new Gui2IconSelector(windowManager, "net_team" + int_to_str(s), 0, 0, 29, 18, "Team select");
     readyButton[s] = new Gui2Button(windowManager, "net_ready" + int_to_str(s), 0, 0, 29, 3, "Ready");
     readyButton[s]->SetToggleable(true);
+    // Pressing Ready latches it: the highlight is dropped so the ready state is
+    // obvious; Escape/B unsets it again (see StepBack).
+    readyButton[s]->SetUncolorWhenToggled(true);
     readyButton[s]->sig_OnClick.connect(boost::bind(&NetworkLobbyPage::OnReadyClicked, this, s));
     leagueSelect[s]->SetDrawOutline(true);
     teamSelect[s]->SetDrawOutline(true);
@@ -136,8 +133,14 @@ void NetworkLobbyPage::BuildTeamPanels() {
     countrySelect[s]->sig_OnChange.connect(boost::bind(&NetworkLobbyPage::OnCountryChanged, this, s));
     leagueSelect[s]->sig_OnChange.connect(boost::bind(&NetworkLobbyPage::OnLeagueChanged, this, s));
     teamSelect[s]->sig_OnChange.connect(boost::bind(&NetworkLobbyPage::OnTeamChanged, this, s));
-    countrySelect[s]->sig_OnClick.connect([this, s]() { leagueSelect[s]->SetFocus(); });
+    // Enter/A on a selector moves focus down: national teams skip the league
+    // stage, and the team list moves on to Ready (same as the local flow).
+    countrySelect[s]->sig_OnClick.connect([this, s]() {
+      if (countrySelect[s]->GetSelectedEntryID() == "national") teamSelect[s]->SetFocus();
+      else leagueSelect[s]->SetFocus();
+    });
     leagueSelect[s]->sig_OnClick.connect([this, s]() { teamSelect[s]->SetFocus(); });
+    teamSelect[s]->sig_OnClick.connect([this, s]() { readyButton[s]->SetFocus(); });
 
     teamGrid[s] = new Gui2Grid(windowManager, "net_teamgrid" + int_to_str(s), gx, 24, 30, 41);
     teamGrid[s]->AddView(countrySelect[s], 0, 0);
@@ -148,7 +151,8 @@ void NetworkLobbyPage::BuildTeamPanels() {
     this->AddView(teamGrid[s]);
 
     AddCountries(countrySelect[s]);
-    countrySelect[s]->SetSelectedEntry(FirstCountryIndex(countrySelect[s]));
+    int nationalIndex = countrySelect[s]->FindEntryIndex("national");
+    countrySelect[s]->SetSelectedEntry(nationalIndex >= 0 ? nationalIndex : 0); // default: National Teams
 
     teamBg[s]->Show();
     teamGrid[s]->Show();
@@ -168,42 +172,43 @@ void NetworkLobbyPage::ApplyTeamState() {
     int cid = state.countryId[s];
     int lid = state.leagueId[s];
     int tid = state.teamId[s];
-    int stateCid = cid;
 
     bool cChanged = (cid != lastCountryId[s]);
     bool lChanged = (lid != lastLeagueId[s]);
     bool tChanged = (tid != lastTeamId[s]);
 
     if (cChanged) {
-      if (cid < 0) {
-        countrySelect[s]->SetSelectedEntry(FirstCountryIndex(countrySelect[s]));
-      } else if (cid == 0) {
+      if (cid == 0) {
         int nationalIndex = countrySelect[s]->FindEntryIndex("national");
         if (nationalIndex >= 0) countrySelect[s]->SetSelectedEntry(nationalIndex);
-      } else {
+      } else if (cid > 0) {
         SelectEntryById(countrySelect[s], cid);
+      } else {
+        // Host has no choice yet: keep our local default (National Teams).
+        int nationalIndex = countrySelect[s]->FindEntryIndex("national");
+        if (nationalIndex >= 0) countrySelect[s]->SetSelectedEntry(nationalIndex);
       }
 
-      if (cid == 0) {
+      if (countrySelect[s]->GetSelectedEntryID() == "national") {
         leagueSelect[s]->ClearEntries();
         teamSelect[s]->ClearEntries();
         AddTeams(teamSelect[s], GetNationalTeamsLeagueID());
         teamSelect[s]->SetDrawOutline(true);
-        lastCountryId[s] = state.countryId[s];
-        lastLeagueId[s] = state.leagueId[s];
+        lastCountryId[s] = cid;
+        lastLeagueId[s] = lid;
         tChanged = true;
       } else {
         int effectiveCid = atoi(countrySelect[s]->GetSelectedEntryID().c_str());
         AddLeagues(leagueSelect[s], int_to_str(effectiveCid));
         leagueSelect[s]->SetDrawOutline(true);
-        lastCountryId[s] = state.countryId[s];
+        lastCountryId[s] = cid;
         lChanged = true;
         tChanged = true;
       }
       defaultSent[s] = false;
     }
 
-    if (lChanged && stateCid != 0) {
+    if (lChanged && countrySelect[s]->GetSelectedEntryID() != "national") {
       if (lid < 0) leagueSelect[s]->SetSelectedEntry(0);
       else SelectEntryById(leagueSelect[s], lid);
       int effectiveLid = atoi(leagueSelect[s]->GetSelectedEntryID().c_str());
@@ -229,11 +234,13 @@ void NetworkLobbyPage::ApplyTeamState() {
     readyButton[s]->SetToggled(state.teamReady[s]);
 
     if (chooser && !defaultSent[s]) {
-      int c = atoi(countrySelect[s]->GetSelectedEntryID().c_str());
+      std::string countryIdStr = countrySelect[s]->GetSelectedEntryID();
+      int c = (countryIdStr == "national") ? 0 : atoi(countryIdStr.c_str());
       int l = atoi(leagueSelect[s]->GetSelectedEntryID().c_str());
       int t = atoi(teamSelect[s]->GetSelectedEntryID().c_str());
       if (state.countryId[s] < 0) {
-        if (c > 0) SendAction(e_NetLobbyAction_SetSelection, s, 0, c);
+        if (countryIdStr == "national") SendAction(e_NetLobbyAction_SetSelection, s, 0, 0);
+        else if (c > 0) SendAction(e_NetLobbyAction_SetSelection, s, 0, c);
         if (l > 0) SendAction(e_NetLobbyAction_SetSelection, s, 1, l);
         if (t > 0) SendAction(e_NetLobbyAction_SetSelection, s, 2, t);
         defaultSent[s] = true;
@@ -383,22 +390,19 @@ void NetworkLobbyPage::Process() {
       CreatePage(e_PageID_NetworkMenu);
       return;
     }
-
-    // The host starts the match: build the same Match from the streamed setup.
-    NetMatchSetup setup;
-    if (client->ConsumeMatchSetup(setup)) {
-      GetMenuTask()->SetTeamIDs(int_to_str(setup.teamId[0]), int_to_str(setup.teamId[1]));
-      CreatePage(e_PageID_LoadingMatch);
-      return;
-    }
   }
 
   NetLobbyState state = GetState();
 
   // A join/leave or a device loss drops the lobby back to the side phase: the
-  // shared SideSelectPage takes over from here.
-  if (state.phase != e_NetLobbyPhase_Teams) {
+  // shared SideSelectPage takes over from here. Both teams confirmed -> the
+  // kickoff options screen (host sets difficulty/duration).
+  if (state.phase == e_NetLobbyPhase_Sides) {
     CreatePage(e_PageID_SideSelect);
+    return;
+  }
+  if (state.phase == e_NetLobbyPhase_Options) {
+    CreatePage(e_PageID_NetworkMatchOptions);
     return;
   }
 
@@ -434,25 +438,15 @@ void NetworkLobbyPage::Process() {
       break;
     }
   }
-
-  // Both teams chosen and confirmed by their choosers -> the host starts.
-  if (IsHost() && !matchStartTriggered &&
-      state.teamReady[0] && state.teamReady[1] &&
-      state.teamId[0] > 0 && state.teamId[1] > 0) {
-    StartHostMatch(state.teamId[0], state.teamId[1]);
-  }
 }
 
 void NetworkLobbyPage::ProcessKeyboardEvent(KeyboardEvent *event) {
   // Remember the last used device so the match binds the right one (same
-  // inference the side-selection screen uses).
+  // inference the side-selection screen uses). Escape is handled as a
+  // windowing event (also covers the gamepad Back button) so it can step back.
   if (sentDevice != 0) {
     sentDevice = 0;
     SendAction(e_NetLobbyAction_SetDevice, 0, 0);
-  }
-  if (event->GetKeyOnce(SDLK_ESCAPE)) {
-    Leave();
-    return;
   }
 }
 
@@ -466,7 +460,35 @@ void NetworkLobbyPage::ProcessJoystickEvent(JoystickEvent *event) {
 }
 
 void NetworkLobbyPage::ProcessWindowingEvent(WindowingEvent *event) {
+  if (event->IsEscape()) {
+    StepBack();
+    return;
+  }
   event->Ignore();
+}
+
+void NetworkLobbyPage::StepBack() {
+  Gui2View *focus = windowManager->GetFocus();
+  for (int s = 0; s < 2; s++) {
+    if (focus == readyButton[s]) {
+      // Leaving Ready cancels the ready state, so the match can't start.
+      // Sent unconditionally: it is a no-op server-side when not ready, but
+      // covers the case where a just-sent Ready hasn't echoed back yet.
+      SendAction(e_NetLobbyAction_SetTeamReady, s, 0);
+      teamSelect[s]->SetFocus();
+      return;
+    }
+    if (focus == teamSelect[s]) {
+      // National teams skip the league stage.
+      if (countrySelect[s]->GetSelectedEntryID() == "national") countrySelect[s]->SetFocus();
+      else leagueSelect[s]->SetFocus();
+      return;
+    }
+    if (focus == leagueSelect[s]) { countrySelect[s]->SetFocus(); return; }
+    if (focus == countrySelect[s]) { Leave(); return; }
+  }
+  // Focus not on a selector (e.g. this page, a non-chooser): leave the lobby.
+  Leave();
 }
 
 void NetworkLobbyPage::Leave() {
@@ -480,21 +502,4 @@ void NetworkLobbyPage::Leave() {
     GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
   }
   CreatePage(e_PageID_NetworkMenu);
-}
-
-void NetworkLobbyPage::StartHostMatch(int team0, int team1) {
-  matchStartTriggered = true;
-
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (server) {
-    NetMatchSetup setup;
-    setup.teamId[0] = team0;
-    setup.teamId[1] = team1;
-    NetBuffer buffer;
-    WriteMatchSetup(buffer, setup);
-    server->BroadcastMessage(e_NetMessage_MatchSetup, buffer);
-  }
-
-  GetMenuTask()->SetTeamIDs(int_to_str(team0), int_to_str(team1));
-  CreatePage(e_PageID_LoadingMatch);
 }

@@ -42,6 +42,7 @@ enum e_PageID {
   e_PageID_NetworkHost,
   e_PageID_NetworkJoin,
   e_PageID_NetworkLobby,
+  e_PageID_NetworkMatchOptions,
 
   e_PageID_League_Start,
   e_PageID_League_Start_Load,

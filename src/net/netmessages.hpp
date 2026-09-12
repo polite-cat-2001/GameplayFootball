@@ -47,7 +47,8 @@ NetServerHello ReadServerHello(NetBuffer &buffer);
 
 enum e_NetLobbyPhase {
   e_NetLobbyPhase_Sides = 0,
-  e_NetLobbyPhase_Teams
+  e_NetLobbyPhase_Teams,
+  e_NetLobbyPhase_Options // teams chosen: host sets difficulty/duration before kickoff
 };
 
 enum e_NetSide {
@@ -66,7 +67,9 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_SetDevice,
   e_NetLobbyAction_DeviceLost,
   e_NetLobbyAction_RequestSideSelect,
-  e_NetLobbyAction_SetResumeReady
+  e_NetLobbyAction_SetResumeReady,
+  e_NetLobbyAction_SetMatchOptions, // value: 0 = difficulty, 1 = duration; value2 = value * 1000
+  e_NetLobbyAction_BackToTeams     // host: leave the options screen back to team selection
 };
 
 struct NetLobbyPlayer {
@@ -100,6 +103,8 @@ struct NetLobbyState {
     teamCursor[1] = 0;
     listScroll[0] = 0;
     listScroll[1] = 0;
+    matchDifficulty = 0.8f;
+    matchDuration = 1.0f;
   }
 
   uint32_t revision;
@@ -115,6 +120,9 @@ struct NetLobbyState {
   uint32_t chooser[2];
   int teamCursor[2];
   int listScroll[2];
+  // Host-chosen kickoff options, mirrored so clients can display them.
+  float matchDifficulty;
+  float matchDuration;
 };
 
 // Client intent. The server attributes it to the connection (playerId is filled in

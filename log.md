@@ -1430,3 +1430,41 @@ UDP-канал (нет head-of-line blocking) и вернуть прежнее �
 `IsValidIPv4`/`IsValidHostname` в `network.cpp`), имя — непустое; порт уже
 проверялся. Локальной симуляции не касается, детерминизм `7134def2...` без
 изменений. Сборка ок, `nettest` `PASS (47)`, `lanmatchtest` `PASS (34)`.
+
+## [2026-09-11] fix | выбор команды: LAN UX выровнен с локальным
+Три вещи. (1) В сетевой фазе Teams Enter на команде теперь переводит фокус на
+Ready (как `TeamSelectPage`), а Enter на стране мимо турнира идёт сразу в команду,
+если выбран «National Teams». (2) Сфокусированный Ready у сетевого матча рисуется
+цветом обычного фокуса (`Bright2`), как в локальном; добавлен флаг
+`Gui2Button::SetToggledColorWhileFocused` (по умолчанию true), у сетевых Ready —
+false, поэтому «готовность» видна красным только когда фокус ушёл. (3) И в
+локальном `TeamSelectPage`, и в сетевом лобби обе стороны по умолчанию стоят на
+пункте «National Teams» (раньше — первая страна), фокус на нём; в сетевом
+`ApplyTeamState` научен дефолту national (`cid 0`) и `FirstCountryIndex` удалён.
+(4) Esc/B в сетевой фазе Teams теперь идёт по шагам назад, как локально: Ready →
+команда → лига (для national пропускается) → страна, и только на стране —
+`Leave()` (закрыть лобби); обработка перенесена в `ProcessWindowingEvent`, поэтому
+работает и Esc, и Back на геймпаде. (5) Нажатие Ready «гасит» подсветку кнопки
+(`Gui2Button::SetUncolorWhenToggled`, вместо прежнего `SetToggledColorWhileFocused`),
+а Esc/B на Ready снимает готовность в лобби (нельзя начать матч) и возвращает фокус
+на команду. Локальной симуляции не касается, детерминизм `7134def2...` без
+изменений. Сборка ок, `nettest` `PASS (47)`, `lanmatchtest` `PASS (34)`. Вики
+[[сеть]] обновлена.
+
+## [2026-09-11] feat | LAN: экран опций матча перед стартом
+После выбора команд добавлен экран «Match options» (как в локальном матче):
+сложность AI и длительность. Новая фаза лобби `e_NetLobbyPhase_Options` — хост
+переводит её, когда обе команды выбраны и Ready (раньше хост сразу стартовал).
+Значения хост шлёт `e_NetLobbyAction_SetMatchOptions` (`value` = 0 difficulty /
+1 duration, `value2` = значение×1000; сервер применяет только от `isHost`) и они
+зеркалятся в `NetLobbyState.matchDifficulty/matchDuration`; клиент видит слайдеры
+read-only. Новая `NetworkMatchOptionsPage` (`e_PageID_NetworkMatchOptions`), хост
+на старт кладёт значения в конфиг (их читает `Match`), рассылает `MatchSetup` и
+идёт в `LoadingMatch`, клиент ждёт `MatchSetup`. Экраны не тупик: Esc/B у **любого**
+пира шлёт `e_NetLobbyAction_BackToTeams`, сервер возвращает фазу в `Teams` и
+сбрасывает `teamReady[0..1]` (выбор команд можно переиграть). `NetworkLobbyPage`
+стал только фазой Teams (старт матча убран), `net_protocolVersion` 4 → 5. `nettest`
++13 проверок (round-trip options, Sides→Teams→Options, применение хостом, запрет для
+не-хоста, возврат к командам хостом и не-хостом) → `PASS (60)`. Локальной
+симуляции не касается, детерминизм `7134def2...` без изменений. `lanmatchtest`
+`PASS (34)`. Вики [[сеть]], [[константы]] обновлены.

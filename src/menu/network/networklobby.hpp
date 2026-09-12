@@ -43,7 +43,6 @@ class NetworkLobbyPage : public Gui2Page {
     void BuildTeamPanels();
     void ApplyTeamState();
     void SelectEntryById(Gui2IconSelector *selector, int id);
-    int FirstCountryIndex(Gui2IconSelector *selector);
     void OnCountryChanged(int side);
     void OnLeagueChanged(int side);
     void OnTeamChanged(int side);
@@ -54,7 +53,9 @@ class NetworkLobbyPage : public Gui2Page {
     int FindLocalGamepadId();
     bool GamepadPresent(int id);
 
-    void StartHostMatch(int team0, int team1);
+    // Escape/B: step back through the selectors (Ready -> team -> league ->
+    // country); only at the country selector does it leave the lobby.
+    void StepBack();
 
     Gui2Image *background;
     Gui2Caption *homePanelCaption;
@@ -62,7 +63,6 @@ class NetworkLobbyPage : public Gui2Page {
     Gui2Caption *helpCaption;
 
     bool teamsBuilt;
-    bool matchStartTriggered;
     bool deviceLostSent;
     int sentDevice;      // last device type reported to the lobby (0 keyboard, 1 gamepad)
     int lastLocalDevice; // last device seen in the lobby state, drives input reconfig

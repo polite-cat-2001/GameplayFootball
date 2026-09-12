@@ -13,7 +13,8 @@
 //     NetKeepalive, NetMatchSession pause/side-select semantics.
 // v3: UDP realtime channel (input/snapshot) + client snapshot interpolation.
 // v4: per-player animation blend state (smooth/smoothFactor) in snapshots.
-const int net_protocolVersion = 4;
+// v5: LobbyState match options (difficulty/duration) + Options lobby phase.
+const int net_protocolVersion = 5;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

@@ -66,7 +66,10 @@ namespace blunted {
 
     int alpha = 0;
     Vector3 color1;
-    if (IsFocussed()) {
+    if (toggleable && toggled && uncolorWhenToggled) {
+      alpha = 0; // latched: no fill at all (Ready)
+      color1 = Vector3(0, 0, 0);
+    } else if (IsFocussed()) {
       alpha = 200;
 
       color1 = windowManager->GetStyle()->GetColor(e_DecorationType_Bright2);

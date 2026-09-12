@@ -63,6 +63,8 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
     buffer.PutU32((uint32_t)state.teamCursor[side]);
     buffer.PutU32((uint32_t)state.listScroll[side]);
   }
+  buffer.PutFloat(state.matchDifficulty);
+  buffer.PutFloat(state.matchDuration);
 }
 
 NetLobbyState ReadLobbyState(NetBuffer &buffer) {
@@ -92,6 +94,8 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
     state.teamCursor[side] = (int)buffer.GetU32();
     state.listScroll[side] = (int)buffer.GetU32();
   }
+  state.matchDifficulty = buffer.GetFloat();
+  state.matchDuration = buffer.GetFloat();
   return state;
 }
 

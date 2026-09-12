@@ -744,6 +744,25 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
       } else if (action.type == e_NetLobbyAction_SetResumeReady) {
         player->resumeReady = (action.value != 0);
         changed = true;
+      } else if (action.type == e_NetLobbyAction_SetMatchOptions) {
+        // Host-only kickoff options; value selects the field, value2 is *1000.
+        if (player->isHost) {
+          float value = (float)action.value2 / 1000.0f;
+          if (value < 0.0f) value = 0.0f;
+          if (value > 1.0f) value = 1.0f;
+          if (action.value == 0) lobbyState.matchDifficulty = value;
+          else if (action.value == 1) lobbyState.matchDuration = value;
+          changed = true;
+        }
+      } else if (action.type == e_NetLobbyAction_BackToTeams) {
+        // Any peer may back out of the options screen: return to team selection
+        // and clear both confirmations so it doesn't bounce straight back.
+        if (lobbyState.phase == e_NetLobbyPhase_Options) {
+          lobbyState.phase = e_NetLobbyPhase_Teams;
+          lobbyState.teamReady[0] = false;
+          lobbyState.teamReady[1] = false;
+          changed = true;
+        }
       } else if (action.type == e_NetLobbyAction_RequestSideSelect) {
         // Any peer may ask for (value != 0) or cancel (value == 0) in-match side
         // selection; the host mirrors it. Cancel resumes the match as-is.
@@ -786,6 +805,16 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         if (allReady && !lobbyState.sideSelect) {
           lobbyState.phase = e_NetLobbyPhase_Teams;
           RecomputeChoppers();
+          changed = true;
+        }
+      }
+
+      // Both sides picked and confirmed their teams: move to the kickoff
+      // options screen (host sets AI difficulty / match duration).
+      if (lobbyState.phase == e_NetLobbyPhase_Teams) {
+        if (lobbyState.teamReady[0] && lobbyState.teamReady[1] &&
+            lobbyState.teamId[0] > 0 && lobbyState.teamId[1] > 0) {
+          lobbyState.phase = e_NetLobbyPhase_Options;
           changed = true;
         }
       }

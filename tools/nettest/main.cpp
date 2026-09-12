@@ -193,6 +193,8 @@ static void TestSerializationRoundTrips() {
     state.teamCursor[1] = 9;
     state.listScroll[0] = 1;
     state.listScroll[1] = 2;
+    state.matchDifficulty = 0.65f;
+    state.matchDuration = 0.4f;
 
     NetBuffer buffer;
     WriteLobbyState(buffer, state);
@@ -212,6 +214,8 @@ static void TestSerializationRoundTrips() {
     CHECK(restored.chooser[1] == state.chooser[1], "lobby chooser mismatch");
     CHECK(restored.teamCursor[0] == state.teamCursor[0], "lobby teamCursor mismatch");
     CHECK(restored.teamId[1] == state.teamId[1], "lobby teamId mismatch");
+    CHECK(restored.matchDifficulty == state.matchDifficulty, "lobby matchDifficulty mismatch");
+    CHECK(restored.matchDuration == state.matchDuration, "lobby matchDuration mismatch");
   }
 
   // Match environment, including kit numbers.
@@ -396,6 +400,105 @@ static void TestUdpRealtime(uint16_t port) {
   CHECK(gotInput, "udp: client input not applied on host");
 }
 
+static void TestMatchOptions(uint16_t port) {
+  NetPair pair(port);
+  if (!pair.Connect()) { CHECK(false, "options: connect failed"); return; }
+
+  uint32_t clientId = pair.client.GetPlayerId();
+
+  // Client picks Away so it becomes the away-side chooser.
+  NetLobbyAction side;
+  side.type = e_NetLobbyAction_SetSide;
+  side.side = e_NetSide_Away;
+  pair.client.SendLobbyAction(side);
+  CHECK(WaitFor([&]() { return ServerPlayerHasSide(pair.server, clientId, e_NetSide_Away); }),
+        "options: side not applied");
+
+  auto setReady = [&](bool host) {
+    NetLobbyAction a;
+    a.type = e_NetLobbyAction_SetReady;
+    a.value = 1;
+    if (host) { a.playerId = 0; pair.server.ApplyLobbyAction(a); }
+    else pair.client.SendLobbyAction(a);
+  };
+  setReady(false);
+  setReady(true);
+  CHECK(WaitFor([&]() { return pair.server.GetLobbyState().phase == e_NetLobbyPhase_Teams; }),
+        "options: all-ready did not reach Teams");
+
+  auto setTeam = [&](int sideIdx, int teamId, bool host) {
+    NetLobbyAction a;
+    a.type = e_NetLobbyAction_SetSelection;
+    a.side = sideIdx;
+    a.value = 2;
+    a.value2 = teamId;
+    if (host) { a.playerId = 0; pair.server.ApplyLobbyAction(a); }
+    else pair.client.SendLobbyAction(a);
+  };
+  setTeam(0, 3, true);
+  setTeam(1, 8, false);
+
+  auto setTeamReady = [&](int sideIdx, bool host) {
+    NetLobbyAction a;
+    a.type = e_NetLobbyAction_SetTeamReady;
+    a.side = sideIdx;
+    a.value = 1;
+    if (host) { a.playerId = 0; pair.server.ApplyLobbyAction(a); }
+    else pair.client.SendLobbyAction(a);
+  };
+  setTeamReady(0, true);
+  setTeamReady(1, false);
+  CHECK(WaitFor([&]() { return pair.server.GetLobbyState().phase == e_NetLobbyPhase_Options; }),
+        "options: both teams ready did not advance to Options");
+  CHECK(WaitFor([&]() { return pair.client.GetLobbyState().phase == e_NetLobbyPhase_Options; }),
+        "options: client did not mirror the Options phase");
+
+  // Host changes difficulty (0.65); the client mirrors it.
+  NetLobbyAction opt;
+  opt.type = e_NetLobbyAction_SetMatchOptions;
+  opt.playerId = 0;
+  opt.value = 0;
+  opt.value2 = 650;
+  pair.server.ApplyLobbyAction(opt);
+  CHECK(WaitFor([&]() {
+    float d = pair.server.GetLobbyState().matchDifficulty;
+    return d > 0.64f && d < 0.66f;
+  }), "options: host difficulty not applied");
+  CHECK(WaitFor([&]() { return pair.client.GetLobbyState().matchDifficulty > 0.64f; }),
+        "options: client difficulty not mirrored");
+
+  // A non-host peer must not be able to change the options.
+  NetLobbyAction cheat;
+  cheat.type = e_NetLobbyAction_SetMatchOptions;
+  cheat.value = 0;
+  cheat.value2 = 100;
+  pair.client.SendLobbyAction(cheat);
+  SleepMs(150);
+  CHECK(pair.server.GetLobbyState().matchDifficulty > 0.64f, "options: non-host changed options");
+
+  // Host backs out to team selection: phase returns and confirmations clear.
+  NetLobbyAction back;
+  back.type = e_NetLobbyAction_BackToTeams;
+  back.playerId = 0;
+  pair.server.ApplyLobbyAction(back);
+  CHECK(WaitFor([&]() { return pair.server.GetLobbyState().phase == e_NetLobbyPhase_Teams; }),
+        "options: did not return to Teams");
+  CHECK(!pair.server.GetLobbyState().teamReady[0] && !pair.server.GetLobbyState().teamReady[1],
+        "options: back should clear team readiness");
+
+  // Re-confirm and check a non-host peer can also back out to Teams.
+  setTeamReady(0, true);
+  setTeamReady(1, false);
+  CHECK(WaitFor([&]() { return pair.server.GetLobbyState().phase == e_NetLobbyPhase_Options; }),
+        "options: could not re-enter Options");
+
+  NetLobbyAction clientBack;
+  clientBack.type = e_NetLobbyAction_BackToTeams;
+  pair.client.SendLobbyAction(clientBack);
+  CHECK(WaitFor([&]() { return pair.server.GetLobbyState().phase == e_NetLobbyPhase_Teams; }),
+        "options: non-host back to teams failed");
+}
+
 static void TestKeepaliveRtt(uint16_t port) {
   NetPair pair(port);
   if (!pair.Connect()) { CHECK(false, "rtt: connect failed"); return; }
@@ -419,6 +522,7 @@ int main(int argc, char **argv) {
   TestDisconnect(basePort + 4);
   TestKeepaliveRtt(basePort + 5);
   TestUdpRealtime(basePort + 6);
+  TestMatchOptions(basePort + 7);
 
   if (g_failures == 0) {
     std::printf("PASS (%d checks)\n", g_checks);
