@@ -39,8 +39,17 @@ CameraPage::CameraPage(Gui2WindowManager *windowManager, const Gui2PageData &pag
 
   sliderZoom->SetFocus();
 
+  // Pre-match there is no Match yet: fall back to the saved config values.
   float zoom, height, fov, angleFactor;
-  GetGameTask()->GetMatch()->GetCameraParams(zoom, height, fov, angleFactor);
+  Match *match = GetGameTask()->GetMatch();
+  if (match) {
+    match->GetCameraParams(zoom, height, fov, angleFactor);
+  } else {
+    zoom = GetConfiguration()->GetReal("camera_zoom", _default_CameraZoom);
+    height = GetConfiguration()->GetReal("camera_height", _default_CameraHeight);
+    fov = GetConfiguration()->GetReal("camera_fov", _default_CameraFOV);
+    angleFactor = GetConfiguration()->GetReal("camera_anglefactor", _default_CameraAngleFactor);
+  }
 
   sliderZoom->SetValue(zoom);
   sliderHeight->SetValue(height);
@@ -64,8 +73,10 @@ void CameraPage::UpdateCamera() {
   GetConfiguration()->Set("camera_fov", sliderFOV->GetValue());
   GetConfiguration()->Set("camera_anglefactor", sliderAngleFactor->GetValue());
   Match *match = GetGameTask()->GetMatch();
-  match->SetCameraParams(sliderZoom->GetValue(), sliderHeight->GetValue(), sliderFOV->GetValue(), sliderAngleFactor->GetValue());
-  // On a thin LAN client the camera otherwise comes from the host snapshot; let
-  // this peer use its own settings from now on.
-  if (match->IsRemotePresentation()) match->SetRemoteCameraOverride(true);
+  if (match) {
+    match->SetCameraParams(sliderZoom->GetValue(), sliderHeight->GetValue(), sliderFOV->GetValue(), sliderAngleFactor->GetValue());
+    // On a thin LAN client the camera otherwise comes from the host snapshot; let
+    // this peer use its own settings from now on.
+    if (match->IsRemotePresentation()) match->SetRemoteCameraOverride(true);
+  }
 }

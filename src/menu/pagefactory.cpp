@@ -10,6 +10,7 @@
 #include "sideselect.hpp"
 #include "startmatch/teamselect.hpp"
 #include "startmatch/matchoptions.hpp"
+#include "startmatch/prematch.hpp"
 #include "startmatch/loadingmatch.hpp"
 #include "ingame/gamepage.hpp"
 #include "ingame/phasemenu.hpp"
@@ -77,6 +78,10 @@ Gui2Page *PageFactory::CreatePage(const Gui2PageData &pageData) {
 
     case e_PageID_MatchOptions:
       page = new MatchOptionsPage(windowManager, pageData);
+      break;
+
+    case e_PageID_PreMatch:
+      page = new PreMatchPage(windowManager, pageData);
       break;
 
     case e_PageID_LoadingMatch:

@@ -1293,7 +1293,11 @@ float AI_GetMindSet(e_PlayerRole role) {
 
   if (role == e_PlayerRole_AM) mindSet = 0.75;
 
-  if (role == e_PlayerRole_CF) mindSet = 1.0;
+  if (role == e_PlayerRole_CF ||
+      role == e_PlayerRole_ST) mindSet = 1.0;
+
+  if (role == e_PlayerRole_LW ||
+      role == e_PlayerRole_RW) mindSet = 0.7;
 
   return mindSet;
 }

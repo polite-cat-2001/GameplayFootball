@@ -17,6 +17,10 @@ MatchData::MatchData(int team1DatabaseID, int team2DatabaseID) {
   shots[0] = 0;
   shots[1] = 0;
 
+  for (int t = 0; t < 2; t++) {
+    for (int r = 0; r < e_TeamRole_SIZE; r++) rolePlayers[t][r] = -1;
+  }
+
   possession60seconds = 0.0f;
 }
 

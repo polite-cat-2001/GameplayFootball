@@ -59,6 +59,21 @@ struct ReplaySpatial {
   boost::circular_buffer<ReplaySpatialFrame> frames;
 };
 
+// Requested substitution, applied at the next restart (see ApplyPendingSubstitutions).
+struct Substitution {
+  int teamID;
+  int outPlayerID;
+  int inPlayerID;
+};
+
+// Applied substitution, kept for the on-screen notification.
+struct SubstitutionNotice {
+  int teamID;
+  int outPlayerID;
+  int inPlayerID;
+  unsigned long time_ms;
+};
+
 struct PlayerBounce {
   Player *opp;
   float force;
@@ -125,6 +140,15 @@ class Match {
     int GetScore(int teamID) { return matchData->GetGoalCount(teamID); }
     Ball *GetBall() { return ball; }
     Team *GetTeam(int teamID) { return teams[teamID]; }
+
+    // Runtime substitutions: queue them during play; they take effect at the
+    // next restart. Returns false when the team cannot substitute (limit reached
+    // or the players are not in a subbable state).
+    bool QueueSubstitution(int teamID, int outPlayerID, int inPlayerID);
+    int ApplyPendingSubstitutions();
+    const std::vector<Substitution> &GetPendingSubstitutions() const { return pendingSubstitutions; }
+    const std::vector<SubstitutionNotice> &GetSubstitutionNotices() const { return substitutionNotices; }
+    unsigned long GetSubstitutionNoticeCounter() const { return substitutionNoticeCounter; }
     Player *GetPlayer(int playerID);
     void GetAllTeamPlayers(int teamID, std::vector<Player*> &players);
     void GetActiveTeamPlayers(int teamID, std::vector<Player*> &players);
@@ -360,6 +384,10 @@ class Match {
     signed int bestPossessionTeamID;
     Player *designatedPossessionPlayer;
     Player *ballRetainer;
+
+    std::vector<Substitution> pendingSubstitutions;
+    std::vector<SubstitutionNotice> substitutionNotices;
+    unsigned long substitutionNoticeCounter;
 
     bool gameOver;
 

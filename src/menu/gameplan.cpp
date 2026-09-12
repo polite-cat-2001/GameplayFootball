@@ -15,7 +15,15 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   teamID = pageData.properties->GetInt("teamID", 0);
 
   int xOffset = 32.5;//14;
-  teamData = GetGameTask()->GetMatch()->GetTeam(teamID)->GetTeamData();
+  // In-match the live TeamData is used; pre-match (from the hub) the match does
+  // not exist yet, so edit the MatchData the hub prepared instead.
+  if (GetGameTask()->GetMatch()) {
+    teamData = GetGameTask()->GetMatch()->GetTeam(teamID)->GetTeamData();
+  } else {
+    MatchData *matchData = GetMenuTask()->GetMatchData();
+    teamData = matchData ? matchData->GetTeamData(teamID) : 0;
+  }
+  assert(teamData);
 
   Gui2Image *bg1 = new Gui2Image(windowManager, "gameplan_image_bg", xOffset, 15, 35, 72);
   this->AddView(bg1);

@@ -35,6 +35,9 @@ Team::Team(int id, Match *match, TeamData *teamData) : id(id), match(match), tea
   }
   lastTouchPlayer = 0;
   lastTouchType = e_TouchType_None;
+
+  substitutionCount = 0;
+  colorCoords = 0;
 }
 
 Team::~Team() {
@@ -61,6 +64,9 @@ void Team::Exit() {
 
 void Team::InitPlayers(boost::intrusive_ptr<Node> fullbodyNode, std::map<Vector3, Vector3> &colorCoords) {
 
+  this->fullbodyNode = fullbodyNode;
+  this->colorCoords = &colorCoords;
+
   // first, load 1 instance of a player
 
   Log(e_Notice, "Team", "InitPlayers", "Loading player template instance");
@@ -83,21 +89,24 @@ void Team::InitPlayers(boost::intrusive_ptr<Node> fullbodyNode, std::map<Vector3
 
     if (i < activePlayerCount) {
       // activate playerCount players (the starting eleven, usually)
-      std::string kitFilename;
-      //printf("%i player id\n", player->GetID());
-      if (GetFormationEntry(player->GetID()).role != e_PlayerRole_GK) {
-        kitFilename = GetTeamData()->GetKitUrl() + "_kit_0" + int_to_str(GetMenuTask()->GetTeamKitNum(GetID())) + ".png";
-        if (!boost::filesystem::exists(kitFilename)) kitFilename = (GetID() == 0) ? "media/textures/almost_white.png" : "media/textures/almost_black.png";
-      } else {
-        kitFilename = "media/objects/players/textures/goalie_kit.png";
-      }
-      kit = ResourceManagerPool::GetInstance().GetManager<Surface>(e_ResourceType_Surface)->Fetch(kitFilename);
-      player->Activate(playerNode, fullbodyNode, colorCoords, kit, match->GetAnimCollection());
+      ActivatePlayer(player);
     }
   }
 
   designatedTeamPossessionPlayer = players.at(0);
 
+}
+
+void Team::ActivatePlayer(Player *player) {
+  std::string kitFilename;
+  if (GetFormationEntry(player->GetID()).role != e_PlayerRole_GK) {
+    kitFilename = GetTeamData()->GetKitUrl() + "_kit_0" + int_to_str(GetMenuTask()->GetTeamKitNum(GetID())) + ".png";
+    if (!boost::filesystem::exists(kitFilename)) kitFilename = (GetID() == 0) ? "media/textures/almost_white.png" : "media/textures/almost_black.png";
+  } else {
+    kitFilename = "media/objects/players/textures/goalie_kit.png";
+  }
+  kit = ResourceManagerPool::GetInstance().GetManager<Surface>(e_ResourceType_Surface)->Fetch(kitFilename);
+  player->Activate(playerNode, fullbodyNode, *colorCoords, kit, match->GetAnimCollection());
 }
 
 signed int Team::GetSide() {
@@ -135,6 +144,11 @@ PlayerData *Team::GetPlayerData(int playerID) {
 }
 
 FormationEntry Team::GetFormationEntry(int playerID) {
+  // Substituted-in players have no slot in teamData's starting formation; they
+  // inherit the outgoing player's role/position (see Substitute()).
+  std::map<int, FormationEntry>::iterator overrideIter = runtimeFormation.find(playerID);
+  if (overrideIter != runtimeFormation.end()) return overrideIter->second;
+
   for (int i = 0; i < (signed int)players.size(); i++) {
     if (players.at(i)->GetID() == playerID) {
       return teamData->GetFormationEntry(i);
@@ -144,6 +158,39 @@ FormationEntry Team::GetFormationEntry(int playerID) {
   assert(1 == 2);
   FormationEntry fail;
   return fail;
+}
+
+bool Team::Substitute(int outPlayerID, int inPlayerID) {
+  if (!CanSubstitute()) return false;
+  if (outPlayerID == inPlayerID) return false;
+
+  Player *out = GetPlayer(outPlayerID);
+  Player *in = GetPlayer(inPlayerID);
+  if (!out || !in) return false;
+  if (!out->IsActive() || in->IsActive()) return false;
+
+  // The incoming player takes over the outgoing player's role and position.
+  runtimeFormation[inPlayerID] = GetFormationEntry(outPlayerID);
+
+  ActivatePlayer(in);
+  out->Deactivate();
+
+  substitutionCount++;
+  return true;
+}
+
+void Team::SetRolePlayer(e_TeamRole role, int playerID) {
+  if (role < 0 || role >= e_TeamRole_SIZE) return;
+  match->GetMatchData()->SetRolePlayer(GetID(), role, playerID);
+}
+
+Player *Team::GetRolePlayer(e_TeamRole role) {
+  if (role < 0 || role >= e_TeamRole_SIZE) return 0;
+  int playerID = match->GetMatchData()->GetRolePlayer(GetID(), role);
+  if (playerID < 0) return 0;
+  Player *player = GetPlayer(playerID);
+  if (player && player->IsActive()) return player;
+  return 0;
 }
 
 void Team::SetFormationEntry(int playerID, FormationEntry entry) {

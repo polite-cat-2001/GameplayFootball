@@ -61,6 +61,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   remoteCameraOverride = false;
   localPeerId = 0;
   remoteMaxRtt_ms = 0;
+  substitutionNoticeCounter = 0;
 
   matchDurationFactor = GetConfiguration()->GetReal("match_duration", 1.0) * 0.2f + 0.05f;
   matchDifficulty = GetConfiguration()->GetReal("match_difficulty", 0.8f);
@@ -738,6 +739,67 @@ void Match::GetActiveTeamPlayers(int teamID, std::vector<Player*> &players) {
 
 void Match::GetOfficialPlayers(std::vector<PlayerBase*> &players) {
   officials->GetPlayers(players);
+}
+
+bool Match::QueueSubstitution(int teamID, int outPlayerID, int inPlayerID) {
+  if (teamID < 0 || teamID > 1) return false;
+  Team *team = teams[teamID];
+  if (!team) return false;
+
+  int pendingForTeam = 0;
+  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+    if (pendingSubstitutions.at(i).teamID == teamID) pendingForTeam++;
+  }
+  if (team->GetSubstitutionCount() + pendingForTeam >= maxSubstitutions) return false;
+
+  Player *out = team->GetPlayer(outPlayerID);
+  Player *in = team->GetPlayer(inPlayerID);
+  if (!out || !in) return false;
+  if (!out->IsActive() || in->IsActive()) return false;
+
+  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+    const Substitution &s = pendingSubstitutions.at(i);
+    if (s.teamID != teamID) continue;
+    if (s.outPlayerID == outPlayerID || s.outPlayerID == inPlayerID ||
+        s.inPlayerID == outPlayerID || s.inPlayerID == inPlayerID) return false;
+  }
+
+  Substitution sub;
+  sub.teamID = teamID;
+  sub.outPlayerID = outPlayerID;
+  sub.inPlayerID = inPlayerID;
+  pendingSubstitutions.push_back(sub);
+  return true;
+}
+
+int Match::ApplyPendingSubstitutions() {
+  if (pendingSubstitutions.empty()) return 0;
+
+  int applied = 0;
+  std::vector<Substitution> remaining;
+  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+    const Substitution &sub = pendingSubstitutions.at(i);
+    Team *team = teams[sub.teamID];
+    Player *out = team ? team->GetPlayer(sub.outPlayerID) : 0;
+    if (!out || !out->IsActive()) continue; // dropped: can never be applied
+    // Don't pull the ball retainer off the pitch mid-action; try next restart.
+    if (out == ballRetainer) { remaining.push_back(sub); continue; }
+
+    if (team->Substitute(sub.outPlayerID, sub.inPlayerID)) {
+      SubstitutionNotice notice;
+      notice.teamID = sub.teamID;
+      notice.outPlayerID = sub.outPlayerID;
+      notice.inPlayerID = sub.inPlayerID;
+      notice.time_ms = actualTime_ms;
+      substitutionNotices.push_back(notice);
+      substitutionNoticeCounter++;
+      applied++;
+    } else {
+      remaining.push_back(sub);
+    }
+  }
+  pendingSubstitutions.swap(remaining);
+  return applied;
 }
 
 const MentalImage *Match::GetMentalImage(int history_ms) {

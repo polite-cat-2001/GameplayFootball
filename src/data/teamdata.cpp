@@ -48,6 +48,15 @@ Vector3 GetDefaultRolePosition(e_PlayerRole role) {
     case e_PlayerRole_CF:
       return Vector3( 1.0,  0.0, 0);
       break;
+    case e_PlayerRole_ST:
+      return Vector3( 1.0,  0.0, 0);
+      break;
+    case e_PlayerRole_LW:
+      return Vector3( 0.7,  0.9, 0);
+      break;
+    case e_PlayerRole_RW:
+      return Vector3( 0.7, -0.9, 0);
+      break;
 
     default:
       return Vector3( 0.0,  0.0, 0);

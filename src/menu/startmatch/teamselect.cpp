@@ -285,7 +285,7 @@ void TeamSelectPage::GoOptionsMenu() {
   this->Exit();
 
   Properties properties;
-  windowManager->GetPageFactory()->CreatePage((int)e_PageID_MatchOptions, properties, 0);
+  windowManager->GetPageFactory()->CreatePage((int)e_PageID_PreMatch, properties, 0);
 
   delete this;
 }

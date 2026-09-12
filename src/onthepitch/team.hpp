@@ -39,6 +39,19 @@ class Team {
     void GetActivePlayers(std::vector<Player*> &activePlayers);
     int GetActivePlayerCount() const { return activePlayerCount; }
 
+    // Runtime (in-match) squad changes. Host-authoritative, not persisted: the
+    // setup lives and dies with the Match. outPlayerID must be on the pitch and
+    // inPlayerID on the bench; the sub takes over the outgoing player's role.
+    bool CanSubstitute() const { return substitutionCount < maxSubstitutions; }
+    int GetSubstitutionCount() const { return substitutionCount; }
+    bool Substitute(int outPlayerID, int inPlayerID);
+
+    // Runtime designated roles; GetRolePlayer returns 0 when unset or when the
+    // designated player left the pitch, so callers fall back to the automatic
+    // (closest/best) choice.
+    void SetRolePlayer(e_TeamRole role, int playerID);
+    Player *GetRolePlayer(e_TeamRole role);
+
     unsigned int GetHumanGamerCount() const { return humanGamers.size(); }
     void AddHumanGamer(IHIDevice *hid, e_PlayerColor color);
     void DeleteHumanGamers();
@@ -104,8 +117,17 @@ class Team {
 
     TeamAIController *teamController;
 
+    void ActivatePlayer(Player *player);
+
     std::vector<Player*> players;
     int activePlayerCount;
+
+    std::map<int, FormationEntry> runtimeFormation; // playerID -> role/position for substituted-in players
+    int substitutionCount;
+
+    // Kept from InitPlayers so bench players can be activated on demand.
+    boost::intrusive_ptr<Node> fullbodyNode;
+    std::map<Vector3, Vector3> *colorCoords;
 
     boost::intrusive_ptr<Node> teamNode;
     boost::intrusive_ptr<Node> playerNode;

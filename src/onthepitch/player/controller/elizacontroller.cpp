@@ -267,7 +267,10 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
              CastPlayer()->GetFormationEntry().role == e_PlayerRole_AM) {
       midfieldStrategy->RequestInput(_mentalImage, rawInputDirection, rawInputVelocityFloat);
     }
-    else if (CastPlayer()->GetFormationEntry().role == e_PlayerRole_CF) {
+    else if (CastPlayer()->GetFormationEntry().role == e_PlayerRole_CF ||
+             CastPlayer()->GetFormationEntry().role == e_PlayerRole_ST ||
+             CastPlayer()->GetFormationEntry().role == e_PlayerRole_LW ||
+             CastPlayer()->GetFormationEntry().role == e_PlayerRole_RW) {
       offenseStrategy->RequestInput(_mentalImage, rawInputDirection, rawInputVelocityFloat);
     }
 
@@ -650,9 +653,12 @@ Vector3 ElizaController::GetSupportPosition_ForceField(const MentalImage *mental
       opponentRepelWeight *= 1.6f;
       break;
     case e_PlayerRole_AM:
+    case e_PlayerRole_LW:
+    case e_PlayerRole_RW:
       opponentRepelWeight *= 1.2f;
       break;
     case e_PlayerRole_CF:
+    case e_PlayerRole_ST:
       opponentRepelWeight *= 1.0f;
       break;
     default:

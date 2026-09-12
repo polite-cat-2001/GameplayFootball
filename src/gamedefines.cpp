@@ -162,6 +162,16 @@ std::string GetRoleName(e_PlayerRole playerRole) {
       return "CF";
       break;
 
+    case e_PlayerRole_LW:
+      return "LW";
+      break;
+    case e_PlayerRole_RW:
+      return "RW";
+      break;
+    case e_PlayerRole_ST:
+      return "ST";
+      break;
+
     default:
       return "undefined";
       break;
@@ -179,6 +189,9 @@ e_PlayerRole GetRoleFromString(const std::string &roleString) {
   if (roleString.compare("RM") == 0) return e_PlayerRole_RM;
   if (roleString.compare("AM") == 0) return e_PlayerRole_AM;
   if (roleString.compare("CF") == 0) return e_PlayerRole_CF;
+  if (roleString.compare("LW") == 0) return e_PlayerRole_LW;
+  if (roleString.compare("RW") == 0) return e_PlayerRole_RW;
+  if (roleString.compare("ST") == 0) return e_PlayerRole_ST;
   return e_PlayerRole_CM; // default
 }
 

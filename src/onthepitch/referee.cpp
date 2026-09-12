@@ -221,6 +221,11 @@ void Referee::Process() {
       }
 
       if (buffer.startTime == match->GetActualTime_ms()) {
+        // Pending substitutions take effect as play resumes: the new players
+        // come on at the restart, then set-piece positions are recomputed for
+        // the updated XI (including a possibly new taker).
+        if (match->ApplyPendingSubstitutions() > 0) PrepareSetPiece(buffer.desiredSetPiece);
+
         // blow whistle and wait for set piece taker to touch the ball
         whistle[1]->SetGain(0.3 * GetConfiguration()->GetReal("audio_volume", 0.5));
         whistle[1]->Poke(e_SystemType_Audio);

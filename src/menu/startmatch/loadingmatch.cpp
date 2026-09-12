@@ -18,8 +18,13 @@ LoadingMatchPage::LoadingMatchPage(Gui2WindowManager *windowManager, const Gui2P
   loading->Show();
 
   // logos
-  MatchData *matchData = new MatchData(GetMenuTask()->GetTeamID(0), GetMenuTask()->GetTeamID(1));
-  GetMenuTask()->SetMatchData(matchData);
+  // The pre-match hub builds the MatchData up front so its game-plan edits
+  // (lineup, tactics, roles) carry into the match; otherwise build it here.
+  MatchData *matchData = GetMenuTask()->GetMatchData();
+  if (!matchData) {
+    matchData = new MatchData(GetMenuTask()->GetTeamID(0), GetMenuTask()->GetTeamID(1));
+    GetMenuTask()->SetMatchData(matchData);
+  }
   TeamData *teamData1 = matchData->GetTeamData(0);
   TeamData *teamData2 = matchData->GetTeamData(1);
 

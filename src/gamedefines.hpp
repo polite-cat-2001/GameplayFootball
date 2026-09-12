@@ -74,6 +74,9 @@ const float ballDistanceOptimizeThreshold = 10.0f;
 
 const int playerNum = 11;
 
+// In-match substitutions allowed per team (extra time / extra windows not modelled yet).
+const int maxSubstitutions = 5;
+
 // how far into an animation the ball is usually touched
 const unsigned int defaultTouchOffset_ms = 80;
 
@@ -255,6 +258,25 @@ enum e_PlayerRole {
   e_PlayerRole_RM,
   e_PlayerRole_AM,
   e_PlayerRole_CF,
+  // Present in Transfermarkt-sourced data and used by formations; modelled here
+  // so the tokens are not silently degraded to CM.
+  e_PlayerRole_LW,
+  e_PlayerRole_RW,
+  e_PlayerRole_ST,
+};
+
+// Distance (m) from the attacking goal below which a free kick counts as
+// "near" and uses the near free-kick taker; farther kicks use the far taker.
+const float freeKickNearDistance = 35.0f;
+
+enum e_TeamRole {
+  e_TeamRole_Captain,
+  e_TeamRole_PenaltyTaker,
+  e_TeamRole_FreeKickTakerNear,
+  e_TeamRole_FreeKickTakerFar,
+  e_TeamRole_CornerTakerLeft,
+  e_TeamRole_CornerTakerRight,
+  e_TeamRole_SIZE
 };
 
 std::string GetRoleName(e_PlayerRole playerRole);

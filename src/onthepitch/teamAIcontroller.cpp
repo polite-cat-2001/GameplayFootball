@@ -257,7 +257,8 @@ float mixup(float base, const std::string &varname, e_PlayerRole role) {
     if (varname.compare("position_offense_ownhalf_factor") == 0) value = -0.1f; // go forward
   }
 
-  if (role == e_PlayerRole_LM || role == e_PlayerRole_RM) {
+  if (role == e_PlayerRole_LM || role == e_PlayerRole_RM ||
+      role == e_PlayerRole_LW || role == e_PlayerRole_RW) {
     // wingers stay high up to offer counter-attack support
     if (varname.compare("position_defense_ownhalf_factor") == 0) value = -0.05f;
     if (varname.compare("position_offense_ownhalf_factor") == 0) value = -0.1f; // go forward
@@ -268,7 +269,7 @@ float mixup(float base, const std::string &varname, e_PlayerRole role) {
     if (varname.compare("position_defense_depth_factor") == 0) value = 0.125f;
   }
 
-  if (role == e_PlayerRole_CF) {
+  if (role == e_PlayerRole_CF || role == e_PlayerRole_ST) {
     // strikers stay high up to offer counter-attack support
     if (varname.compare("position_defense_depth_factor") == 0) value = 0.125f;
   }
@@ -890,7 +891,21 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
   }
 
   if (isTakerTeam) {
-    taker = AI_GetClosestPlayer(team, match->GetBall()->Predict(0).Get2D(), false);
+    // Designated taker (set in the game plan) if still on the pitch; otherwise
+    // fall back to the closest player. Corner side is from the taker's view of
+    // the goal: left corner == negative y on the pitch.
+    taker = 0;
+    if (setPiece == e_SetPiece_Penalty) {
+      taker = team->GetRolePlayer(e_TeamRole_PenaltyTaker);
+    } else if (setPiece == e_SetPiece_FreeKick) {
+      Vector3 goalPos(-team->GetSide() * pitchHalfW, 0, 0);
+      bool nearGoal = (match->GetBall()->Predict(0).Get2D() - goalPos).GetLength() < freeKickNearDistance;
+      taker = team->GetRolePlayer(nearGoal ? e_TeamRole_FreeKickTakerNear : e_TeamRole_FreeKickTakerFar);
+    } else if (setPiece == e_SetPiece_Corner) {
+      bool left = match->GetBall()->Predict(0).coords[1] < 0;
+      taker = team->GetRolePlayer(left ? e_TeamRole_CornerTakerLeft : e_TeamRole_CornerTakerRight);
+    }
+    if (!taker) taker = AI_GetClosestPlayer(team, match->GetBall()->Predict(0).Get2D(), false);
 
     if (setPiece == e_SetPiece_ThrowIn || setPiece == e_SetPiece_KickOff) {
       taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + match->GetBall()->Predict(0).Get2D().GetNormalized(Vector3(0, -team->GetSide(), 0)) * 0.3f, match->GetBall()->Predict(0).Get2D());
