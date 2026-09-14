@@ -16,6 +16,19 @@
 class NetServerConnection;
 class NetHIDDevice;
 
+// A client substitution intent, attributed to the requesting peer. The host
+// validates team ownership and resolves slots to runtime player ids before
+// queueing it on the Match.
+struct NetSubRequest {
+  NetSubRequest() : playerId(0), teamID(0), outSlot(-1), inSlot(-1), cancel(false) {}
+
+  uint32_t playerId;
+  int teamID;
+  int outSlot;
+  int inSlot;
+  bool cancel;
+};
+
 class NetServer {
 
   public:
@@ -89,6 +102,9 @@ class NetServer {
     // A peer left side selection; the host applies sides and stays paused.
     bool ConsumeSideSelectCancel();
 
+    // Substitution intents from clients, consumed by the host's game task.
+    bool ConsumeSubRequest(NetSubRequest &request);
+
     // Send one control message to a single peer (host -> one client).
     void SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body);
 
@@ -150,6 +166,9 @@ class NetServer {
     boost::mutex resumeMutex;
     bool allResumeReadyPending;
     bool sideSelectCancelPending;
+
+    boost::mutex subRequestMutex;
+    std::vector<NetSubRequest> subRequests;
 
     boost::mutex disconnectMutex;
     std::vector<uint32_t> disconnectedPlayers;

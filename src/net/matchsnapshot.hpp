@@ -36,6 +36,17 @@ struct SnapshotPlayer {
   float orientation;
 };
 
+// Substitution applied on the host, relayed so the thin client can run the same
+// Team::Substitute (activate the incoming player and inherit the outgoing role).
+// Identified by squad slot, the peer-stable index used by snapshot poses.
+struct SnapshotSubstitution {
+  SnapshotSubstitution() : team(-1), outSlot(-1), inSlot(-1) {}
+
+  int team;
+  int outSlot;
+  int inSlot;
+};
+
 // Host -> client snapshot: everything the thin client needs to present a frame
 // without running the simulation. Scores/time/phase form a small header.
 struct Snapshot {
@@ -54,6 +65,7 @@ struct Snapshot {
     maxRtt_ms = 0;
     messageTime_ms = 0;
     messageCounter = 0;
+    substitutionCounter = 0;
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
@@ -76,6 +88,11 @@ struct Snapshot {
   std::string message;
   int messageTime_ms;
   unsigned long messageCounter;
+
+  // Full applied-substitution list (<= 2 * 5 entries) so a late/reconnecting
+  // client can reconcile without a delta protocol.
+  unsigned long substitutionCounter;
+  std::vector<SnapshotSubstitution> substitutions;
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

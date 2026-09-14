@@ -60,10 +60,14 @@ struct ReplaySpatial {
 };
 
 // Requested substitution, applied at the next restart (see ApplyPendingSubstitutions).
+// Slot = index into Team::GetAllPlayers() (== TeamData::playerData index); it is
+// the peer-stable identifier used to sync substitutions over the network.
 struct Substitution {
   int teamID;
   int outPlayerID;
   int inPlayerID;
+  int outSlot;
+  int inSlot;
 };
 
 // Applied substitution, kept for the on-screen notification.
@@ -71,6 +75,8 @@ struct SubstitutionNotice {
   int teamID;
   int outPlayerID;
   int inPlayerID;
+  int outSlot;
+  int inSlot;
   unsigned long time_ms;
 };
 
@@ -137,6 +143,9 @@ class Match {
     void RandomizeAdboards(boost::intrusive_ptr<Node> stadiumNode);
     void UpdateControllerSetup();
     void SpamMessage(const std::string &msg, int time_ms = 3000);
+    // Corner notice listing who came off / on. A batch of substitutions applied
+    // in one go is shown as a stack of lines (all at once).
+    void ShowSubstitutionNotices(const std::vector<std::string> &msgs, int time_ms = 5000);
     int GetScore(int teamID) { return matchData->GetGoalCount(teamID); }
     Ball *GetBall() { return ball; }
     Team *GetTeam(int teamID) { return teams[teamID]; }
@@ -145,11 +154,15 @@ class Match {
     // next restart. Returns false when the team cannot substitute (limit reached
     // or the players are not in a subbable state).
     bool QueueSubstitution(int teamID, int outPlayerID, int inPlayerID);
+    // Drop a queued (not yet applied) substitution by the outgoing slot.
+    bool CancelSubstitution(int teamID, int outSlot);
     int ApplyPendingSubstitutions();
     const std::vector<Substitution> &GetPendingSubstitutions() const { return pendingSubstitutions; }
     const std::vector<SubstitutionNotice> &GetSubstitutionNotices() const { return substitutionNotices; }
     unsigned long GetSubstitutionNoticeCounter() const { return substitutionNoticeCounter; }
     Player *GetPlayer(int playerID);
+    // A player left the pitch (substitution); drop match-level references.
+    void OnPlayerLeftPitch(Player *player);
     void GetAllTeamPlayers(int teamID, std::vector<Player*> &players);
     void GetActiveTeamPlayers(int teamID, std::vector<Player*> &players);
     void GetOfficialPlayers(std::vector<PlayerBase*> &players);
@@ -308,6 +321,8 @@ class Match {
     bool CheckForGoal(signed int side);
 
     void CalculateBestPossessionTeamID();
+    // Collapse queued substitution chains (X->Z + Z->W == X->W, X<->Z cancels).
+    void NormalizePendingSubstitutions();
     void CheckHumanoidCollisions();
     void CheckHumanoidCollision(Player *p1, Player *p2, std::vector<PlayerBounce> &p1Bounce, std::vector<PlayerBounce> &p2Bounce);
     void CheckBallCollisions();
@@ -356,6 +371,9 @@ class Match {
     Gui2TacticsDebug *tacticsDebug;
     Gui2Caption *messageCaption;
     unsigned long messageCaptionRemoveTime_ms;
+    static const int substitutionCaptionCount = 6;
+    Gui2Caption *substitutionCaptions[substitutionCaptionCount];
+    unsigned long substitutionCaptionRemoveTime_ms;
     std::string lastSpamMessage;      // host: last SpamMessage, relayed in snapshots
     int lastSpamMessageTime_ms;
     unsigned long spamMessageCounter;
@@ -388,6 +406,11 @@ class Match {
     std::vector<Substitution> pendingSubstitutions;
     std::vector<SubstitutionNotice> substitutionNotices;
     unsigned long substitutionNoticeCounter;
+
+    // Thin client: applied substitutions relayed in snapshots. The client runs
+    // Team::Substitute for entries it has not applied yet.
+    unsigned long remoteSubstitutionCounter;
+    int remoteAppliedSubstitutions;
 
     bool gameOver;
 

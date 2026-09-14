@@ -139,6 +139,12 @@ namespace blunted {
 
   void GraphicsTask::ProcessPhase() {
 
+    // Structural scene changes from the game thread (e.g. a substituted-in
+    // player's Humanoid / captions) take getPhaseMutex. GetPhase already holds
+    // it for its own scene traversal; ProcessPhase must too, because its worker
+    // commands (PokeObjects on scene3D/scene2D) walk the same object lists.
+    boost::mutex::scoped_lock processPhaseLock(graphicsSystem->getPhaseMutex);
+
     TaskManager *taskManager = TaskManager::GetInstancePtr();
     Renderer3D *renderer3D = graphicsSystem->GetRenderer3D();
 

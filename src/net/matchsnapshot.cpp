@@ -44,6 +44,16 @@ Snapshot CaptureSnapshot(Match *match) {
   snapshot.messageTime_ms = match->GetSpamMessageTime_ms();
   snapshot.messageCounter = match->GetSpamMessageCounter();
 
+  snapshot.substitutionCounter = match->GetSubstitutionNoticeCounter();
+  const std::vector<SubstitutionNotice> &notices = match->GetSubstitutionNotices();
+  for (unsigned int i = 0; i < notices.size(); i++) {
+    SnapshotSubstitution sub;
+    sub.team = notices.at(i).teamID;
+    sub.outSlot = notices.at(i).outSlot;
+    sub.inSlot = notices.at(i).inSlot;
+    snapshot.substitutions.push_back(sub);
+  }
+
   const std::vector<Animation*> &animations = match->GetAnims()->GetAnimations();
   std::map<Animation*, int> animIDs;
   for (unsigned int i = 0; i < animations.size(); i++) {
@@ -124,6 +134,14 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutU32((uint32_t)snapshot.messageTime_ms);
   buffer.PutU32((uint32_t)snapshot.messageCounter);
 
+  buffer.PutU32((uint32_t)snapshot.substitutionCounter);
+  buffer.PutU32((uint32_t)snapshot.substitutions.size());
+  for (unsigned int i = 0; i < snapshot.substitutions.size(); i++) {
+    buffer.PutU32((uint32_t)snapshot.substitutions.at(i).team);
+    buffer.PutU32((uint32_t)snapshot.substitutions.at(i).outSlot);
+    buffer.PutU32((uint32_t)snapshot.substitutions.at(i).inSlot);
+  }
+
   buffer.PutU32((uint32_t)snapshot.players.size());
   for (unsigned int i = 0; i < snapshot.players.size(); i++) {
     WriteSnapshotPlayer(buffer, snapshot.players.at(i));
@@ -162,6 +180,15 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
   snapshot.message = buffer.GetString();
   snapshot.messageTime_ms = (int)buffer.GetU32();
   snapshot.messageCounter = buffer.GetU32();
+
+  snapshot.substitutionCounter = buffer.GetU32();
+  uint32_t substitutionCount = buffer.GetU32();
+  snapshot.substitutions.resize(substitutionCount);
+  for (unsigned int i = 0; i < substitutionCount; i++) {
+    snapshot.substitutions.at(i).team = (int)buffer.GetU32();
+    snapshot.substitutions.at(i).outSlot = (int)buffer.GetU32();
+    snapshot.substitutions.at(i).inSlot = (int)buffer.GetU32();
+  }
 
   uint32_t playerCount = buffer.GetU32();
   snapshot.players.resize(playerCount);

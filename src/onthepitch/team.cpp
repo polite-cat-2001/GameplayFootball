@@ -132,6 +132,13 @@ Player *Team::GetPlayer(int player_id) {
   return 0;
 }
 
+int Team::GetPlayerSlot(int playerID) {
+  for (int i = 0; i < (signed int)players.size(); i++) {
+    if (players.at(i)->GetID() == playerID) return i;
+  }
+  return -1;
+}
+
 PlayerData *Team::GetPlayerData(int playerID) {
   for (int i = 0; i < (signed int)players.size(); i++) {
     if (players.at(i)->GetID() == playerID) {
@@ -168,15 +175,36 @@ bool Team::Substitute(int outPlayerID, int inPlayerID) {
   Player *in = GetPlayer(inPlayerID);
   if (!out || !in) return false;
   if (!out->IsActive() || in->IsActive()) return false;
+  if (leftPitch.count(inPlayerID)) return false; // already went off
 
   // The incoming player takes over the outgoing player's role and position.
   runtimeFormation[inPlayerID] = GetFormationEntry(outPlayerID);
 
   ActivatePlayer(in);
   out->Deactivate();
+  leftPitch.insert(outPlayerID); // can never return
+
+  // Drop references to the player that just left the pitch so nothing acts on
+  // an inactive (controller-less) player.
+  if (designatedTeamPossessionPlayer == out) {
+    std::vector<Player*> active;
+    GetActivePlayers(active);
+    designatedTeamPossessionPlayer = active.empty() ? 0 : active.front();
+  }
+  for (int i = 0; i < e_TouchType_SIZE; i++) if (lastTouchPlayers[i] == out) lastTouchPlayers[i] = 0;
+  if (lastTouchPlayer == out) lastTouchPlayer = 0;
+  match->OnPlayerLeftPitch(out);
 
   substitutionCount++;
   return true;
+}
+
+bool Team::HasLeftPitch(int playerID) const {
+  return leftPitch.count(playerID) > 0;
+}
+
+void Team::MarkPlayerLeftPitch(int playerID) {
+  leftPitch.insert(playerID);
 }
 
 void Team::SetRolePlayer(e_TeamRole role, int playerID) {

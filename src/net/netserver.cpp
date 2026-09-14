@@ -506,6 +506,14 @@ bool NetServer::ConsumeSideSelectCancel() {
   return true;
 }
 
+bool NetServer::ConsumeSubRequest(NetSubRequest &request) {
+  boost::mutex::scoped_lock lock(subRequestMutex);
+  if (subRequests.empty()) return false;
+  request = subRequests.front();
+  subRequests.erase(subRequests.begin());
+  return true;
+}
+
 void NetServer::SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body) {
   boost::shared_ptr<NetServerConnection> target;
   {
@@ -687,6 +695,19 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
     }
 
     if (player) {
+      if (action.type == e_NetLobbyAction_RequestSubstitution || action.type == e_NetLobbyAction_CancelSubstitution) {
+        // Not a lobby-state change: queue it for the host's game task, which
+        // validates team ownership and resolves slots before touching the Match.
+        NetSubRequest request;
+        request.playerId = action.playerId;
+        request.teamID = action.side;
+        request.outSlot = action.value;
+        request.inSlot = action.value2;
+        request.cancel = (action.type == e_NetLobbyAction_CancelSubstitution);
+        boost::mutex::scoped_lock lock(subRequestMutex);
+        subRequests.push_back(request);
+        return;
+      }
       if (action.type == e_NetLobbyAction_SetSide && lobbyState.phase == e_NetLobbyPhase_Sides) {
         int side = action.side;
         if (side < 0) side = 0;

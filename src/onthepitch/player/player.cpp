@@ -88,8 +88,9 @@ void Player::Activate(boost::intrusive_ptr<Node> humanoidSourceNode, boost::intr
 
   assert(!isActive);
 
-  isActive = true;
-
+  // Build everything first and only then mark the player active: the Put worker
+  // thread iterates active players and dereferences their humanoid/captions, so
+  // it must never observe isActive == true before the humanoid exists.
   humanoid = new Humanoid(this, humanoidSourceNode, fullbodySourceNode, colorCoords, animCollection, GetTeam()->GetSceneNode(), kit, GetTeam()->GetID());
 
   controller = new ElizaController(match);
@@ -110,9 +111,15 @@ void Player::Activate(boost::intrusive_ptr<Node> humanoidSourceNode, boost::intr
   CastHumanoid()->ResetPosition(GetFormationEntry().position * 25 * Vector3(-team->GetSide(), -team->GetSide(), 0), Vector3(0));
 
   SetDynamicFormationEntry(GetFormationEntry());
+
+  isActive = true; // last: the Put thread may now use this player
 }
 
 void Player::Deactivate() {
+  // Mark inactive first: the Put worker stops touching the humanoid/captions as
+  // soon as it observes this (it may already be mid-Put2D, hence the guards).
+  isActive = false;
+
   ResetSituation(GetPosition());
 
   menuTask->GetWindowManager()->MarkForDeletion(nameCaption);
@@ -430,6 +437,10 @@ void Player::FetchPutBuffers(unsigned long putTime_ms) {
 
 void Player::Put2D() {
 
+  // A player may be mid-(de)activation on the game thread while this runs on the
+  // Put worker; skip until it is fully built.
+  if (!humanoid) return;
+
   if (GetDebugMode() == e_DebugMode_AI) {
 
     if (GetManMarkingID() != -1 && team->GetID() == 1) {
@@ -461,7 +472,7 @@ void Player::Put2D() {
     }
   }
 
-  if (fetchedbuf_nameCaptionShowCondition) {
+  if (fetchedbuf_nameCaptionShowCondition && nameCaption) {
     //Vector3 captionPos3D = fetchedbuf_nameCaptionPos;
     //Vector3 captionPos2D = GetProjectedCoord(captionPos3D, match->GetCamera());
     Vector3 captionPos3D = GetProjectedCoord(GetGeomPosition() + Vector3(0, 0.5f, 2.4f), match->GetCamera()); // geom pos because in Put2D, we cannot access normal class vars (because multithreading)
@@ -473,11 +484,11 @@ void Player::Put2D() {
 
     nameCaption->SetCaption(fetchedbuf_nameCaption);
     nameCaption->Show();
-  } else {
+  } else if (nameCaption) {
     nameCaption->Hide();
   }
 
-  if (fetchedbuf_debugCaptionShowCondition) {
+  if (fetchedbuf_debugCaptionShowCondition && debugCaption) {
     Vector3 captionPos3D = GetProjectedCoord(GetGeomPosition() + Vector3(0, 0.3f, 2.0f), match->GetCamera());
     float w, h;
     debugCaption->GetSize(w, h);
@@ -486,18 +497,17 @@ void Player::Put2D() {
     debugCaption->SetCaption(fetchedbuf_debugCaption);
     debugCaption->SetColor(fetchedbuf_debugCaptionColor);
     debugCaption->Show();
-  } else {
+  } else if (debugCaption) {
     debugCaption->Hide();
   }
 }
 
 void Player::Hide2D() {
-  if (fetchedbuf_nameCaptionShowCondition) {
-    assert(nameCaption);
+  if (!humanoid) return;
+  if (fetchedbuf_nameCaptionShowCondition && nameCaption) {
     nameCaption->Hide();
   }
-  if (fetchedbuf_debugCaptionShowCondition) {
-    assert(debugCaption);
+  if (fetchedbuf_debugCaptionShowCondition && debugCaption) {
     debugCaption->Hide();
   }
 }
@@ -515,6 +525,7 @@ void Player::SendOff() {
   match->SpamMessage(message);
 
   Deactivate();
+  team->MarkPlayerLeftPitch(id); // sent off: cannot return
 
   if (GetFormationEntry().role == e_PlayerRole_GK) {
     FormationEntry entry = GetFormationEntry();

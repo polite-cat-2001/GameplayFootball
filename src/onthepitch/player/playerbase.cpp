@@ -70,6 +70,7 @@ void PlayerBase::Deactivate() {
 
   if (externalController) externalController = 0;
   delete controller;
+  controller = 0; // never leave a dangling pointer behind
 }
 
 IController *PlayerBase::GetController() {
@@ -79,7 +80,7 @@ IController *PlayerBase::GetController() {
 
 void PlayerBase::RequestCommand(PlayerCommandQueue &commandQueue) {
   if (externalController) externalController->RequestCommand(commandQueue);
-                     else controller->RequestCommand(commandQueue);
+  else if (controller) controller->RequestCommand(commandQueue);
 }
 
 void PlayerBase::SetExternalController(IController *externalController) {
@@ -90,7 +91,7 @@ void PlayerBase::SetExternalController(IController *externalController) {
     this->externalController->SetFallbackController(controller);
     //debug = true;
   } else {
-    controller->Reset();
+    if (controller) controller->Reset();
     //debug = false;
   }
 }

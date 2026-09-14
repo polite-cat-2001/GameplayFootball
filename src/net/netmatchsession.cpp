@@ -268,6 +268,31 @@ void NetMatchSession::ProcessHost(Match *match) {
   // the pause menu). Resuming is a separate action (Continue vote).
   if (server->ConsumeSideSelectCancel()) SetupControllers(match);
 
+  // Client substitution intents: only the peer that owns the side may edit its
+  // team; slots resolve to this process's runtime player ids before queueing.
+  NetSubRequest subRequest;
+  while (server->ConsumeSubRequest(subRequest)) {
+    int teamID = -1;
+    const NetLobbyState lobby = server->GetLobbyState();
+    for (unsigned int i = 0; i < lobby.players.size(); i++) {
+      if (lobby.players.at(i).id != subRequest.playerId) continue;
+      if (lobby.players.at(i).side == e_NetSide_Home) teamID = 0;
+      else if (lobby.players.at(i).side == e_NetSide_Away) teamID = 1;
+      break;
+    }
+    if (teamID < 0 || teamID != subRequest.teamID) continue;
+    Team *team = match->GetTeam(teamID);
+    if (!team) continue;
+    if (subRequest.cancel) {
+      match->CancelSubstitution(teamID, subRequest.outSlot);
+      continue;
+    }
+    const std::vector<Player*> &all = team->GetAllPlayers();
+    if (subRequest.outSlot < 0 || subRequest.outSlot >= (int)all.size() ||
+        subRequest.inSlot < 0 || subRequest.inSlot >= (int)all.size()) continue;
+    match->QueueSubstitution(teamID, all.at(subRequest.outSlot)->GetID(), all.at(subRequest.inSlot)->GetID());
+  }
+
   match->Process();
 }
 

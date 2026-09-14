@@ -37,6 +37,13 @@ if(UNIX)
    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -O3")
 endif(UNIX)
 
+# MSVC: emit debug info (PDB) even for Release so the crash handler can
+# symbolize stack traces. Optimisation is unchanged.
+if(MSVC)
+  add_compile_options(/Zi)
+  add_link_options(/DEBUG)
+endif()
+
 # Find required libraries. Only two differences are real across platforms: Windows
 # builds use vcpkg (manifest mode), Linux/macOS use system packages (apt/brew).
 # - Boost: system builds (Ubuntu libboost-all-dev, Homebrew) are done with b2, which

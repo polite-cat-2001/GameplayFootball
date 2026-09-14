@@ -9,6 +9,10 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>
+#ifdef _MSC_VER
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
 #endif
 
 #include <vector>
@@ -52,6 +56,67 @@ using namespace blunted;
 
 boost::shared_ptr<TaskSequence> graphicsSequence;
 boost::shared_ptr<TaskSequence> gameSequence;
+
+#if defined(WIN32) && defined(_MSC_VER)
+// Writes a symbolized stack trace to crash.txt on a hard crash. Temporary
+// diagnostic aid for the in-match substitution crash; needs the .pdb next to
+// the .exe (Release is built with /Zi + /DEBUG).
+static LONG WINAPI GameplayFootballCrashFilter(EXCEPTION_POINTERS *info) {
+  FILE *f = fopen("crash.txt", "w");
+  if (f) {
+    fprintf(f, "exception 0x%08lX address %p\ntid %lu\n",
+            info->ExceptionRecord->ExceptionCode,
+            info->ExceptionRecord->ExceptionAddress,
+            (unsigned long)GetCurrentThreadId());
+
+    HANDLE process = GetCurrentProcess();
+    HANDLE thread = GetCurrentThread();
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    if (SymInitialize(process, NULL, TRUE)) {
+      CONTEXT context = *info->ContextRecord;
+      STACKFRAME64 frame;
+      memset(&frame, 0, sizeof(frame));
+      frame.AddrPC.Offset = context.Eip;
+      frame.AddrPC.Mode = AddrModeFlat;
+      frame.AddrFrame.Offset = context.Ebp;
+      frame.AddrFrame.Mode = AddrModeFlat;
+      frame.AddrStack.Offset = context.Esp;
+      frame.AddrStack.Mode = AddrModeFlat;
+
+      int depth = 0;
+      while (depth < 64 && StackWalk64(IMAGE_FILE_MACHINE_I386, process, thread, &frame, &context, NULL,
+                                       SymFunctionTableAccess64, SymGetModuleBase64, NULL)) {
+        DWORD64 addr = frame.AddrPC.Offset;
+        if (addr == 0) break;
+
+        char symBuffer[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO *symbol = (SYMBOL_INFO *)symBuffer;
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 255;
+        DWORD64 displacement = 0;
+
+        IMAGEHLP_LINE64 line;
+        line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        DWORD lineDisplacement = 0;
+
+        if (SymFromAddr(process, addr, &displacement, symbol)) {
+          if (SymGetLineFromAddr64(process, addr, &lineDisplacement, &line)) {
+            fprintf(f, "  #%02d %s +0x%llx  (%s:%lu)\n", depth, symbol->Name,
+                    (unsigned long long)displacement, line.FileName, line.LineNumber);
+          } else {
+            fprintf(f, "  #%02d %s +0x%llx\n", depth, symbol->Name, (unsigned long long)displacement);
+          }
+        } else {
+          fprintf(f, "  #%02d <unknown> 0x%llx\n", depth, (unsigned long long)addr);
+        }
+        depth++;
+      }
+    }
+    fclose(f);
+  }
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
 
 void InitDebugImage() {
   SDL_Surface *sdlSurface = CreateSDLSurface(200, 150);
@@ -238,6 +303,10 @@ void RunGame() {
 
 
 int main(int argc, char** argv) {
+
+#if defined(WIN32) && defined(_MSC_VER)
+  SetUnhandledExceptionFilter(GameplayFootballCrashFilter);
+#endif
 
   config = new Properties();
   if (argc > 1) configFile = argv[1];

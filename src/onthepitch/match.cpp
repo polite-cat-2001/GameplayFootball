@@ -62,6 +62,8 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   localPeerId = 0;
   remoteMaxRtt_ms = 0;
   substitutionNoticeCounter = 0;
+  remoteSubstitutionCounter = 0;
+  remoteAppliedSubstitutions = 0;
 
   matchDurationFactor = GetConfiguration()->GetReal("match_duration", 1.0) * 0.2f + 0.05f;
   matchDifficulty = GetConfiguration()->GetReal("match_difficulty", 0.8f);
@@ -354,6 +356,15 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   messageCaption->SetTransparency(0.3f);
   root->AddView(messageCaption);
   messageCaptionRemoveTime_ms = actualTime_ms + 5000;
+
+  for (int i = 0; i < substitutionCaptionCount; i++) {
+    substitutionCaptions[i] = new Gui2Caption(menuTask->GetWindowManager(), "game_substitution_" + int_to_str(i),
+                                              2, 8 + i * 4.2f, 44, 3.8f, "");
+    substitutionCaptions[i]->SetTransparency(0.2f);
+    root->AddView(substitutionCaptions[i]);
+    substitutionCaptions[i]->Hide();
+  }
+  substitutionCaptionRemoveTime_ms = actualTime_ms;
   lastSpamMessage = "";
   lastSpamMessageTime_ms = 0;
   spamMessageCounter = 0;
@@ -454,6 +465,7 @@ void Match::Exit() {
   fullbodyNode.reset();
 
   messageCaption->Hide();
+  for (int i = 0; i < substitutionCaptionCount; i++) substitutionCaptions[i]->Hide();
 
   // remove, don't delete, because main.cpp is owner
   GetDynamicNode()->RemoveObject(GetGreenDebugPilon());
@@ -716,6 +728,16 @@ void Match::SpamMessage(const std::string &msg, int time_ms) {
   spamMessageCounter++;
 }
 
+void Match::ShowSubstitutionNotices(const std::vector<std::string> &msgs, int time_ms) {
+  int shown = 0;
+  for (unsigned int i = 0; i < msgs.size() && shown < substitutionCaptionCount; i++, shown++) {
+    substitutionCaptions[shown]->SetCaption(msgs.at(i));
+    substitutionCaptions[shown]->Show();
+  }
+  for (int i = shown; i < substitutionCaptionCount; i++) substitutionCaptions[i]->Hide();
+  substitutionCaptionRemoveTime_ms = actualTime_ms + time_ms;
+}
+
 Player *Match::GetPlayer(int playerID) {
   for (int t = 0; t < 2; t++) {
     for (unsigned int p = 0; p < teams[t]->GetAllPlayers().size(); p++) {
@@ -727,6 +749,12 @@ Player *Match::GetPlayer(int playerID) {
 
   assert(1 == 2); // shouldn't be here ;)
   return 0;
+}
+
+void Match::OnPlayerLeftPitch(Player *player) {
+  if (!player) return;
+  if (ballRetainer == player) ballRetainer = 0;
+  if (lastGoalScorer == player) lastGoalScorer = 0;
 }
 
 void Match::GetAllTeamPlayers(int teamID, std::vector<Player*> &players) {
@@ -746,37 +774,123 @@ bool Match::QueueSubstitution(int teamID, int outPlayerID, int inPlayerID) {
   Team *team = teams[teamID];
   if (!team) return false;
 
+  Player *out = team->GetPlayer(outPlayerID);
+  Player *in = team->GetPlayer(inPlayerID);
+  if (!out || !in || outPlayerID == inPlayerID) return false;
+  if (team->HasLeftPitch(inPlayerID)) return false; // already went off; no return
+
+  // The outgoing player must be on the pitch now, or already queued to come on
+  // (a chain: X->Z, then Z->W). The incoming player must be off the pitch and
+  // not already queued to come on.
+  bool outAvailable = out->IsActive();
+  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+    const Substitution &s = pendingSubstitutions.at(i);
+    if (s.teamID != teamID) continue;
+    if (s.inPlayerID == outPlayerID) outAvailable = true;
+    if (s.inPlayerID == inPlayerID) return false;
+  }
+  if (!outAvailable || in->IsActive()) return false;
+
+  std::vector<Substitution> before = pendingSubstitutions;
+
+  // Retarget an existing queued sub for this outgoing player.
+  bool retargeted = false;
+  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+    Substitution &s = pendingSubstitutions.at(i);
+    if (s.teamID == teamID && s.outPlayerID == outPlayerID) {
+      s.inPlayerID = inPlayerID;
+      s.inSlot = team->GetPlayerSlot(inPlayerID);
+      retargeted = true;
+      break;
+    }
+  }
+  if (!retargeted) {
+    Substitution sub;
+    sub.teamID = teamID;
+    sub.outPlayerID = outPlayerID;
+    sub.inPlayerID = inPlayerID;
+    sub.outSlot = team->GetPlayerSlot(outPlayerID);
+    sub.inSlot = team->GetPlayerSlot(inPlayerID);
+    pendingSubstitutions.push_back(sub);
+  }
+
+  NormalizePendingSubstitutions();
+
   int pendingForTeam = 0;
   for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
     if (pendingSubstitutions.at(i).teamID == teamID) pendingForTeam++;
   }
-  if (team->GetSubstitutionCount() + pendingForTeam >= maxSubstitutions) return false;
-
-  Player *out = team->GetPlayer(outPlayerID);
-  Player *in = team->GetPlayer(inPlayerID);
-  if (!out || !in) return false;
-  if (!out->IsActive() || in->IsActive()) return false;
-
-  for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
-    const Substitution &s = pendingSubstitutions.at(i);
-    if (s.teamID != teamID) continue;
-    if (s.outPlayerID == outPlayerID || s.outPlayerID == inPlayerID ||
-        s.inPlayerID == outPlayerID || s.inPlayerID == inPlayerID) return false;
+  if (team->GetSubstitutionCount() + pendingForTeam > maxSubstitutions) {
+    pendingSubstitutions = before;
+    return false;
   }
-
-  Substitution sub;
-  sub.teamID = teamID;
-  sub.outPlayerID = outPlayerID;
-  sub.inPlayerID = inPlayerID;
-  pendingSubstitutions.push_back(sub);
   return true;
+}
+
+void Match::NormalizePendingSubstitutions() {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+
+    for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
+      if (pendingSubstitutions.at(i).outPlayerID == pendingSubstitutions.at(i).inPlayerID) {
+        pendingSubstitutions.erase(pendingSubstitutions.begin() + i);
+        changed = true;
+        break;
+      }
+    }
+    if (changed) continue;
+
+    for (unsigned int i = 0; i < pendingSubstitutions.size() && !changed; i++) {
+      for (unsigned int j = 0; j < pendingSubstitutions.size(); j++) {
+        if (i == j) continue;
+        if (pendingSubstitutions.at(i).inPlayerID == pendingSubstitutions.at(j).outPlayerID) {
+          pendingSubstitutions.at(i).inPlayerID = pendingSubstitutions.at(j).inPlayerID;
+          pendingSubstitutions.at(i).inSlot = pendingSubstitutions.at(j).inSlot;
+          pendingSubstitutions.erase(pendingSubstitutions.begin() + j);
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) continue;
+
+    for (unsigned int i = 0; i < pendingSubstitutions.size() && !changed; i++) {
+      for (unsigned int j = i + 1; j < pendingSubstitutions.size(); j++) {
+        if (pendingSubstitutions.at(i).teamID != pendingSubstitutions.at(j).teamID) continue;
+        if (pendingSubstitutions.at(i).outPlayerID == pendingSubstitutions.at(j).outPlayerID ||
+            pendingSubstitutions.at(i).inPlayerID == pendingSubstitutions.at(j).inPlayerID) {
+          pendingSubstitutions.erase(pendingSubstitutions.begin() + j);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+}
+
+bool Match::CancelSubstitution(int teamID, int outSlot) {
+  for (std::vector<Substitution>::iterator it = pendingSubstitutions.begin(); it != pendingSubstitutions.end(); ++it) {
+    if (it->teamID == teamID && it->outSlot == outSlot) {
+      pendingSubstitutions.erase(it);
+      return true;
+    }
+  }
+  return false;
 }
 
 int Match::ApplyPendingSubstitutions() {
   if (pendingSubstitutions.empty()) return 0;
 
+  // Team::Substitute creates/destroys a humanoid and GUI captions — structural
+  // scene changes that must not run while the graphics thread is traversing the
+  // scene. getPhaseMutex is the same lock GameTask uses to create/destroy the
+  // match for exactly this reason.
+  GetGraphicsSystem()->getPhaseMutex.lock();
+
   int applied = 0;
   std::vector<Substitution> remaining;
+  std::vector<std::string> messages;
   for (unsigned int i = 0; i < pendingSubstitutions.size(); i++) {
     const Substitution &sub = pendingSubstitutions.at(i);
     Team *team = teams[sub.teamID];
@@ -786,10 +900,16 @@ int Match::ApplyPendingSubstitutions() {
     if (out == ballRetainer) { remaining.push_back(sub); continue; }
 
     if (team->Substitute(sub.outPlayerID, sub.inPlayerID)) {
+      Player *inPlayer = team->GetPlayer(sub.inPlayerID);
+      messages.push_back(out->GetPlayerData()->GetLastName() + " off, " +
+                         (inPlayer ? inPlayer->GetPlayerData()->GetLastName() : std::string("?")) + " on");
+
       SubstitutionNotice notice;
       notice.teamID = sub.teamID;
       notice.outPlayerID = sub.outPlayerID;
       notice.inPlayerID = sub.inPlayerID;
+      notice.outSlot = sub.outSlot;
+      notice.inSlot = sub.inSlot;
       notice.time_ms = actualTime_ms;
       substitutionNotices.push_back(notice);
       substitutionNoticeCounter++;
@@ -799,6 +919,10 @@ int Match::ApplyPendingSubstitutions() {
     }
   }
   pendingSubstitutions.swap(remaining);
+
+  if (!messages.empty()) ShowSubstitutionNotices(messages);
+
+  GetGraphicsSystem()->getPhaseMutex.unlock();
   return applied;
 }
 
@@ -1420,6 +1544,32 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
 
   ApplySnapshot(this, snapshot, remoteAnimTable);
 
+  // Relay applied substitutions: run the same Team::Substitute so the incoming
+  // player's humanoid is activated with the outgoing player's role.
+  if (snapshot.substitutionCounter != remoteSubstitutionCounter) {
+    // Structural scene change: block the graphics thread while swapping models.
+    GetGraphicsSystem()->getPhaseMutex.lock();
+    std::vector<std::string> messages;
+    for (unsigned int i = remoteAppliedSubstitutions; i < snapshot.substitutions.size(); i++) {
+      const SnapshotSubstitution &sub = snapshot.substitutions.at(i);
+      if (sub.team < 0 || sub.team > 1) continue;
+      Team *team = teams[sub.team];
+      if (!team) continue;
+      const std::vector<Player*> &all = team->GetAllPlayers();
+      if (sub.outSlot < 0 || sub.outSlot >= (int)all.size() || sub.inSlot < 0 || sub.inSlot >= (int)all.size()) continue;
+      Player *outPlayer = all.at(sub.outSlot);
+      Player *inPlayer = all.at(sub.inSlot);
+      if (team->Substitute(outPlayer->GetID(), inPlayer->GetID())) {
+        messages.push_back(outPlayer->GetPlayerData()->GetLastName() + " off, " +
+                           inPlayer->GetPlayerData()->GetLastName() + " on");
+      }
+    }
+    if (!messages.empty()) ShowSubstitutionNotices(messages);
+    GetGraphicsSystem()->getPhaseMutex.unlock();
+    remoteAppliedSubstitutions = (int)snapshot.substitutions.size();
+    remoteSubstitutionCounter = snapshot.substitutionCounter;
+  }
+
   // Possession players drive the name captions; without Process() those fields
   // are frozen on the client, so point them at the action.
   const Vector3 ballPos = ball->GetStatePosition();
@@ -1631,6 +1781,9 @@ void Match::Put() {
     //}
 
     if (messageCaptionRemoveTime_ms <= fetchedbuf_actualTime_ms) messageCaption->Hide();
+    if (substitutionCaptionRemoveTime_ms <= fetchedbuf_actualTime_ms) {
+      for (int i = 0; i < substitutionCaptionCount; i++) substitutionCaptions[i]->Hide();
+    }
 
 
     // radar

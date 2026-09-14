@@ -69,7 +69,12 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_RequestSideSelect,
   e_NetLobbyAction_SetResumeReady,
   e_NetLobbyAction_SetMatchOptions, // value: 0 = difficulty, 1 = duration; value2 = value * 1000
-  e_NetLobbyAction_BackToTeams     // host: leave the options screen back to team selection
+  e_NetLobbyAction_BackToTeams,    // host: leave the options screen back to team selection
+  // In-match substitution request (client -> host). side = teamID, value = out
+  // slot, value2 = in slot; the host validates the peer owns that team.
+  e_NetLobbyAction_RequestSubstitution,
+  // Cancel a queued (not yet applied) substitution: side = teamID, value = out slot.
+  e_NetLobbyAction_CancelSubstitution
 };
 
 struct NetLobbyPlayer {

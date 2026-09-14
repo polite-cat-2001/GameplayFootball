@@ -10,6 +10,8 @@
 #include "teamAIcontroller.hpp"
 #include "humangamer.hpp"
 
+#include <set>
+
 class Match;
 
 class Team {
@@ -31,6 +33,8 @@ class Team {
     TeamData *GetTeamData() { return teamData; }
 
     Player *GetPlayer(int playerID);
+    // Index into GetAllPlayers()/players (== TeamData::playerData index), or -1.
+    int GetPlayerSlot(int playerID);
     PlayerData *GetPlayerData(int playerID);
     FormationEntry GetFormationEntry(int playerID);
     void SetFormationEntry(int playerID, FormationEntry entry);
@@ -45,6 +49,11 @@ class Team {
     bool CanSubstitute() const { return substitutionCount < maxSubstitutions; }
     int GetSubstitutionCount() const { return substitutionCount; }
     bool Substitute(int outPlayerID, int inPlayerID);
+
+    // A player who already left the pitch (substituted out or sent off) can
+    // never come back on.
+    bool HasLeftPitch(int playerID) const;
+    void MarkPlayerLeftPitch(int playerID);
 
     // Runtime designated roles; GetRolePlayer returns 0 when unset or when the
     // designated player left the pitch, so callers fall back to the automatic
@@ -124,6 +133,7 @@ class Team {
 
     std::map<int, FormationEntry> runtimeFormation; // playerID -> role/position for substituted-in players
     int substitutionCount;
+    std::set<int> leftPitch; // playerIDs that went off (subbed or sent off)
 
     // Kept from InitPlayers so bench players can be activated on demand.
     boost::intrusive_ptr<Node> fullbodyNode;
