@@ -75,13 +75,11 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_RequestSubstitution,
   // Cancel a queued (not yet applied) substitution: side = teamID, value = out slot.
   e_NetLobbyAction_CancelSubstitution,
-  // Pre-match hub: host opens/closes the shared game plan (value != 0 = open).
-  e_NetLobbyAction_SetGamePlanOpen,
   // Client lineup edit in the pre-match plan: side = teamID, value/value2 = db ids
   // of the two players to swap; the host validates side ownership and applies it.
   e_NetLobbyAction_PlanSwap,
   // Hub vote: value = e_NetHubVote (0 withdraws). All peers must agree before the
-  // host executes the action (leave the hub, start the match, close the plan).
+  // host executes the action (leave the hub, start the match).
   e_NetLobbyAction_HubVote
 };
 
@@ -89,7 +87,6 @@ enum e_NetLobbyActionType {
 enum e_NetHubVote {
   e_NetHubVote_None = 0,
   e_NetHubVote_BackToTeams,
-  e_NetHubVote_CloseGamePlan,
   e_NetHubVote_StartMatch
 };
 
@@ -110,7 +107,7 @@ struct NetLobbyPlayer {
 // Canonical, host-authoritative lobby state. Mirrored to every peer so that side
 // changes and the team cursor are visible live on all devices.
 struct NetLobbyState {
-  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides), sideSelect(false), gamePlanOpen(false), hubVote(0) {
+  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides), sideSelect(false), hubVote(0) {
     teamId[0] = -1;
     teamId[1] = -1;
     countryId[0] = -1;
@@ -134,8 +131,6 @@ struct NetLobbyState {
   // In-match side selection: while true the lobby stays in the Sides phase and
   // never advances to team selection; all-ready means "resume the match".
   bool sideSelect;
-  // Pre-match hub: the shared game plan overlay is open on every peer.
-  bool gamePlanOpen;
   // Hub action the peers currently agree on (e_NetHubVote); None when idle.
   int hubVote;
   std::vector<NetLobbyPlayer> players;

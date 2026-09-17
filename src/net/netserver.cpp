@@ -838,16 +838,6 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
             sideSelectCancelPending = true;
           }
         }
-      } else if (action.type == e_NetLobbyAction_SetGamePlanOpen) {
-        // Host opens/closes the shared pre-match plan; reset the hub votes.
-        if (player->isHost && lobbyState.phase == e_NetLobbyPhase_Options) {
-          lobbyState.gamePlanOpen = (action.value != 0);
-          for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).hubVote = e_NetHubVote_None;
-          lobbyState.hubVote = e_NetHubVote_None;
-          boost::mutex::scoped_lock lock(hubVoteMutex);
-          hubVoteResultPending = false;
-          changed = true;
-        }
       } else if (action.type == e_NetLobbyAction_PlanSwap) {
         // Client lineup edit: queue it for the host menu layer, which validates
         // side ownership, applies it to its MatchData and relays the swap.
@@ -906,9 +896,8 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
       }
 
       // Hub state only exists in the kickoff-options phase; a fall back to sides
-      // or teams (roster change, back) clears the open plan and pending votes.
+      // or teams (roster change, back) clears pending votes.
       if (lobbyState.phase != e_NetLobbyPhase_Options) {
-        lobbyState.gamePlanOpen = false;
         lobbyState.hubVote = e_NetHubVote_None;
         for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).hubVote = e_NetHubVote_None;
       }

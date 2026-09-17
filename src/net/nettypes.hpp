@@ -15,8 +15,9 @@
 // v4: per-player animation blend state (smooth/smoothFactor) in snapshots.
 // v5: LobbyState match options (difficulty/duration) + Options lobby phase.
 // v6: in-match substitutions (Request/CancelSubstitution, Snapshot.substitutions).
-// v7: pre-match hub: LobbyState.gamePlanOpen/hubVote, hub votes, PlanSwap relay.
-const int net_protocolVersion = 7;
+// v7: pre-match hub: LobbyState.hubVote, hub votes, PlanSwap relay.
+// v8: game plan opens locally per peer (no shared open flag / close vote).
+const int net_protocolVersion = 8;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

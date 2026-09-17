@@ -112,11 +112,7 @@ class MenuTask : public Gui2Task {
     void ApplyPlanSwap(int side, int dbA, int dbB);
     bool PlayerOwnsSide(uint32_t playerId, int side);
 
-    // Pre-match: surface the shared game plan overlay while the host has it open.
-    void UpdateNetworkPlanOverlay();
-
-    // Pre-match: host consumes the agreed hub action (leave hub / close plan /
-    // start). Runs even while the hub page is replaced by the plan overlay.
+    // Pre-match: host consumes the agreed hub action (leave hub / start).
     void ProcessNetworkHubVotes();
 
     unsigned int planRevision = 0;

@@ -53,7 +53,6 @@ class PreMatchPage : public Gui2Page {
     NetLobbyState GetNetworkState();
     void SendHubVote(int vote);
     void SendMatchOption(int field, float value);
-    void SendOpenGamePlan();
     void DoHostStartMatch();
     void UpdateNetworkStatus();
 
@@ -61,7 +60,6 @@ class PreMatchPage : public Gui2Page {
     int localVote; // this peer's own hub vote (toggle source, not the mirrored one)
     Gui2Caption *statusCaption;
     Gui2Button *startButton;
-    Gui2Button *gameplanButton;
 
     MatchData *matchData;
     TeamData *teamData[2];

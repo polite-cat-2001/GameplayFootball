@@ -94,8 +94,6 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   panelDevice[0] = panelDevice[1] = -1;
 
   networkPrematch = !InMatch() && (GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0);
-  networkHost = GetMenuTask()->GetNetServer() != 0;
-  localCloseVote = e_NetHubVote_None;
   seenPlanRevision = GetMenuTask()->GetPlanRevision();
 
   SetupPanels();
@@ -979,24 +977,7 @@ void GamePlanPage::SendPlanSwap(int side, int dbA, int dbB) {
   if (client) client->SendLobbyAction(action);
 }
 
-void GamePlanPage::SendClosePlanVote(int vote) {
-  NetLobbyAction action;
-  action.type = e_NetLobbyAction_HubVote;
-  action.value = vote;
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (server) { action.playerId = 0; server->ApplyLobbyAction(action); return; }
-  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-  if (client) client->SendLobbyAction(action);
-}
-
 void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
-  if (networkPrematch && event->IsEscape()) {
-    // Leaving the shared plan is peer-equal: propose it, press again to withdraw.
-    localCloseVote = (localCloseVote == e_NetHubVote_CloseGamePlan) ? e_NetHubVote_None : e_NetHubVote_CloseGamePlan;
-    SendClosePlanVote(localCloseVote);
-    event->Accept();
-    return;
-  }
   if (dualPanel) { event->Ignore(); return; }
 
   PlanPanel &panel = panels.at(0);
@@ -1018,33 +999,11 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
 
 void GamePlanPage::Process() {
   if (networkPrematch) {
-    // The shared plan is owned by the host: close when it clears the flag, and
-    // rebuild when an authoritative lineup swap lands.
-    NetLobbyState state;
-    boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-    boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-    if (server) state = server->GetLobbyState();
-    else if (client) state = client->GetLobbyState();
-    if (!state.gamePlanOpen) { GoBack(); return; }
-
+    // Each peer owns their local plan screen; rebuild when the host relays an
+    // authoritative lineup swap (own or the other peer's).
     if (GetMenuTask()->GetPlanRevision() != seenPlanRevision) {
       seenPlanRevision = GetMenuTask()->GetPlanRevision();
       if (!panels.empty()) Rebuild(panels.at(0).teamID, -1);
-    }
-
-    // Show the close-plan vote tally (both peers see who has agreed).
-    int total = (int)state.players.size();
-    int ready = 0;
-    for (unsigned int i = 0; i < state.players.size(); i++) {
-      if (state.players.at(i).hubVote == e_NetHubVote_CloseGamePlan) ready++;
-    }
-    int localVote = localCloseVote;
-    if (exitStatus) {
-      if (localVote == e_NetHubVote_CloseGamePlan) {
-        exitStatus->SetCaption("Close plan (" + int_to_str(ready) + "/" + int_to_str(total) + ") - Esc to cancel");
-      } else {
-        exitStatus->SetCaption("Esc: close plan (" + int_to_str(ready) + "/" + int_to_str(total) + ")");
-      }
     }
   }
 

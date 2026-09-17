@@ -66,7 +66,6 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
   }
   buffer.PutFloat(state.matchDifficulty);
   buffer.PutFloat(state.matchDuration);
-  buffer.PutBool(state.gamePlanOpen);
   buffer.PutU32((uint32_t)state.hubVote);
 }
 
@@ -100,7 +99,6 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
   }
   state.matchDifficulty = buffer.GetFloat();
   state.matchDuration = buffer.GetFloat();
-  state.gamePlanOpen = buffer.GetBool();
   state.hubVote = (int)buffer.GetU32();
   return state;
 }

@@ -179,7 +179,6 @@ void MenuTask::ProcessPhase() {
   UpdateGamepadMissingOverlay();
   ProcessNetworkPlanEdits();
   ProcessNetworkHubVotes();
-  UpdateNetworkPlanOverlay();
 
   menuAction = e_MenuAction_None;
 }
@@ -278,13 +277,7 @@ void MenuTask::ProcessNetworkHubVotes() {
   if (!netServer) return;
   int vote = e_NetHubVote_None;
   while (netServer->ConsumeHubVoteResult(vote)) {
-    if (vote == e_NetHubVote_CloseGamePlan) {
-      NetLobbyAction action;
-      action.type = e_NetLobbyAction_SetGamePlanOpen;
-      action.playerId = 0;
-      action.value = 0;
-      netServer->ApplyLobbyAction(action);
-    } else if (vote == e_NetHubVote_BackToTeams) {
+    if (vote == e_NetHubVote_BackToTeams) {
       NetLobbyAction action;
       action.type = e_NetLobbyAction_BackToTeams;
       action.playerId = 0;
@@ -293,23 +286,6 @@ void MenuTask::ProcessNetworkHubVotes() {
       hubStartRequested = true;
     }
   }
-}
-
-void MenuTask::UpdateNetworkPlanOverlay() {
-  NetLobbyState state;
-  bool haveState = false;
-  if (netServer) { state = netServer->GetLobbyState(); haveState = true; }
-  else if (netClient) { state = netClient->GetLobbyState(); haveState = true; }
-  if (!haveState || !state.gamePlanOpen) return;
-  // In-match plans are opened from the pause menu; this overlay is pre-match only.
-  if (GetGameTask() && GetGameTask()->GetMatch()) return;
-
-  const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
-  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_GamePlan) return;
-
-  Properties properties;
-  Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
-  if (topPage) topPage->CreatePage((int)e_PageID_GamePlan, properties, 0);
 }
 
 void MenuTask::UpdateGamepadMissingOverlay() {

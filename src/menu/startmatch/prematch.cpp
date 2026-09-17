@@ -29,7 +29,6 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
 
   statusCaption = 0;
   startButton = 0;
-  gameplanButton = 0;
   localVote = e_NetHubVote_None;
   networkMatch = GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0;
 
@@ -77,11 +76,9 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
       difficultySlider->sig_OnChange.connect([this](Gui2Slider *slider) { SendMatchOption(0, slider->GetValue()); });
       matchDurationSlider->sig_OnChange.connect([this](Gui2Slider *slider) { SendMatchOption(1, slider->GetValue()); });
     } else {
-      // Client: host owns the kickoff options and the plan; sliders only mirror.
+      // Client: host owns the kickoff options; the plan opens locally.
       difficultySlider->SetSelectable(false);
       matchDurationSlider->SetSelectable(false);
-      gameplanButton->SetSelectable(false);
-      gameplanButton->SetActive(false);
       startButton->SetCaption("Confirm start");
     }
     UpdateNetworkStatus();
@@ -133,17 +130,6 @@ void PreMatchPage::SendMatchOption(int field, float value) {
   server->ApplyLobbyAction(action);
 }
 
-void PreMatchPage::SendOpenGamePlan() {
-  if (!IsNetworkHost()) return;
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (!server) return;
-  NetLobbyAction action;
-  action.type = e_NetLobbyAction_SetGamePlanOpen;
-  action.playerId = 0;
-  action.value = 1;
-  server->ApplyLobbyAction(action);
-}
-
 void PreMatchPage::DoHostStartMatch() {
   GetConfiguration()->Set("match_difficulty", difficultySlider->GetValue());
   GetConfiguration()->Set("match_duration", matchDurationSlider->GetValue());
@@ -174,7 +160,7 @@ void PreMatchPage::UpdateNetworkStatus() {
     int v = state.players.at(i).hubVote;
     if (v > e_NetHubVote_None && v <= e_NetHubVote_StartMatch) counts[v]++;
   }
-  const char *names[4] = { "", "back", "close plan", "start" };
+  const char *names[3] = { "", "back", "start" };
   std::string status;
   for (int v = e_NetHubVote_BackToTeams; v <= e_NetHubVote_StartMatch; v++) {
     if (counts[v] == 0) continue;
@@ -290,7 +276,6 @@ void PreMatchPage::BuildContents() {
   // 3: Game plan
   Gui2Grid *gameplan = new Gui2Grid(windowManager, "prematch_content_gameplan", 0, 0, 60, 40);
   Gui2Button *gameplanBtn = new Gui2Button(windowManager, "prematch_gameplan_open", 0, 0, 30, 3, "Open game plan");
-  gameplanButton = gameplanBtn;
   gameplanBtn->sig_OnClick.connect(boost::bind(&PreMatchPage::OpenPage, this, (int)e_PageID_GamePlan));
   gameplan->AddView(gameplanBtn, 0, 0);
   gameplan->UpdateLayout(0.5);
@@ -438,12 +423,8 @@ void PreMatchPage::ShowContent(int tab) {
 }
 
 void PreMatchPage::OpenPage(int pageID) {
-  if (networkMatch && pageID == (int)e_PageID_GamePlan) {
-    // Only the host may open the shared plan; everyone mirrors it via the lobby.
-    SendOpenGamePlan();
-    return;
-  }
-
+  // The game plan is a local screen: each peer opens it for themselves; lineup
+  // edits are synced separately (host-authoritative PlanSwap relay).
   // Remember the active tab in the (shared) page data so returning here with
   // Back recreates the hub on the same tab.
   pageData.properties->SetInt("tab", activeTab);
