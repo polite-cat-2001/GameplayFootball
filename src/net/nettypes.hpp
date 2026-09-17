@@ -14,7 +14,9 @@
 // v3: UDP realtime channel (input/snapshot) + client snapshot interpolation.
 // v4: per-player animation blend state (smooth/smoothFactor) in snapshots.
 // v5: LobbyState match options (difficulty/duration) + Options lobby phase.
-const int net_protocolVersion = 6;
+// v6: in-match substitutions (Request/CancelSubstitution, Snapshot.substitutions).
+// v7: pre-match hub: LobbyState.gamePlanOpen/hubVote, hub votes, PlanSwap relay.
+const int net_protocolVersion = 7;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
@@ -49,6 +51,7 @@ enum e_NetMessageType {
   e_NetMessage_SetupAck,
   e_NetMessage_InputFrame,
   e_NetMessage_Snapshot,
+  e_NetMessage_PlanSwap,
   e_NetMessage_ReliableEvent,
   e_NetMessage_PauseRequest,
   e_NetMessage_PauseState,

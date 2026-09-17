@@ -181,7 +181,7 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
     std::atomic<unsigned long> lastPacketTime_ms{0};
 };
 
-NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1), pauseRequestPending(false), pauseRequestState(false), replayStopPending(false), allResumeReadyPending(false), sideSelectCancelPending(false) {
+NetServer::NetServer(uint16_t port) : port(port), running(false), nextSessionId(1), pauseRequestPending(false), pauseRequestState(false), replayStopPending(false), allResumeReadyPending(false), sideSelectCancelPending(false), hubVoteResultPending(false), hubVoteResult(0) {
 }
 
 NetServer::~NetServer() {
@@ -514,6 +514,28 @@ bool NetServer::ConsumeSubRequest(NetSubRequest &request) {
   return true;
 }
 
+bool NetServer::ConsumePlanSwapRequest(NetPlanSwapRequest &request) {
+  boost::mutex::scoped_lock lock(planSwapMutex);
+  if (planSwapRequests.empty()) return false;
+  request = planSwapRequests.front();
+  planSwapRequests.erase(planSwapRequests.begin());
+  return true;
+}
+
+void NetServer::BroadcastPlanSwap(const NetPlanSwap &swap) {
+  NetBuffer buffer;
+  WritePlanSwap(buffer, swap);
+  BroadcastMessage(e_NetMessage_PlanSwap, buffer);
+}
+
+bool NetServer::ConsumeHubVoteResult(int &vote) {
+  boost::mutex::scoped_lock lock(hubVoteMutex);
+  if (!hubVoteResultPending) return false;
+  hubVoteResultPending = false;
+  vote = hubVoteResult;
+  return true;
+}
+
 void NetServer::SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body) {
   boost::shared_ptr<NetServerConnection> target;
   {
@@ -816,6 +838,49 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
             sideSelectCancelPending = true;
           }
         }
+      } else if (action.type == e_NetLobbyAction_SetGamePlanOpen) {
+        // Host opens/closes the shared pre-match plan; reset the hub votes.
+        if (player->isHost && lobbyState.phase == e_NetLobbyPhase_Options) {
+          lobbyState.gamePlanOpen = (action.value != 0);
+          for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).hubVote = e_NetHubVote_None;
+          lobbyState.hubVote = e_NetHubVote_None;
+          boost::mutex::scoped_lock lock(hubVoteMutex);
+          hubVoteResultPending = false;
+          changed = true;
+        }
+      } else if (action.type == e_NetLobbyAction_PlanSwap) {
+        // Client lineup edit: queue it for the host menu layer, which validates
+        // side ownership, applies it to its MatchData and relays the swap.
+        NetPlanSwapRequest request;
+        request.playerId = action.playerId;
+        request.side = action.side;
+        request.dbA = action.value;
+        request.dbB = action.value2;
+        {
+          boost::mutex::scoped_lock lock(planSwapMutex);
+          planSwapRequests.push_back(request);
+        }
+        return;
+      } else if (action.type == e_NetLobbyAction_HubVote) {
+        // Every peer must agree on the same action before the host executes it.
+        int vote = action.value;
+        if (vote < e_NetHubVote_None || vote > e_NetHubVote_StartMatch) vote = e_NetHubVote_None;
+        player->hubVote = vote;
+        int agreed = e_NetHubVote_None;
+        bool all = !lobbyState.players.empty();
+        for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+          int v = lobbyState.players.at(i).hubVote;
+          if (v <= e_NetHubVote_None) { all = false; break; }
+          if (agreed == e_NetHubVote_None) agreed = v;
+          else if (agreed != v) { all = false; break; }
+        }
+        lobbyState.hubVote = all ? agreed : e_NetHubVote_None;
+        if (all) {
+          boost::mutex::scoped_lock lock(hubVoteMutex);
+          hubVoteResultPending = true;
+          hubVoteResult = agreed;
+        }
+        changed = true;
       }
 
       if (lobbyState.phase == e_NetLobbyPhase_Sides) {
@@ -838,6 +903,14 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
           lobbyState.phase = e_NetLobbyPhase_Options;
           changed = true;
         }
+      }
+
+      // Hub state only exists in the kickoff-options phase; a fall back to sides
+      // or teams (roster change, back) clears the open plan and pending votes.
+      if (lobbyState.phase != e_NetLobbyPhase_Options) {
+        lobbyState.gamePlanOpen = false;
+        lobbyState.hubVote = e_NetHubVote_None;
+        for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).hubVote = e_NetHubVote_None;
       }
     }
 

@@ -6,6 +6,9 @@
 
 #include "../onthepitch/match.hpp"
 
+#include "../data/matchdata.hpp"
+#include "../data/teamdata.hpp"
+
 #include "pagefactory.hpp"
 
 #include "mainmenu.hpp"
@@ -174,6 +177,9 @@ void MenuTask::ProcessPhase() {
 
   UpdateNetworkOverlay();
   UpdateGamepadMissingOverlay();
+  ProcessNetworkPlanEdits();
+  ProcessNetworkHubVotes();
+  UpdateNetworkPlanOverlay();
 
   menuAction = e_MenuAction_None;
 }
@@ -203,6 +209,107 @@ void MenuTask::UpdateNetworkOverlay() {
   } else {
     windowManager->GetPageFactory()->CreatePage((int)e_PageID_SideSelect, properties, 0);
   }
+}
+
+int MenuTask::GetLocalNetworkTeamID() {
+  NetLobbyState state;
+  int localId = 0;
+  if (netServer) {
+    state = netServer->GetLobbyState();
+  } else if (netClient) {
+    state = netClient->GetLobbyState();
+    localId = (int)netClient->GetPlayerId();
+  } else {
+    return -1;
+  }
+
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if ((int)state.players.at(i).id != localId) continue;
+    if (state.players.at(i).side == e_NetSide_Home) return 0;
+    if (state.players.at(i).side == e_NetSide_Away) return 1;
+    return -1; // spectator/centre
+  }
+  return -1;
+}
+
+bool MenuTask::PlayerOwnsSide(uint32_t playerId, int side) {
+  NetLobbyState state;
+  if (netServer) state = netServer->GetLobbyState();
+  else if (netClient) state = netClient->GetLobbyState();
+  else return false;
+
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (state.players.at(i).id != playerId) continue;
+    return (side == 0 && state.players.at(i).side == e_NetSide_Home) ||
+           (side == 1 && state.players.at(i).side == e_NetSide_Away);
+  }
+  return false;
+}
+
+void MenuTask::ApplyPlanSwap(int side, int dbA, int dbB) {
+  MatchData *matchData = GetMatchData();
+  if (!matchData || side < 0 || side > 1 || dbA < 0 || dbB < 0 || dbA == dbB) return;
+  TeamData *teamData = matchData->GetTeamData(side);
+  if (!teamData) return;
+  teamData->SwitchPlayers(dbA, dbB);
+  planRevision++;
+}
+
+void MenuTask::ProcessNetworkPlanEdits() {
+  if (netServer) {
+    // Host: apply client edits under ownership check, then relay to everyone.
+    NetPlanSwapRequest request;
+    while (netServer->ConsumePlanSwapRequest(request)) {
+      if (!PlayerOwnsSide(request.playerId, request.side)) continue;
+      ApplyPlanSwap(request.side, request.dbA, request.dbB);
+      NetPlanSwap swap;
+      swap.side = request.side;
+      swap.dbA = request.dbA;
+      swap.dbB = request.dbB;
+      netServer->BroadcastPlanSwap(swap);
+    }
+  } else if (netClient) {
+    NetPlanSwap swap;
+    while (netClient->ConsumePlanSwap(swap)) ApplyPlanSwap(swap.side, swap.dbA, swap.dbB);
+  }
+}
+
+void MenuTask::ProcessNetworkHubVotes() {
+  if (!netServer) return;
+  int vote = e_NetHubVote_None;
+  while (netServer->ConsumeHubVoteResult(vote)) {
+    if (vote == e_NetHubVote_CloseGamePlan) {
+      NetLobbyAction action;
+      action.type = e_NetLobbyAction_SetGamePlanOpen;
+      action.playerId = 0;
+      action.value = 0;
+      netServer->ApplyLobbyAction(action);
+    } else if (vote == e_NetHubVote_BackToTeams) {
+      NetLobbyAction action;
+      action.type = e_NetLobbyAction_BackToTeams;
+      action.playerId = 0;
+      netServer->ApplyLobbyAction(action);
+    } else if (vote == e_NetHubVote_StartMatch) {
+      hubStartRequested = true;
+    }
+  }
+}
+
+void MenuTask::UpdateNetworkPlanOverlay() {
+  NetLobbyState state;
+  bool haveState = false;
+  if (netServer) { state = netServer->GetLobbyState(); haveState = true; }
+  else if (netClient) { state = netClient->GetLobbyState(); haveState = true; }
+  if (!haveState || !state.gamePlanOpen) return;
+  // In-match plans are opened from the pause menu; this overlay is pre-match only.
+  if (GetGameTask() && GetGameTask()->GetMatch()) return;
+
+  const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_GamePlan) return;
+
+  Properties properties;
+  Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
+  if (topPage) topPage->CreatePage((int)e_PageID_GamePlan, properties, 0);
 }
 
 void MenuTask::UpdateGamepadMissingOverlay() {

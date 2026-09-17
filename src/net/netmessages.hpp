@@ -74,11 +74,27 @@ enum e_NetLobbyActionType {
   // slot, value2 = in slot; the host validates the peer owns that team.
   e_NetLobbyAction_RequestSubstitution,
   // Cancel a queued (not yet applied) substitution: side = teamID, value = out slot.
-  e_NetLobbyAction_CancelSubstitution
+  e_NetLobbyAction_CancelSubstitution,
+  // Pre-match hub: host opens/closes the shared game plan (value != 0 = open).
+  e_NetLobbyAction_SetGamePlanOpen,
+  // Client lineup edit in the pre-match plan: side = teamID, value/value2 = db ids
+  // of the two players to swap; the host validates side ownership and applies it.
+  e_NetLobbyAction_PlanSwap,
+  // Hub vote: value = e_NetHubVote (0 withdraws). All peers must agree before the
+  // host executes the action (leave the hub, start the match, close the plan).
+  e_NetLobbyAction_HubVote
+};
+
+// Shared pre-match hub action requiring confirmation from every peer.
+enum e_NetHubVote {
+  e_NetHubVote_None = 0,
+  e_NetHubVote_BackToTeams,
+  e_NetHubVote_CloseGamePlan,
+  e_NetHubVote_StartMatch
 };
 
 struct NetLobbyPlayer {
-  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0), device(0), resumeReady(false) {}
+  NetLobbyPlayer() : id(0), side(e_NetSide_Spectator), ready(false), isHost(false), ping_ms(0), device(0), resumeReady(false), hubVote(0) {}
 
   uint32_t id;
   std::string name;
@@ -88,12 +104,13 @@ struct NetLobbyPlayer {
   int ping_ms;
   int device; // 0 = keyboard, 1 = gamepad (last device used by this peer)
   bool resumeReady; // voted to leave the in-match pause menu
+  int hubVote;      // e_NetHubVote this peer agrees to (0 = none)
 };
 
 // Canonical, host-authoritative lobby state. Mirrored to every peer so that side
 // changes and the team cursor are visible live on all devices.
 struct NetLobbyState {
-  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides), sideSelect(false) {
+  NetLobbyState() : revision(0), phase(e_NetLobbyPhase_Sides), sideSelect(false), gamePlanOpen(false), hubVote(0) {
     teamId[0] = -1;
     teamId[1] = -1;
     countryId[0] = -1;
@@ -117,6 +134,10 @@ struct NetLobbyState {
   // In-match side selection: while true the lobby stays in the Sides phase and
   // never advances to team selection; all-ready means "resume the match".
   bool sideSelect;
+  // Pre-match hub: the shared game plan overlay is open on every peer.
+  bool gamePlanOpen;
+  // Hub action the peers currently agree on (e_NetHubVote); None when idle.
+  int hubVote;
   std::vector<NetLobbyPlayer> players;
   int teamId[2];
   int countryId[2];
@@ -166,6 +187,19 @@ struct NetMatchSetup {
 
 void WriteMatchSetup(NetBuffer &buffer, const NetMatchSetup &setup);
 NetMatchSetup ReadMatchSetup(NetBuffer &buffer);
+
+// Authoritative pre-match lineup swap, broadcast by the host after validating a
+// client's PlanSwap request (or applying its own edit). Sides ship db ids.
+struct NetPlanSwap {
+  NetPlanSwap() : side(0), dbA(-1), dbB(-1) {}
+
+  int side;
+  int dbA;
+  int dbB;
+};
+
+void WritePlanSwap(NetBuffer &buffer, const NetPlanSwap &swap);
+NetPlanSwap ReadPlanSwap(NetBuffer &buffer);
 
 // Host animation collection listing, in host index order. The client resolves
 // each name to its own Animation* so snapshots can carry a compact animID.

@@ -53,6 +53,7 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
     buffer.PutU32((uint32_t)player.ping_ms);
     buffer.PutU32((uint32_t)player.device);
     buffer.PutBool(player.resumeReady);
+    buffer.PutU32((uint32_t)player.hubVote);
   }
   for (int side = 0; side < 2; side++) {
     buffer.PutU32((uint32_t)state.teamId[side]);
@@ -65,6 +66,8 @@ void WriteLobbyState(NetBuffer &buffer, const NetLobbyState &state) {
   }
   buffer.PutFloat(state.matchDifficulty);
   buffer.PutFloat(state.matchDuration);
+  buffer.PutBool(state.gamePlanOpen);
+  buffer.PutU32((uint32_t)state.hubVote);
 }
 
 NetLobbyState ReadLobbyState(NetBuffer &buffer) {
@@ -84,6 +87,7 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
     player.ping_ms = (int)buffer.GetU32();
     player.device = (int)buffer.GetU32();
     player.resumeReady = buffer.GetBool();
+    player.hubVote = (int)buffer.GetU32();
   }
   for (int side = 0; side < 2; side++) {
     state.teamId[side] = (int)buffer.GetU32();
@@ -96,6 +100,8 @@ NetLobbyState ReadLobbyState(NetBuffer &buffer) {
   }
   state.matchDifficulty = buffer.GetFloat();
   state.matchDuration = buffer.GetFloat();
+  state.gamePlanOpen = buffer.GetBool();
+  state.hubVote = (int)buffer.GetU32();
   return state;
 }
 
@@ -148,6 +154,20 @@ NetMatchSetup ReadMatchSetup(NetBuffer &buffer) {
   setup.teamId[0] = (int)buffer.GetU32();
   setup.teamId[1] = (int)buffer.GetU32();
   return setup;
+}
+
+void WritePlanSwap(NetBuffer &buffer, const NetPlanSwap &swap) {
+  buffer.PutU32((uint32_t)swap.side);
+  buffer.PutU32((uint32_t)swap.dbA);
+  buffer.PutU32((uint32_t)swap.dbB);
+}
+
+NetPlanSwap ReadPlanSwap(NetBuffer &buffer) {
+  NetPlanSwap swap;
+  swap.side = (int)buffer.GetU32();
+  swap.dbA = (int)buffer.GetU32();
+  swap.dbB = (int)buffer.GetU32();
+  return swap;
 }
 
 void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names) {

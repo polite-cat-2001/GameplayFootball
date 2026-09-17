@@ -82,6 +82,21 @@ class MenuTask : public Gui2Task {
     void SetNetClient(boost::shared_ptr<NetClient> client) { netClient = client; }
     boost::shared_ptr<NetClient> GetNetClient() { return netClient; }
 
+    // Team (0/1) this peer controls in the current network match, resolved from
+    // the authoritative lobby (sides live there, not in the local controller
+    // setup, which the mirrored network side screen never fills). -1 when not
+    // in a network match or when this peer is a spectator.
+    int GetLocalNetworkTeamID();
+
+    // Pre-match plan sync: bumped whenever a lineup swap is applied (local host
+    // edit relayed to clients, or an authoritative swap received from the host).
+    // GamePlanPage watches it to rebuild.
+    unsigned int GetPlanRevision() const { return planRevision; }
+
+    // Host only: set once all peers agreed to start the match; PreMatchPage
+    // consumes it and performs the actual kickoff.
+    bool ConsumeHubStartRequested() { bool r = hubStartRequested; hubStartRequested = false; return r; }
+
   protected:
     // Menu-layer reaction to the network match state: opens the mirrored side
     // selection overlay. GameTask no longer touches the GUI.
@@ -90,6 +105,22 @@ class MenuTask : public Gui2Task {
     // Menu-layer reaction to a local gamepad disappearing mid-match: pause and
     // open the side/device selection overlay. GameTask no longer touches the GUI.
     void UpdateGamepadMissingOverlay();
+
+    // Pre-match: consume client lineup swaps (host applies + relays) or apply
+    // host-relayed swaps (client) to the shared MatchData.
+    void ProcessNetworkPlanEdits();
+    void ApplyPlanSwap(int side, int dbA, int dbB);
+    bool PlayerOwnsSide(uint32_t playerId, int side);
+
+    // Pre-match: surface the shared game plan overlay while the host has it open.
+    void UpdateNetworkPlanOverlay();
+
+    // Pre-match: host consumes the agreed hub action (leave hub / close plan /
+    // start). Runs even while the hub page is replaced by the plan overlay.
+    void ProcessNetworkHubVotes();
+
+    unsigned int planRevision = 0;
+    bool hubStartRequested = false;
 
     unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
 

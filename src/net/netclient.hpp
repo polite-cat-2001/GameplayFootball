@@ -51,6 +51,9 @@ class NetClient {
     bool ConsumeEnvironment(NetMatchEnvironment &environment);
     bool ConsumePauseState(bool &paused);
     bool ConsumeReplayStop();
+    // Authoritative pre-match lineup swaps relayed by the host (host-applied
+    // client edits). One-shot reads, applied to the local MatchData.
+    bool ConsumePlanSwap(NetPlanSwap &swap);
 
   private:
     void Run();
@@ -125,6 +128,7 @@ class NetClient {
     bool pauseStatePending;
     bool pauseState;
     bool replayStopPending;
+    std::deque<NetPlanSwap> planSwaps; // guarded by pendingMutex
 };
 
 #endif

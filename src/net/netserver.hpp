@@ -29,6 +29,17 @@ struct NetSubRequest {
   bool cancel;
 };
 
+// A client pre-match lineup swap, attributed to the requesting peer. The host
+// menu layer validates side ownership, applies it to its MatchData and relays it.
+struct NetPlanSwapRequest {
+  NetPlanSwapRequest() : playerId(0), side(0), dbA(-1), dbB(-1) {}
+
+  uint32_t playerId;
+  int side;
+  int dbA;
+  int dbB;
+};
+
 class NetServer {
 
   public:
@@ -105,6 +116,14 @@ class NetServer {
     // Substitution intents from clients, consumed by the host's game task.
     bool ConsumeSubRequest(NetSubRequest &request);
 
+    // Pre-match hub. The host menu layer consumes client lineup swaps, validates
+    // ownership, applies them and calls BroadcastPlanSwap so everyone mirrors it.
+    bool ConsumePlanSwapRequest(NetPlanSwapRequest &request);
+    void BroadcastPlanSwap(const NetPlanSwap &swap);
+
+    // All peers agreed on a hub action (e_NetHubVote); consumed once by the host.
+    bool ConsumeHubVoteResult(int &vote);
+
     // Send one control message to a single peer (host -> one client).
     void SendToPlayer(uint32_t playerId, e_NetMessageType type, NetBuffer &body);
 
@@ -169,6 +188,13 @@ class NetServer {
 
     boost::mutex subRequestMutex;
     std::vector<NetSubRequest> subRequests;
+
+    boost::mutex planSwapMutex;
+    std::vector<NetPlanSwapRequest> planSwapRequests;
+
+    boost::mutex hubVoteMutex;
+    bool hubVoteResultPending;
+    int hubVoteResult;
 
     boost::mutex disconnectMutex;
     std::vector<uint32_t> disconnectedPlayers;

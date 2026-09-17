@@ -100,7 +100,11 @@ void Team::InitPlayers(boost::intrusive_ptr<Node> fullbodyNode, std::map<Vector3
 void Team::ActivatePlayer(Player *player) {
   std::string kitFilename;
   if (GetFormationEntry(player->GetID()).role != e_PlayerRole_GK) {
-    kitFilename = GetTeamData()->GetKitUrl() + "_kit_0" + int_to_str(GetMenuTask()->GetTeamKitNum(GetID())) + ".png";
+    // Use the live kit number: SetKitNumber may have changed it mid-match, and a
+    // substituted-in player must wear the same kit as the rest of the team.
+    std::string kitNumberString = int_to_str(kitNumber);
+    if (kitNumberString.size() < 2) kitNumberString = "0" + kitNumberString;
+    kitFilename = GetTeamData()->GetKitUrl() + "_kit_" + kitNumberString + ".png";
     if (!boost::filesystem::exists(kitFilename)) kitFilename = (GetID() == 0) ? "media/textures/almost_white.png" : "media/textures/almost_black.png";
   } else {
     kitFilename = "media/objects/players/textures/goalie_kit.png";

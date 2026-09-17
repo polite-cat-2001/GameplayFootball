@@ -7,6 +7,7 @@
 
 #include "utils/gui2/windowmanager.hpp"
 
+#include "utils/gui2/events.hpp"
 #include "utils/gui2/page.hpp"
 #include "utils/gui2/widgets/grid.hpp"
 #include "utils/gui2/widgets/button.hpp"
@@ -17,6 +18,7 @@
 #include "../pagefactory.hpp"
 
 #include "../../data/matchdata.hpp"
+#include "../../net/netmessages.hpp"
 
 using namespace blunted;
 
@@ -34,6 +36,8 @@ class PreMatchPage : public Gui2Page {
     void GoStartMatch();
     void OpenPage(int pageID);
 
+    virtual void Process();
+    virtual void ProcessKeyboardEvent(KeyboardEvent *event);
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
@@ -42,6 +46,22 @@ class PreMatchPage : public Gui2Page {
     void ShowContent(int tab);
     void FocusFirstContent();
     bool IsInContent(Gui2View *view);
+
+    // Network hub: host-authoritative options, host-only game plan, and
+    // confirmations from both peers before leaving the hub or starting.
+    bool IsNetworkHost() const;
+    NetLobbyState GetNetworkState();
+    void SendHubVote(int vote);
+    void SendMatchOption(int field, float value);
+    void SendOpenGamePlan();
+    void DoHostStartMatch();
+    void UpdateNetworkStatus();
+
+    bool networkMatch;
+    int localVote; // this peer's own hub vote (toggle source, not the mirrored one)
+    Gui2Caption *statusCaption;
+    Gui2Button *startButton;
+    Gui2Button *gameplanButton;
 
     MatchData *matchData;
     TeamData *teamData[2];

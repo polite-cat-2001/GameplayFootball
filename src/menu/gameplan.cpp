@@ -13,6 +13,7 @@
 
 #include "../net/netclient.hpp"
 #include "../net/netmessages.hpp"
+#include "../net/netserver.hpp"
 #include "../onthepitch/match.hpp"
 #include "../onthepitch/team.hpp"
 #include "../hid/gamepad.hpp"
@@ -91,6 +92,11 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   rebuildFocusSlot = -1;
   dualPanel = false;
   panelDevice[0] = panelDevice[1] = -1;
+
+  networkPrematch = !InMatch() && (GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0);
+  networkHost = GetMenuTask()->GetNetServer() != 0;
+  localCloseVote = e_NetHubVote_None;
+  seenPlanRevision = GetMenuTask()->GetPlanRevision();
 
   SetupPanels();
 
@@ -193,8 +199,14 @@ void GamePlanPage::SetupPanels() {
   // Both in-match and pre-match: if two local humans control the two sides, show
   // and edit both teams. (Pre-match edits TeamData in MatchData, in-match the
   // live Team; either way each panel is driven by its own device.)
-  const bool networkClient = GetMenuTask()->GetNetClient() != 0;
-  if (!networkClient) {
+  const bool networkMatch = GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0;
+  if (networkMatch) {
+    // Network sides live in the lobby, not in the local controller setup (the
+    // mirrored side screen never fills ControllerSetup). Edit only the team this
+    // peer owns; the opponent stays read-only.
+    int localTeam = GetMenuTask()->GetLocalNetworkTeamID();
+    if (localTeam >= 0) { teams.push_back(localTeam); devices.push_back(-1); }
+  } else {
     const std::vector<SideSelection> sides = GetMenuTask()->GetControllerSetup();
     for (unsigned int s = 0; s < sides.size(); s++) {
       if (sides.at(s).side == 0) continue; // spectator/centre
@@ -208,9 +220,7 @@ void GamePlanPage::SetupPanels() {
   if (teams.size() > 2) { teams.resize(2); devices.resize(2); }
   if (teams.size() >= 2) {
     dualPanel = true;
-  } else {
-    teams.clear();
-    devices.clear();
+  } else if (teams.empty()) {
     teams.push_back(requestedTeamID);
     devices.push_back(-1);
   }
@@ -227,6 +237,12 @@ void GamePlanPage::SetupPanels() {
       panel.px = d0_px; panel.pw = d0_pw; panel.bx = d0_bx; panel.bw = d0_bw;
     } else if (dualPanel && i == 1) {
       panel.px = d1_px; panel.pw = d1_pw; panel.bx = d1_bx; panel.bw = d1_bw;
+    } else if (networkMatch && panel.teamID == 1) {
+      // Own team is the away side: keep the real orientation (away on the right),
+      // with its bench to the right; the home opponent is drawn on the left.
+      panel.px = d1_px; panel.pw = d1_pw; panel.bx = d1_bx; panel.bw = d1_bw;
+    } else if (networkMatch) {
+      panel.px = d0_px; panel.pw = d0_pw; panel.bx = d0_bx; panel.bw = d0_bw;
     } else {
       panel.px = s_px; panel.pw = s_pw; panel.bx = s_bx; panel.bw = s_bw;
     }
@@ -235,6 +251,14 @@ void GamePlanPage::SetupPanels() {
 
     panelDevice[i] = devices.at(i);
     panels.push_back(panel);
+  }
+
+  // Single-panel opponent placement: mirror it to the opposite side of the peer.
+  oppX = s_oppx;
+  oppW = s_oppw;
+  if (networkMatch && !dualPanel && !panels.empty()) {
+    if (panels.at(0).teamID == 1) { oppX = d0_px; oppW = d0_pw; }
+    else { oppX = d1_px; oppW = d1_pw; }
   }
 }
 
@@ -267,7 +291,7 @@ void GamePlanPage::BuildPlan() {
 
   if (!dualPanel) {
     int opponentID = abs(panels.at(0).teamID - 1);
-    Gui2Image *oppPitch = new Gui2Image(windowManager, "gameplan_opp_bg", s_oppx, pitchY, s_oppw, pitchH);
+    Gui2Image *oppPitch = new Gui2Image(windowManager, "gameplan_opp_bg", oppX, pitchY, oppW, pitchH);
     oppPitch->LoadImage("media/menu/planmap_vertical.png");
     this->AddView(oppPitch);
     oppPitch->Show();
@@ -279,7 +303,7 @@ void GamePlanPage::BuildPlan() {
 void GamePlanPage::BuildEntries() {
   ClearEntries();
   for (unsigned int p = 0; p < panels.size(); p++) BuildPanel(panels.at(p));
-  if (!dualPanel) BuildOpponent(abs(panels.at(0).teamID - 1), s_oppx, pitchY, s_oppw, pitchH);
+  if (!dualPanel) BuildOpponent(abs(panels.at(0).teamID - 1), oppX, pitchY, oppW, pitchH);
   for (unsigned int p = 0; p < panels.size(); p++) LayoutBench(panels.at(p));
 }
 
@@ -541,7 +565,7 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
 void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
   ClearEntries();
   for (unsigned int p = 0; p < panels.size(); p++) BuildPanel(panels.at(p));
-  if (!dualPanel) BuildOpponent(abs(panels.at(0).teamID - 1), s_oppx, pitchY, s_oppw, pitchH);
+  if (!dualPanel) BuildOpponent(abs(panels.at(0).teamID - 1), oppX, pitchY, oppW, pitchH);
   for (unsigned int p = 0; p < panels.size(); p++) LayoutBench(panels.at(p));
 
   for (unsigned int p = 0; p < panels.size(); p++) {
@@ -704,6 +728,12 @@ void GamePlanPage::PerformAction(PlanPanel &panel, int a, int b) {
     // pre-match: swap the two slots in TeamData
     int idA = panel.teamData->GetPlayerData(entries.at(a).index)->GetDatabaseID();
     int idB = panel.teamData->GetPlayerData(entries.at(b).index)->GetDatabaseID();
+    if (networkPrematch) {
+      // Host-authoritative: send the intent; the host applies it and relays the
+      // authoritative swap back, which triggers the rebuild below.
+      SendPlanSwap(panel.teamID, idA, idB);
+      return;
+    }
     panel.teamData->SwitchPlayers(idA, idB);
     Refresh();
     return;
@@ -937,7 +967,36 @@ void GamePlanPage::ProcessJoystickEvent(JoystickEvent *event) {
   }
 }
 
+void GamePlanPage::SendPlanSwap(int side, int dbA, int dbB) {
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_PlanSwap;
+  action.side = side;
+  action.value = dbA;
+  action.value2 = dbB;
+  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+  if (server) { action.playerId = 0; server->ApplyLobbyAction(action); return; }
+  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+  if (client) client->SendLobbyAction(action);
+}
+
+void GamePlanPage::SendClosePlanVote(int vote) {
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_HubVote;
+  action.value = vote;
+  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+  if (server) { action.playerId = 0; server->ApplyLobbyAction(action); return; }
+  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+  if (client) client->SendLobbyAction(action);
+}
+
 void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
+  if (networkPrematch && event->IsEscape()) {
+    // Leaving the shared plan is peer-equal: propose it, press again to withdraw.
+    localCloseVote = (localCloseVote == e_NetHubVote_CloseGamePlan) ? e_NetHubVote_None : e_NetHubVote_CloseGamePlan;
+    SendClosePlanVote(localCloseVote);
+    event->Accept();
+    return;
+  }
   if (dualPanel) { event->Ignore(); return; }
 
   PlanPanel &panel = panels.at(0);
@@ -958,6 +1017,37 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
 }
 
 void GamePlanPage::Process() {
+  if (networkPrematch) {
+    // The shared plan is owned by the host: close when it clears the flag, and
+    // rebuild when an authoritative lineup swap lands.
+    NetLobbyState state;
+    boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+    boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+    if (server) state = server->GetLobbyState();
+    else if (client) state = client->GetLobbyState();
+    if (!state.gamePlanOpen) { GoBack(); return; }
+
+    if (GetMenuTask()->GetPlanRevision() != seenPlanRevision) {
+      seenPlanRevision = GetMenuTask()->GetPlanRevision();
+      if (!panels.empty()) Rebuild(panels.at(0).teamID, -1);
+    }
+
+    // Show the close-plan vote tally (both peers see who has agreed).
+    int total = (int)state.players.size();
+    int ready = 0;
+    for (unsigned int i = 0; i < state.players.size(); i++) {
+      if (state.players.at(i).hubVote == e_NetHubVote_CloseGamePlan) ready++;
+    }
+    int localVote = localCloseVote;
+    if (exitStatus) {
+      if (localVote == e_NetHubVote_CloseGamePlan) {
+        exitStatus->SetCaption("Close plan (" + int_to_str(ready) + "/" + int_to_str(total) + ") - Esc to cancel");
+      } else {
+        exitStatus->SetCaption("Esc: close plan (" + int_to_str(ready) + "/" + int_to_str(total) + ")");
+      }
+    }
+  }
+
   if (rebuildPending) {
     rebuildPending = false;
     Rebuild(rebuildFocusTeam, rebuildFocusSlot);

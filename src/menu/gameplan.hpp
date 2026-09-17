@@ -126,6 +126,9 @@ class GamePlanPage : public Gui2Page {
     TeamData *GetTeamDataFor(int teamID);
     Team *GetTeamFor(int teamID);
 
+    void SendPlanSwap(int side, int dbA, int dbB);
+    void SendClosePlanVote(int vote);
+
     std::vector<PlanEntry> entries;
     std::vector<PlanPanel> panels;
     bool dualPanel;
@@ -137,6 +140,19 @@ class GamePlanPage : public Gui2Page {
     bool rebuildPending;
     int rebuildFocusTeam;
     int rebuildFocusSlot;
+
+    // Pre-match network plan: shared (host opens it), each peer edits only its
+    // own team; edits are relayed through the host and the page rebuilds when the
+    // shared MatchData changes.
+    bool networkPrematch;
+    unsigned int seenPlanRevision;
+    bool networkHost;
+    int localCloseVote; // this peer's own close-plan vote (toggle source)
+
+    // Single-panel placement of the read-only opponent (mirrored when the peer's
+    // team is the away side, so own team sits on the right).
+    float oppX;
+    float oppW;
 
     Gui2Caption *header;
     Gui2Caption *exitStatus;

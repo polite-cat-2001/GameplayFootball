@@ -65,6 +65,9 @@ class PlayerBase {
     const AnimApplyBuffer &GetAnimApplyBuffer() const { return humanoid->GetAnimApplyBuffer(); }
   void SetRemotePose(Animation *anim, int frameNum, const Vector3 &position, radian orientation, bool noPos,
                      bool smooth = true, float smoothFactor = 1.0f) {
+    // Inactive players (e.g. just substituted in, before the relay runs) have no
+    // humanoid yet; a snapshot pose must not dereference it.
+    if (!humanoid) return;
     humanoid->SetRemotePose(anim, frameNum, position, orientation, noPos, smooth, smoothFactor);
     }
 

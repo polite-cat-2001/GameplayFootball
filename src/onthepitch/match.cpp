@@ -1542,10 +1542,9 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     scoreboard->SetGoalCount(1, snapshot.score[1]);
   }
 
-  ApplySnapshot(this, snapshot, remoteAnimTable);
-
-  // Relay applied substitutions: run the same Team::Substitute so the incoming
-  // player's humanoid is activated with the outgoing player's role.
+  // Relay applied substitutions first: the incoming player's humanoid must be
+  // activated before the snapshot poses below reference it (otherwise an
+  // inactive, model-less player is posed -> crash).
   if (snapshot.substitutionCounter != remoteSubstitutionCounter) {
     // Structural scene change: block the graphics thread while swapping models.
     GetGraphicsSystem()->getPhaseMutex.lock();
@@ -1569,6 +1568,8 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     remoteAppliedSubstitutions = (int)snapshot.substitutions.size();
     remoteSubstitutionCounter = snapshot.substitutionCounter;
   }
+
+  ApplySnapshot(this, snapshot, remoteAnimTable);
 
   // Possession players drive the name captions; without Process() those fields
   // are frozen on the client, so point them at the action.

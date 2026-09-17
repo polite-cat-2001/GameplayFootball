@@ -235,6 +235,9 @@ int ApplySnapshot(Match *match, const Snapshot &snapshot, const std::vector<Anim
     if (pose.team < 0 || pose.team > 1) continue;
     std::vector<Player*> &all = teamPlayers[pose.team];
     if (pose.slot < 0 || pose.slot >= (int)all.size()) continue;
+    // The client may not have relayed a substitution yet, so a player the host
+    // has on the pitch can still be inactive here (and pose-less).
+    if (!all.at(pose.slot)->IsActive()) continue;
     if (pose.animID >= 0 && pose.animID < (int)animTable.size() && animTable.at(pose.animID)) {
       ApplySnapshotPose(all.at(pose.slot), pose, animTable);
       applied++;

@@ -402,7 +402,8 @@ void NetworkLobbyPage::Process() {
     return;
   }
   if (state.phase == e_NetLobbyPhase_Options) {
-    CreatePage(e_PageID_NetworkMatchOptions);
+    // Kickoff hub, same as the single-player pre-match page (host-authoritative).
+    CreatePage(e_PageID_PreMatch);
     return;
   }
 
