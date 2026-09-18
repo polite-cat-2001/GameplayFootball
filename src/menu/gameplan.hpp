@@ -29,8 +29,9 @@ using namespace blunted;
 struct PlanEntry {
   Gui2Button *button;
   Gui2Caption *roleCaption;
-  Gui2Caption *ratingCaption; // bench only: rating sits to the right of the name
-  Gui2Caption *nameCaption;   // pitch only: centered name drawn over the button
+  Gui2Caption *ratingCaption;  // bench only: rating sits to the right of the name
+  Gui2Caption *fatigueCaption; // condition %, right of the rating (all entries)
+  Gui2Caption *nameCaption;    // pitch only: centered name drawn over the button
   Gui2Image *photo;           // pitch only: placeholder portrait
   e_PlayerRole role;          // display role (pending subs included)
   int teamID;
@@ -116,6 +117,8 @@ class GamePlanPage : public Gui2Page {
     void Refresh();
     void RefreshPanel(PlanPanel &panel);
     void CenterCaption(Gui2Caption *caption, float centerX, float y, float height, const std::string &text);
+    float EntryFatigue(PlanPanel &panel, const PlanEntry &entry);
+    void PositionPitchCaption(PlanEntry &entry, const std::string &roleText, const std::string &fatigueText);
 
     void EntryClicked(int entryPosition);
 

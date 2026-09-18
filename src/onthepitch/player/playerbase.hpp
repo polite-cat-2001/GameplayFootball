@@ -104,6 +104,7 @@ class PlayerBase {
     const NodeMap &GetNodeMap() { return humanoid->GetNodeMap(); }
 
     float GetFatigueFactorInv() const { return fatigueFactorInv; }
+    void SetFatigueFactorInv(float value) { fatigueFactorInv = clamp(value, 0.01f, 1.0f); }
     void RelaxFatigue(float howMuch) { fatigueFactorInv += howMuch; fatigueFactorInv = clamp(fatigueFactorInv, 0.01f, 1.0f); }
     float GetConfidenceFactor() const { return confidenceFactor; }
 

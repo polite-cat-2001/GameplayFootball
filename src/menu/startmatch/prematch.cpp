@@ -11,6 +11,8 @@
 #include "../../net/netclient.hpp"
 #include "../../net/netserver.hpp"
 
+#include "../../hid/gamepad.hpp"
+
 using namespace blunted;
 
 namespace {
@@ -31,6 +33,8 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
   startButton = 0;
   localVote = e_NetHubVote_None;
   networkMatch = GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0;
+  localTwoPlayers = false;
+  suppressLocalEscape = false;
 
   // In a network match the lobby is canonical for the chosen teams; seed the
   // menu's team ids from it before building the shared MatchData.
@@ -82,6 +86,16 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
       startButton->SetCaption("Confirm start");
     }
     UpdateNetworkStatus();
+  } else {
+    // Local two-player: like the LAN vote, but the votes come from the two local
+    // side devices instead of two peers.
+    localTwoPlayers = GetMenuTask()->HasTwoLocalPlayers();
+    if (localTwoPlayers) {
+      statusCaption = new Gui2Caption(windowManager, "prematch_status", 20, 92, 60, 3, "");
+      this->AddView(statusCaption);
+      statusCaption->Show();
+      UpdateLocalStatus();
+    }
   }
 
   this->Show();
@@ -180,8 +194,68 @@ void PreMatchPage::UpdateNetworkStatus() {
   }
 }
 
+bool PreMatchPage::StartButtonFocused() {
+  return startButton && windowManager->GetFocus() == startButton;
+}
+
+void PreMatchPage::FocusKickOffTab() {
+  SelectTab(2); // Kick-off
+  if (tabButtons.size() > 2) tabButtons.at(2)->SetFocus();
+}
+
+bool PreMatchPage::CancelLocalStartVote(int controllerID) {
+  if (!localStartVotes.count(controllerID)) return false;
+  localStartVotes.erase(controllerID);
+  UpdateLocalStatus();
+  FocusKickOffTab();
+  return true;
+}
+
+void PreMatchPage::ToggleLocalStartVote(int controllerID) {
+  if (localStartVotes.count(controllerID)) localStartVotes.erase(controllerID);
+  else localStartVotes.insert(controllerID);
+  UpdateLocalStatus();
+
+  int device[2];
+  GetMenuTask()->GetLocalSideDevices(device);
+  int needed = 0;
+  for (int i = 0; i < 2; i++) if (device[i] >= 0) needed++;
+  if ((int)localStartVotes.size() >= needed) DoLocalStartMatch(); // deletes this
+}
+
+void PreMatchPage::UpdateLocalStatus() {
+  if (!statusCaption) return;
+  int device[2];
+  GetMenuTask()->GetLocalSideDevices(device);
+  int total = 0;
+  for (int i = 0; i < 2; i++) if (device[i] >= 0) total++;
+  statusCaption->SetCaption("start " + int_to_str((int)localStartVotes.size()) + "/" + int_to_str(total));
+  // Shared screen, per-side votes: a "Cancel start" label would lie to the side
+  // that hasn't voted yet (pressing it starts the match). Show the tally instead;
+  // pressing again only retracts the voting side's own readiness.
+  if (startButton) {
+    std::string caption = "Start match";
+    if (!localStartVotes.empty()) caption += " (" + int_to_str((int)localStartVotes.size()) + "/" + int_to_str(total) + ")";
+    startButton->SetCaption(caption);
+  }
+}
+
+void PreMatchPage::DoLocalStartMatch() {
+  GetConfiguration()->Set("match_difficulty", difficultySlider->GetValue());
+  GetConfiguration()->Set("match_duration", matchDurationSlider->GetValue());
+  GetConfiguration()->SaveFile(GetConfigFilename());
+
+  this->Exit();
+
+  Properties properties;
+  windowManager->GetPageFactory()->CreatePage((int)e_PageID_LoadingMatch, properties, 0);
+
+  delete this;
+}
+
 void PreMatchPage::Process() {
   Gui2View::Process();
+  suppressLocalEscape = false; // one-frame latch, if no windowing escape followed
   if (!networkMatch) return;
 
   NetLobbyState state = GetNetworkState();
@@ -351,6 +425,27 @@ bool PreMatchPage::IsInContent(Gui2View *view) {
 }
 
 void PreMatchPage::ProcessKeyboardEvent(KeyboardEvent *event) {
+  // Local two-player start vote: the keyboard side (controller 0) confirms with
+  // Enter while "Start match" is focused. Back retracts an already cast vote and
+  // returns to the Kick-off tab. The GUI activation itself is a no-op in this
+  // mode, so votes are cast/retracted exactly once, here.
+  if (localTwoPlayers) {
+    int device[2];
+    GetMenuTask()->GetLocalSideDevices(device);
+    bool keyboardSide = (device[0] == 0 || device[1] == 0);
+    if (keyboardSide && event->GetKeyOnce(SDLK_ESCAPE) && CancelLocalStartVote(0)) {
+      suppressLocalEscape = true; // windowing escape follows; already handled
+      event->Accept();
+      return;
+    }
+    if (keyboardSide && StartButtonFocused() &&
+        (event->GetKeyOnce(SDLK_RETURN) || event->GetKeyOnce(SDLK_KP_ENTER))) {
+      ToggleLocalStartVote(0); // may delete this
+      event->Accept();
+      return;
+    }
+  }
+
   // The content grids accept the up-direction windowing event and never let it
   // bubble (they have no selectable rows above the focused button), so the tab
   // strip would be unreachable. Handle the key here: up from content returns
@@ -370,13 +465,49 @@ void PreMatchPage::ProcessKeyboardEvent(KeyboardEvent *event) {
   Gui2Page::ProcessKeyboardEvent(event);
 }
 
+void PreMatchPage::ProcessJoystickEvent(JoystickEvent *event) {
+  if (localTwoPlayers) {
+    int device[2];
+    GetMenuTask()->GetLocalSideDevices(device);
+    const std::vector<IHIDevice*> &controllers = GetControllers();
+    for (unsigned int c = 1; c < controllers.size(); c++) {
+      if (controllers.at(c)->GetDeviceType() != e_HIDeviceType_Gamepad) continue;
+      if ((int)c != device[0] && (int)c != device[1]) continue;
+      HIDGamepad *gamepad = static_cast<HIDGamepad*>(controllers.at(c));
+      int joyID = gamepad->GetGamepadID();
+      if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_B)) && CancelLocalStartVote((int)c)) {
+        suppressLocalEscape = true; // windowing escape follows; already handled
+        event->Accept();
+        return;
+      }
+      if (StartButtonFocused() && event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A))) {
+        ToggleLocalStartVote((int)c); // may delete this
+        event->Accept();
+        return;
+      }
+    }
+    return;
+  }
+  Gui2Page::ProcessJoystickEvent(event);
+}
+
 void PreMatchPage::ProcessWindowingEvent(WindowingEvent *event) {
+  // A local Back that retracted a start vote already ran in the raw handlers;
+  // the windowing escape it also produced must not do anything else.
+  if (suppressLocalEscape && event->IsEscape()) {
+    suppressLocalEscape = false;
+    event->Accept();
+    return;
+  }
+
   if (networkMatch && event->IsEscape()) {
-    // Esc is layered: it first withdraws an agreed start, then proposes leaving
-    // the hub, and pressing it again withdraws that proposal too.
+    // Esc is layered: it first withdraws an agreed start (returning to the
+    // Kick-off tab), then proposes leaving the hub, then withdraws that too.
+    bool wasStart = (localVote == e_NetHubVote_StartMatch);
     if (localVote == e_NetHubVote_StartMatch || localVote == e_NetHubVote_BackToTeams) localVote = e_NetHubVote_None;
     else localVote = e_NetHubVote_BackToTeams;
     SendHubVote(localVote);
+    if (wasStart) FocusKickOffTab();
     event->Accept();
     return;
   }
@@ -440,14 +571,10 @@ void PreMatchPage::GoStartMatch() {
     return;
   }
 
-  GetConfiguration()->Set("match_difficulty", difficultySlider->GetValue());
-  GetConfiguration()->Set("match_duration", matchDurationSlider->GetValue());
-  GetConfiguration()->SaveFile(GetConfigFilename());
+  // Local two-player: the GUI activation is only a no-op; each side votes with
+  // its own controller (see ProcessJoystickEvent / ProcessKeyboardEvent), so one
+  // player can't start the match alone.
+  if (localTwoPlayers) return;
 
-  this->Exit();
-
-  Properties properties;
-  windowManager->GetPageFactory()->CreatePage((int)e_PageID_LoadingMatch, properties, 0);
-
-  delete this;
+  DoLocalStartMatch();
 }

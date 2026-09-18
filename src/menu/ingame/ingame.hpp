@@ -16,6 +16,8 @@
 
 #include "../../onthepitch/match.hpp"
 
+#include <set>
+
 using namespace blunted;
 
 class IngamePage : public Gui2Page {
@@ -35,6 +37,8 @@ class IngamePage : public Gui2Page {
     void VoteResume();
 
     virtual void Process();
+    virtual void ProcessKeyboardEvent(KeyboardEvent *event);
+    virtual void ProcessJoystickEvent(JoystickEvent *event);
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
@@ -42,6 +46,13 @@ class IngamePage : public Gui2Page {
     bool LocalResumeReady();
     int GetResumeReadyCount();
     int GetPeerCount();
+
+    // Local two-player: "Continue" is a per-side vote, like the LAN resume.
+    bool localTwoPlayers;
+    std::set<int> localResumeVotes; // controller ids of the sides that agreed
+    bool ContinueButtonFocused();
+    void ToggleLocalResumeVote(int controllerID);
+    void UpdateContinueCaption();
 
     int teamID; // team that activated the ingame menu
     Gui2Button *buttonContinue;

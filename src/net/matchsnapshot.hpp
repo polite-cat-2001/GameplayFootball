@@ -20,7 +20,7 @@ namespace blunted { class Animation; }
 // and may be offset (e.g. after a local match). team 0/1 = Home/Away squad slot;
 // team 2 = officials (referee, linesman north, linesman south).
 struct SnapshotPlayer {
-  SnapshotPlayer() : team(-1), slot(-1), ownerId(-1), animID(-1), frameNum(0), noPos(false), smooth(true), smoothFactor(1.0f), orientation(0) {}
+  SnapshotPlayer() : team(-1), slot(-1), ownerId(-1), animID(-1), frameNum(0), noPos(false), smooth(true), smoothFactor(1.0f), position(), orientation(0), fatigue(1.0f) {}
 
   int team;
   int slot;
@@ -34,6 +34,9 @@ struct SnapshotPlayer {
   float smoothFactor;
   blunted::Vector3 position;
   float orientation;
+  // 1.0 = fully rested, down to 0.01 = exhausted. The client never runs the
+  // simulation, so without this the game plan would show everyone as fresh.
+  float fatigue;
 };
 
 // Substitution applied on the host, relayed so the thin client can run the same

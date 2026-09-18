@@ -69,6 +69,12 @@ class MenuTask : public Gui2Task {
     void SetTeamIDs(const std::string &id1, const std::string &id2) { queuedFixture.Lock(); queuedFixture->teamID1 = id1; queuedFixture->teamID2 = id2; queuedFixture.Unlock(); }
     int GetTeamID(int whichOne) { if (whichOne == 0) return atoi(queuedFixture.GetData().teamID1.c_str()); else return atoi(queuedFixture.GetData().teamID2.c_str()); }
     int GetTeamKitNum(int teamID) { if (teamID == 0) return queuedFixture.GetData().team1KitNum; else return queuedFixture.GetData().team2KitNum; }
+
+    // Local devices (controller indices) assigned to home/away, -1 when that side
+    // has no local human. Two distinct devices mean a local two-player match, in
+    // which group decisions (start, resume) are voted per side like over LAN.
+    void GetLocalSideDevices(int device[2]);
+    bool HasTwoLocalPlayers();
     void SetMatchData(MatchData *matchData) { queuedFixture.Lock(); queuedFixture->matchData = matchData; queuedFixture.Unlock(); }
     MatchData *GetMatchData() { return queuedFixture.GetData().matchData; } // hint: this lock is useless, since we are returning the pointer and not a copy
 

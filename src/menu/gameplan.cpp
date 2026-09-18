@@ -19,6 +19,7 @@
 #include "../hid/gamepad.hpp"
 #include "../hid/keyboard.hpp"
 #include "../managers/environmentmanager.hpp"
+#include "../managers/usereventmanager.hpp"
 
 using namespace blunted;
 
@@ -30,9 +31,10 @@ const float s_px = 0.5f, s_pw = 37.0f;
 const float s_bx = 39.0f, s_bw = 20.0f;
 const float s_oppx = 62.0f, s_oppw = 37.0f;
 
-// two editable teams side by side (local 2 players); bench right of each pitch
-const float d0_px = 1.0f, d0_pw = 30.0f, d0_bx = 32.0f, d0_bw = 15.0f;
-const float d1_px = 53.0f, d1_pw = 30.0f, d1_bx = 84.0f, d1_bw = 15.0f;
+// two editable teams side by side (local 2 players); bench right of each pitch.
+// Benches are wide enough for a full squad name plus the rating/condition columns.
+const float d0_px = 1.0f, d0_pw = 29.0f, d0_bx = 30.5f, d0_bw = 18.0f;
+const float d1_px = 52.0f, d1_pw = 29.0f, d1_bx = 81.5f, d1_bw = 18.0f;
 
 const float photoSize = 5.5f;
 const float badgeW = 7.5f;
@@ -41,9 +43,11 @@ const float cardNameH = 2.1f;
 const float cardGap = 0.15f;
 const float pitchCardH = photoSize + cardGap + badgeH + cardGap + cardNameH;
 
-const float benchPosW = 4.5f;
-const float benchRatingW = 3.5f;
+const float benchPosW = 3.0f;
+const float benchRatingW = 3.0f;
+const float benchFatigueW = 3.4f;
 const float benchRowH = 2.5f;
+const float captionGap = 0.4f;
 
 Vector3 PitchToScreen(const Vector3 &pos, float x, float y, float w, float h) {
   float depth = pos.coords[0] * 0.5f + 0.5f; // 0 == own goal (bottom), 1 == opponent goal (top)
@@ -79,6 +83,23 @@ std::string RoleRatingText(e_PlayerRole role, PlayerData *player) {
 e_PlayerRole NaturalRole(PlayerData *player) {
   const std::vector<e_PlayerRole> &roles = player->GetRoles();
   return roles.empty() ? e_PlayerRole_CM : roles.front();
+}
+
+int FatiguePercent(float fatigueFactorInv) {
+  return int(Clampf(fatigueFactorInv, 0.0f, 1.0f) * 100.0f + 0.5f);
+}
+
+// Condition scale: blue (fresh) -> green -> yellow -> orange -> red (spent).
+Vector3 FatigueColor(int percent) {
+  if (percent >= 90) return Vector3(90, 200, 255);
+  if (percent >= 70) return Vector3(80, 220, 90);
+  if (percent >= 50) return Vector3(235, 220, 60);
+  if (percent >= 30) return Vector3(240, 150, 45);
+  return Vector3(225, 60, 55);
+}
+
+std::string FatigueText(int percent) {
+  return int_to_str(percent) + "%";
 }
 }
 
@@ -325,6 +346,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     planEntry.selectable = selectable;
     planEntry.pos = Vector3(anchorX, anchorY, 0);
     planEntry.ratingCaption = 0;
+    planEntry.fatigueCaption = 0;
     planEntry.nameCaption = 0;
     planEntry.photo = 0;
 
@@ -351,6 +373,11 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
       this->AddView(planEntry.roleCaption);
       planEntry.roleCaption->Show();
       CenterCaption(planEntry.roleCaption, centerX, y, badgeH, roleText);
+
+      planEntry.fatigueCaption = new Gui2Caption(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, badgeH, "");
+      this->AddView(planEntry.fatigueCaption);
+      planEntry.fatigueCaption->Show();
+
       y += badgeH + cardGap;
 
       planEntry.nameY = y;
@@ -359,8 +386,9 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
                                               ShortName(player->GetLastName()));
     } else {
       float rowH = benchRowH;
-      float posW = benchPosW, ratingW = benchRatingW;
-      float nameW = bw - posW - ratingW - 0.4f;
+      float posW = benchPosW, ratingW = benchRatingW, fatigueW = benchFatigueW;
+      float nameW = bw - posW - ratingW - fatigueW - 0.6f;
+      float ratingX = bx + posW + nameW + 0.4f;
       float cy = Clampf(anchorY - rowH * 0.5f, by, by + bh - rowH);
 
       planEntry.roleCaption = new Gui2Caption(windowManager, "gameplan_role_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), bx, cy, posW, rowH, roleText);
@@ -370,9 +398,13 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
       planEntry.button = new Gui2Button(windowManager, "gameplan_player_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), bx + posW + 0.2f, cy, nameW, rowH,
                                         ShortName(player->GetLastName()));
 
-      planEntry.ratingCaption = new Gui2Caption(windowManager, "gameplan_rating_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), bx + posW + nameW + 0.4f, cy, ratingW, rowH, RatingText(player));
+      planEntry.ratingCaption = new Gui2Caption(windowManager, "gameplan_rating_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), ratingX, cy, ratingW, rowH, RatingText(player));
       this->AddView(planEntry.ratingCaption);
       planEntry.ratingCaption->Show();
+
+      planEntry.fatigueCaption = new Gui2Caption(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), ratingX + ratingW + 0.2f, cy, fatigueW, rowH, "");
+      this->AddView(planEntry.fatigueCaption);
+      planEntry.fatigueCaption->Show();
     }
 
     int entryPos = (int)entries.size();
@@ -480,16 +512,44 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
   TeamData *opponent = GetTeamDataFor(teamID);
   if (!opponent) return;
 
+  // In-match, show the opponent's actual lineup. Runtime substitutions live only
+  // in the live Team/runtimeFormation, so reading the original TeamData XI left
+  // the substituted-out player on the host's read-only opponent panel.
+  struct OppPlayer { PlayerData *player; e_PlayerRole role; Vector3 pos; };
+  std::vector<OppPlayer> list;
+  Team *team = GetTeamFor(teamID);
+  if (team) {
+    const std::vector<Player*> &all = team->GetAllPlayers();
+    for (int i = 0; i < (int)all.size(); i++) {
+      if (!all.at(i)->IsActive()) continue;
+      OppPlayer op;
+      op.player = opponent->GetPlayerData(i);
+      FormationEntry fe = team->GetFormationEntry(all.at(i)->GetID());
+      op.role = fe.role;
+      op.pos = fe.databasePosition;
+      list.push_back(op);
+    }
+  } else {
+    for (int i = 0; i < playerNum && i < opponent->GetPlayerNum(); i++) {
+      OppPlayer op;
+      op.player = opponent->GetPlayerData(i);
+      op.role = opponent->GetFormationEntry(i).role;
+      op.pos = opponent->GetFormationEntry(i).databasePosition;
+      list.push_back(op);
+    }
+  }
+
   float gkAnchorY = y + h;
-  for (int i = 0; i < playerNum && i < opponent->GetPlayerNum(); i++) {
-    FormationEntry e = opponent->GetFormationEntry(i);
-    if (e.role == e_PlayerRole_GK) { gkAnchorY = std::min(PitchToScreen(e.databasePosition, x, y, w, h).coords[1], y + h); break; }
+  for (unsigned int i = 0; i < list.size(); i++) {
+    if (list.at(i).role != e_PlayerRole_GK) continue;
+    gkAnchorY = std::min(PitchToScreen(list.at(i).pos, x, y, w, h).coords[1], y + h);
+    break;
   }
   float bottomLimit = (gkAnchorY - pitchCardH) - 0.3f;
 
-  for (int i = 0; i < playerNum && i < opponent->GetPlayerNum(); i++) {
-    FormationEntry entry = opponent->GetFormationEntry(i);
-    Vector3 pos = entry.databasePosition;
+  for (unsigned int i = 0; i < list.size(); i++) {
+    const OppPlayer &entry = list.at(i);
+    Vector3 pos = entry.pos;
     if (entry.role != e_PlayerRole_GK) { pos.coords[0] = pos.coords[0] * 0.8f + 0.1f; }
     Vector3 s = PitchToScreen(pos, x, y, w, h);
     float cardW = std::max(std::max(photoSize, badgeW), 8.5f);
@@ -501,24 +561,24 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     cy = Clampf(cy, y, y + h - cardH);
     float centerX = cx + cardW * 0.5f;
 
-    Gui2Image *photo = new Gui2Image(windowManager, "gameplan_opp_photo_" + int_to_str(i), cx + (cardW - photoSize) * 0.5f, cy, photoSize, photoSize);
+    Gui2Image *photo = new Gui2Image(windowManager, "gameplan_opp_photo_" + int_to_str((int)i), cx + (cardW - photoSize) * 0.5f, cy, photoSize, photoSize);
     photo->LoadImage("media/menu/player_placeholder.png");
     this->AddView(photo);
     photo->Show();
 
     float roleY = cy + photoSize + cardGap;
-    Gui2Caption *role = new Gui2Caption(windowManager, "gameplan_opp_role_" + int_to_str(i), cx, roleY, cardW, badgeH,
-                                        RoleRatingText(entry.role, opponent->GetPlayerData(i)));
+    Gui2Caption *role = new Gui2Caption(windowManager, "gameplan_opp_role_" + int_to_str((int)i), cx, roleY, cardW, badgeH,
+                                        RoleRatingText(entry.role, entry.player));
     this->AddView(role);
     role->Show();
-    CenterCaption(role, centerX, roleY, badgeH, RoleRatingText(entry.role, opponent->GetPlayerData(i)));
+    CenterCaption(role, centerX, roleY, badgeH, RoleRatingText(entry.role, entry.player));
 
     float nameY = roleY + badgeH + cardGap;
-    Gui2Caption *name = new Gui2Caption(windowManager, "gameplan_opp_name_" + int_to_str(i), cx, nameY, cardW, cardNameH,
-                                        ShortName(opponent->GetPlayerData(i)->GetLastName()));
+    Gui2Caption *name = new Gui2Caption(windowManager, "gameplan_opp_name_" + int_to_str((int)i), cx, nameY, cardW, cardNameH,
+                                        ShortName(entry.player->GetLastName()));
     this->AddView(name);
     name->Show();
-    CenterCaption(name, centerX, nameY, cardNameH, ShortName(opponent->GetPlayerData(i)->GetLastName()));
+    CenterCaption(name, centerX, nameY, cardNameH, ShortName(entry.player->GetLastName()));
   }
 }
 
@@ -528,6 +588,7 @@ void GamePlanPage::ClearEntries() {
     if (e.photo) { e.photo->Exit(); delete e.photo; e.photo = 0; }
     if (e.nameCaption) { e.nameCaption->Exit(); delete e.nameCaption; e.nameCaption = 0; }
     if (e.ratingCaption) { e.ratingCaption->Exit(); delete e.ratingCaption; e.ratingCaption = 0; }
+    if (e.fatigueCaption) { e.fatigueCaption->Exit(); delete e.fatigueCaption; e.fatigueCaption = 0; }
     if (e.roleCaption) { e.roleCaption->Exit(); delete e.roleCaption; e.roleCaption = 0; }
     if (e.button) { e.button->Exit(); delete e.button; e.button = 0; }
   }
@@ -538,7 +599,8 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
   int maxScroll = std::max(0, panel.benchCount - panel.benchMaxVisible);
   panel.benchScroll = std::max(0, std::min(panel.benchScroll, maxScroll));
 
-  float nameW = panel.bw - benchPosW - benchRatingW - 0.4f;
+  float nameW = panel.bw - benchPosW - benchRatingW - benchFatigueW - 0.6f;
+  float ratingX = panel.bx + benchPosW + nameW + 0.4f;
   int row = 0;
   for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
     PlanEntry &entry = entries.at(panel.entryIndices.at(k));
@@ -549,11 +611,13 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
       entry.button->Hide();
       if (entry.roleCaption) entry.roleCaption->Hide();
       if (entry.ratingCaption) entry.ratingCaption->Hide();
+      if (entry.fatigueCaption) entry.fatigueCaption->Hide();
     } else {
       entry.button->Show();
       entry.button->SetPosition(panel.bx + benchPosW + 0.2f, cy);
       if (entry.roleCaption) { entry.roleCaption->Show(); entry.roleCaption->SetPosition(panel.bx, cy); }
-      if (entry.ratingCaption) { entry.ratingCaption->Show(); entry.ratingCaption->SetPosition(panel.bx + benchPosW + nameW + 0.4f, cy); }
+      if (entry.ratingCaption) { entry.ratingCaption->Show(); entry.ratingCaption->SetPosition(ratingX, cy); }
+      if (entry.fatigueCaption) { entry.fatigueCaption->Show(); entry.fatigueCaption->SetPosition(ratingX + benchRatingW + 0.2f, cy); }
     }
     entry.pos = Vector3(panel.bx + panel.bw * 0.5f, cy + panel.benchRowHeight * 0.5f, 0);
     row++;
@@ -787,13 +851,20 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     else if (pos == panel.cursorIndex) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright2));
     else entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
 
+    int fatigue = FatiguePercent(EntryFatigue(panel, entry));
+
     if (entry.onPitch) {
-      CenterCaption(entry.roleCaption, entry.cardCenterX, entry.roleY, badgeH, RoleRatingText(role, player));
+      PositionPitchCaption(entry, RoleRatingText(role, player), FatigueText(fatigue));
+      if (entry.fatigueCaption) entry.fatigueCaption->SetColor(FatigueColor(fatigue));
       CenterCaption(entry.nameCaption, entry.cardCenterX, entry.nameY, cardNameH, ShortName(player->GetLastName()) + suffix);
     } else {
       entry.button->SetCaption(ShortName(player->GetLastName()) + suffix);
       if (entry.roleCaption) entry.roleCaption->SetCaption(GetRoleName(role));
       if (entry.ratingCaption) entry.ratingCaption->SetCaption(RatingText(player));
+      if (entry.fatigueCaption) {
+        entry.fatigueCaption->SetCaption(FatigueText(fatigue));
+        entry.fatigueCaption->SetColor(FatigueColor(fatigue));
+      }
     }
   }
 }
@@ -803,6 +874,29 @@ void GamePlanPage::CenterCaption(Gui2Caption *caption, float centerX, float y, f
   caption->SetCaption(text);
   float width = caption->GetTextWidthPercent();
   caption->SetPosition(centerX - width * 0.5f, y);
+}
+
+float GamePlanPage::EntryFatigue(PlanPanel &panel, const PlanEntry &entry) {
+  // Bench players and the pre-match squad never simulate, so they stay at 1.0.
+  if (panel.team && entry.playerID >= 0) {
+    Player *player = panel.team->GetPlayer(entry.playerID);
+    if (player) return player->GetFatigueFactorInv();
+  }
+  return 1.0f;
+}
+
+void GamePlanPage::PositionPitchCaption(PlanEntry &entry, const std::string &roleText, const std::string &fatigueText) {
+  entry.roleCaption->SetCaption(roleText);
+  if (!entry.fatigueCaption) {
+    CenterCaption(entry.roleCaption, entry.cardCenterX, entry.roleY, badgeH, roleText);
+    return;
+  }
+  entry.fatigueCaption->SetCaption(fatigueText);
+  float roleW = entry.roleCaption->GetTextWidthPercent();
+  float fatigueW = entry.fatigueCaption->GetTextWidthPercent();
+  float startX = entry.cardCenterX - (roleW + captionGap + fatigueW) * 0.5f;
+  entry.roleCaption->SetPosition(startX, entry.roleY);
+  entry.fatigueCaption->SetPosition(startX + roleW + captionGap, entry.roleY);
 }
 
 e_PlayerRole GamePlanPage::GetEntryRole(int entryPosition) {
@@ -960,6 +1054,13 @@ void GamePlanPage::ProcessJoystickEvent(JoystickEvent *event) {
     if (gamepad->GetButtonValue(e_ButtonFunction_Right) > 0.5f) direction.coords[0] += 1;
     if (gamepad->GetButtonValue(e_ButtonFunction_Up) > 0.5f) direction.coords[1] -= 1;
     if (gamepad->GetButtonValue(e_ButtonFunction_Down) > 0.5f) direction.coords[1] += 1;
+    // The D-pad is not part of the function mapping (movement functions map to
+    // the stick), so read its semantic buttons directly - same as team select.
+    UserEventManager &userEvents = UserEventManager::GetInstance();
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_UP)) direction.coords[1] -= 1;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) direction.coords[1] += 1;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) direction.coords[0] -= 1;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) direction.coords[0] += 1;
 
     HandlePanelInput(panel, direction, accept, back, now_ms);
   }

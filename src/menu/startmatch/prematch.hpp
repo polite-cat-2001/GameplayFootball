@@ -20,6 +20,8 @@
 #include "../../data/matchdata.hpp"
 #include "../../net/netmessages.hpp"
 
+#include <set>
+
 using namespace blunted;
 
 // Pre-match hub: a PES-style tab strip whose tabs configure the upcoming match
@@ -38,6 +40,7 @@ class PreMatchPage : public Gui2Page {
 
     virtual void Process();
     virtual void ProcessKeyboardEvent(KeyboardEvent *event);
+    virtual void ProcessJoystickEvent(JoystickEvent *event);
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
@@ -60,6 +63,17 @@ class PreMatchPage : public Gui2Page {
     int localVote; // this peer's own hub vote (toggle source, not the mirrored one)
     Gui2Caption *statusCaption;
     Gui2Button *startButton;
+
+    // Local two-player: the same start vote, but per local side (its controller).
+    bool localTwoPlayers;
+    std::set<int> localStartVotes; // controller ids of the sides that agreed
+    bool suppressLocalEscape; // the raw Back handler already consumed this one
+    bool StartButtonFocused();
+    void FocusKickOffTab();
+    bool CancelLocalStartVote(int controllerID);
+    void ToggleLocalStartVote(int controllerID);
+    void UpdateLocalStatus();
+    void DoLocalStartMatch();
 
     MatchData *matchData;
     TeamData *teamData[2];

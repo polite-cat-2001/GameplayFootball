@@ -204,6 +204,30 @@ int MenuTask::GetLocalNetworkTeamID() {
   return -1;
 }
 
+void MenuTask::GetLocalSideDevices(int device[2]) {
+  device[0] = device[1] = -1;
+  const std::vector<SideSelection> sides = GetControllerSetup();
+  for (unsigned int i = 0; i < sides.size(); i++) {
+    int idx = -1;
+    if (sides.at(i).side < 0) idx = 0;
+    else if (sides.at(i).side > 0) idx = 1;
+    if (idx >= 0) device[idx] = sides.at(i).controllerID;
+  }
+}
+
+bool MenuTask::HasTwoLocalPlayers() {
+  int device[2];
+  GetLocalSideDevices(device);
+  if (device[0] < 0 || device[1] < 0 || device[0] == device[1]) return false;
+
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+  if (device[0] >= (int)controllers.size() || device[1] >= (int)controllers.size()) return false;
+  // A single keyboard can't drive two sides at once.
+  if (controllers.at(device[0])->GetDeviceType() == e_HIDeviceType_Keyboard &&
+      controllers.at(device[1])->GetDeviceType() == e_HIDeviceType_Keyboard) return false;
+  return true;
+}
+
 bool MenuTask::PlayerOwnsSide(uint32_t playerId, int side) {
   NetLobbyState state;
   if (netServer) state = netServer->GetLobbyState();

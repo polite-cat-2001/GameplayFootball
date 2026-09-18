@@ -17,12 +17,15 @@
 #include "../../net/netmessages.hpp"
 #include "../../net/netserver.hpp"
 
+#include "../../hid/gamepad.hpp"
+
 using namespace blunted;
 
 IngamePage::IngamePage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
   teamID = pageData.properties->GetInt("teamID", 0);
   buttonContinue = 0;
+  localTwoPlayers = !IsNetworkMatch() && GetMenuTask()->HasTwoLocalPlayers();
 
   // Only the peer that opened the menu initiates the pause; peers that open it
   // because a PauseState arrived are already paused.
@@ -189,6 +192,11 @@ void IngamePage::VoteResume() {
   Match *match = GetGameTask()->GetMatch();
   if (!match) return;
 
+  // Local two-player: the GUI activation is only a no-op; each side votes with
+  // its own controller (see ProcessJoystickEvent / ProcessKeyboardEvent), so one
+  // player can't resume alone.
+  if (localTwoPlayers) return;
+
   // Single player / local game: resume immediately.
   if (!IsNetworkMatch()) {
     match->Pause(false);
@@ -211,6 +219,81 @@ void IngamePage::VoteResume() {
   }
 }
 
+bool IngamePage::ContinueButtonFocused() {
+  return buttonContinue && windowManager->GetFocus() == buttonContinue;
+}
+
+void IngamePage::ToggleLocalResumeVote(int controllerID) {
+  if (localResumeVotes.count(controllerID)) localResumeVotes.erase(controllerID);
+  else localResumeVotes.insert(controllerID);
+  UpdateContinueCaption();
+
+  int device[2];
+  GetMenuTask()->GetLocalSideDevices(device);
+  int needed = 0;
+  for (int i = 0; i < 2; i++) if (device[i] >= 0) needed++;
+  if ((int)localResumeVotes.size() >= needed) {
+    Match *match = GetGameTask()->GetMatch();
+    if (match) match->Pause(false);
+  }
+}
+
+void IngamePage::UpdateContinueCaption() {
+  if (!buttonContinue) return;
+  int device[2];
+  GetMenuTask()->GetLocalSideDevices(device);
+  int total = 0;
+  for (int i = 0; i < 2; i++) if (device[i] >= 0) total++;
+  std::string caption = "Continue (" + int_to_str((int)localResumeVotes.size()) + "/" + int_to_str(total) + ")";
+  if (!localResumeVotes.empty()) caption += " - waiting for other player";
+  buttonContinue->SetCaption(caption);
+}
+
+void IngamePage::ProcessKeyboardEvent(KeyboardEvent *event) {
+  // Local two-player resume vote: the keyboard side (controller 0) votes with
+  // Enter (while "Continue" is focused) or with Back/Esc. Back is the same vote
+  // as Continue; voting again retracts it. The GUI activation is a no-op in this
+  // mode, so the vote is cast exactly once, here.
+  if (localTwoPlayers) {
+    int device[2];
+    GetMenuTask()->GetLocalSideDevices(device);
+    if (device[0] == 0 || device[1] == 0) {
+      bool confirm = event->GetKeyOnce(SDLK_RETURN) || event->GetKeyOnce(SDLK_KP_ENTER);
+      bool back = event->GetKeyOnce(SDLK_ESCAPE);
+      if (back || (confirm && ContinueButtonFocused())) {
+        ToggleLocalResumeVote(0);
+        event->Accept();
+        return;
+      }
+    }
+    return;
+  }
+  Gui2Page::ProcessKeyboardEvent(event);
+}
+
+void IngamePage::ProcessJoystickEvent(JoystickEvent *event) {
+  if (localTwoPlayers) {
+    int device[2];
+    GetMenuTask()->GetLocalSideDevices(device);
+    const std::vector<IHIDevice*> &controllers = GetControllers();
+    for (unsigned int c = 1; c < controllers.size(); c++) {
+      if (controllers.at(c)->GetDeviceType() != e_HIDeviceType_Gamepad) continue;
+      if ((int)c != device[0] && (int)c != device[1]) continue;
+      HIDGamepad *gamepad = static_cast<HIDGamepad*>(controllers.at(c));
+      int joyID = gamepad->GetGamepadID();
+      bool confirm = event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A));
+      bool back = event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_B));
+      if (back || (confirm && ContinueButtonFocused())) {
+        ToggleLocalResumeVote((int)c);
+        event->Accept();
+        return;
+      }
+    }
+    return;
+  }
+  Gui2Page::ProcessJoystickEvent(event);
+}
+
 void IngamePage::Process() {
   Gui2Page::Process();
 
@@ -220,6 +303,8 @@ void IngamePage::Process() {
       std::string caption = "Continue (" + int_to_str(GetResumeReadyCount()) + "/" + int_to_str(GetPeerCount()) + ")";
       if (LocalResumeReady()) caption += " - waiting for others";
       buttonContinue->SetCaption(caption);
+    } else if (localTwoPlayers) {
+      UpdateContinueCaption();
     } else {
       buttonContinue->SetCaption("Continue");
     }
@@ -234,8 +319,11 @@ void IngamePage::Process() {
 
 void IngamePage::ProcessWindowingEvent(WindowingEvent *event) {
   if (event->IsEscape()) {
-    // Cast/retract the resume vote and stay in the menu until everyone agrees
-    // (or resume immediately in single player).
+    // Back is the same vote as Continue: cast/retract it and stay until everyone
+    // agrees (or resume immediately in single player). Local two-player votes are
+    // toggled by the per-device handlers above, so only swallow the windowing
+    // escape here to keep it from falling through to GoBack.
+    if (localTwoPlayers) { event->Accept(); return; }
     GetMenuTask()->ReleaseAllButtons();
     VoteResume();
     event->Ignore();

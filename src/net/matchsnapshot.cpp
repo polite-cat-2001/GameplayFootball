@@ -24,6 +24,7 @@ void CapturePlayerPose(PlayerBase *player, int team, int slot, int ownerId, cons
   out.smoothFactor = applyBuffer.smoothFactor;
   out.position = applyBuffer.position;
   out.orientation = applyBuffer.orientation;
+  out.fatigue = player->GetFatigueFactorInv();
 }
 
 Snapshot CaptureSnapshot(Match *match) {
@@ -100,6 +101,7 @@ void WriteSnapshotPlayer(NetBuffer &buffer, const SnapshotPlayer &player) {
   buffer.PutFloat(player.smoothFactor);
   buffer.PutVector3(player.position);
   buffer.PutFloat(player.orientation);
+  buffer.PutFloat(player.fatigue);
 }
 
 SnapshotPlayer ReadSnapshotPlayer(NetBuffer &buffer) {
@@ -114,6 +116,7 @@ SnapshotPlayer ReadSnapshotPlayer(NetBuffer &buffer) {
   player.smoothFactor = buffer.GetFloat();
   player.position = buffer.GetVector3();
   player.orientation = buffer.GetFloat();
+  player.fatigue = buffer.GetFloat();
   return player;
 }
 
@@ -216,6 +219,7 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
 
 void ApplySnapshotPose(PlayerBase *player, const SnapshotPlayer &pose, const std::vector<Animation*> &animTable) {
   player->SetRemoteOwnerId(pose.ownerId);
+  player->SetFatigueFactorInv(pose.fatigue);
   if (pose.animID < 0 || pose.animID >= (int)animTable.size()) return;
   Animation *animation = animTable.at(pose.animID);
   if (!animation) return;
@@ -302,6 +306,7 @@ void BlendPoses(std::vector<SnapshotPlayer> &newer, const std::vector<SnapshotPl
       pb.position = pa->position + (pb.position - pa->position) * t;
     }
     pb.orientation = LerpAngle(pa->orientation, pb.orientation, t);
+    pb.fatigue = pa->fatigue + (pb.fatigue - pa->fatigue) * t;
   }
 }
 }
