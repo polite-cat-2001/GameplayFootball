@@ -122,12 +122,12 @@ NetworkHostPage::NetworkHostPage(Gui2WindowManager *windowManager, const Gui2Pag
   title->Show();
 
   Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_host_port", 0, 0, 30, 3, "Port");
-  portInput = new Gui2EditLine(windowManager, "editline_network_host_port", 0, 0, 20, 3, "27015");
+  portInput = new Gui2EditLine(windowManager, "editline_network_host_port", 0, 0, 20, 3, GetConfiguration()->Get("network_host_port", "27015"));
   portInput->SetAllowedChars("0123456789");
   portInput->SetMaxLength(5);
 
   Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_host_name", 0, 0, 30, 3, "Name");
-  nameInput = new Gui2EditLine(windowManager, "editline_network_host_name", 0, 0, 20, 3, "Host");
+  nameInput = new Gui2EditLine(windowManager, "editline_network_host_name", 0, 0, 20, 3, GetConfiguration()->Get("network_host_name", "Host"));
   nameInput->SetAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ ");
   nameInput->SetMaxLength(16);
 
@@ -178,6 +178,10 @@ void NetworkHostPage::OpenLobby() {
     return;
   }
 
+  GetConfiguration()->Set("network_host_port", portInput->GetText());
+  GetConfiguration()->Set("network_host_name", name);
+  GetConfiguration()->SaveFile(GetConfigFilename());
+
   server->SetHostName(name);
 
   std::vector<TeamCatalogEntry> source = QueryTeamCatalog(0, 100000, "");
@@ -212,17 +216,17 @@ NetworkJoinPage::NetworkJoinPage(Gui2WindowManager *windowManager, const Gui2Pag
   title->Show();
 
   Gui2Caption *addressLabel = new Gui2Caption(windowManager, "caption_network_join_address", 0, 0, 30, 3, "Address");
-  addressInput = new Gui2EditLine(windowManager, "editline_network_join_address", 0, 0, 20, 3, "127.0.0.1");
+  addressInput = new Gui2EditLine(windowManager, "editline_network_join_address", 0, 0, 20, 3, GetConfiguration()->Get("network_join_address", "127.0.0.1"));
   addressInput->SetAllowedChars("0123456789.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-");
   addressInput->SetMaxLength(64);
 
   Gui2Caption *portLabel = new Gui2Caption(windowManager, "caption_network_join_port", 0, 0, 30, 3, "Port");
-  portInput = new Gui2EditLine(windowManager, "editline_network_join_port", 0, 0, 20, 3, "27015");
+  portInput = new Gui2EditLine(windowManager, "editline_network_join_port", 0, 0, 20, 3, GetConfiguration()->Get("network_join_port", "27015"));
   portInput->SetAllowedChars("0123456789");
   portInput->SetMaxLength(5);
 
   Gui2Caption *nameLabel = new Gui2Caption(windowManager, "caption_network_join_name", 0, 0, 30, 3, "Name");
-  nameInput = new Gui2EditLine(windowManager, "editline_network_join_name", 0, 0, 20, 3, "Player");
+  nameInput = new Gui2EditLine(windowManager, "editline_network_join_name", 0, 0, 20, 3, GetConfiguration()->Get("network_join_name", "Player"));
   nameInput->SetAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ ");
   nameInput->SetMaxLength(16);
 
@@ -277,6 +281,11 @@ void NetworkJoinPage::Connect() {
   boost::shared_ptr<NetClient> client = boost::make_shared<NetClient>();
   client->SetPlayerName(name);
   client->Connect(NetAddress(host, (uint16_t)port));
+
+  GetConfiguration()->Set("network_join_address", host);
+  GetConfiguration()->Set("network_join_port", portInput->GetText());
+  GetConfiguration()->Set("network_join_name", name);
+  GetConfiguration()->SaveFile(GetConfigFilename());
 
   GetMenuTask()->SetNetServer(boost::shared_ptr<NetServer>());
   GetMenuTask()->SetNetClient(client);

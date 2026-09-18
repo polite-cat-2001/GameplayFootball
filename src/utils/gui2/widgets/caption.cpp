@@ -138,13 +138,20 @@ namespace blunted {
     int x, y, w, h;
     windowManager->GetCoordinates(x_percent, y_percent, width_percent, height_percent, x, y, w, h);
 
+    // Measure with the fill font (as Redraw() renders the text), not the outline
+    // font: the outline font is padded on both sides, which pushed callers (the
+    // edit-line cursor) ~one outline width into the next glyph.
     int resW, resH;
-    TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline), caption.substr(0, subStrLength).c_str(), subStrLength, &resW, &resH);
+    TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_Caption), caption.substr(0, subStrLength).c_str(), subStrLength, &resW, &resH);
 
     float zoomy;
     zoomy = (float)h / (float)renderedTextHeightPix;
 
-    return windowManager->GetWidthPercent(resW * zoomy);
+    // Redraw() blits the fill text shifted right by the outline width; add the
+    // same offset so the returned position matches the rendered glyph edge.
+    int outlineWidth = TTF_GetFontOutline(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline));
+
+    return windowManager->GetWidthPercent((resW + outlineWidth) * zoomy);
   }
 
 }

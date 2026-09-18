@@ -35,7 +35,7 @@ namespace blunted {
     int x, y, w, h;
     windowManager->GetCoordinates(x_percent, y_percent, width_percent, height_percent, x, y, w, h);
 
-    cursor = new Gui2Image(windowManager, GetName() + "_cursor", 0, 0, 0.3f, height_percent);
+    cursor = new Gui2Image(windowManager, GetName() + "_cursor", 0, 0, 0.1f, height_percent);
 
     Vector3 cursorSize = cursor->GetImage2D()->GetSize();
     cursor->GetImage2D()->DrawRectangle(0, 0, cursorSize.coords[0], cursorSize.coords[1], windowManager->GetStyle()->GetColor(e_DecorationType_Bright1), 127);
