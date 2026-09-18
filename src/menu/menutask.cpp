@@ -30,33 +30,6 @@
 
 using namespace blunted;
 
-void SetActiveController(int side, bool keyboard) {
-  bool keyboardActive = true;
-  const std::vector<SideSelection> sides = GetMenuTask()->GetControllerSetup();
-  int menuControllerID = -1;
-  for (unsigned int i = 0; i < sides.size(); i++) {
-    if (sides.at(i).side == side) {
-      if (GetControllers().at(sides.at(i).controllerID)->GetDeviceType() == e_HIDeviceType_Gamepad) {
-        menuControllerID = static_cast<HIDGamepad*>(GetControllers().at(sides.at(i).controllerID))->GetGamepadID();
-        keyboardActive = false;
-      }
-      break;
-    }
-    if (i == sides.size() - 1) menuControllerID = 0; // AI opponent, so allow choosing their team with controller
-  }
-
-  GetMenuTask()->SetActiveJoystickID(menuControllerID);
-  if (keyboard) {
-    if (keyboardActive) {
-      GetMenuTask()->EnableKeyboard();
-    } else {
-      GetMenuTask()->DisableKeyboard();
-    }
-  } else {
-    GetMenuTask()->EnableKeyboard();
-  }
-}
-
 MenuTask::MenuTask(float aspectRatio, float margin, TTF_Font *defaultFont, TTF_Font *defaultOutlineFont) : Gui2Task(GetScene2D(), aspectRatio, margin) {
 
   Gui2Style *style = windowManager->GetStyle();

@@ -41,6 +41,9 @@ namespace blunted {
       virtual void SetUncolorWhenToggled(bool on) { this->uncolorWhenToggled = on; }
       virtual void SetActive(bool onOff) { this->active = onOff; if (onOff) SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1)); else SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2)); Redraw(); }
 
+      // Highlight without holding window-manager focus (parallel team select).
+      virtual void SetHighlighted(bool onOff);
+
       virtual void ProcessWindowingEvent(WindowingEvent *event);
 
       virtual void OnGainFocus();
@@ -62,6 +65,7 @@ namespace blunted {
       bool toggled;
       bool active;
       bool uncolorWhenToggled = false;
+      bool highlighted = false;
 
       Vector3 color;
 

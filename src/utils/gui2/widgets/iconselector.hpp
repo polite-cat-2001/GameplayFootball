@@ -39,6 +39,14 @@ namespace blunted {
       void ClearEntries();
       void AddEntry(const std::string &id, const std::string &caption, const std::string &imageFile);
 
+      // Move the selection by delta and emit sig_OnChange (used by pages that
+      // drive several selectors in parallel, without the global focus).
+      void MoveSelection(int delta);
+
+      // Highlight the selector without it holding window-manager focus, so more
+      // than one selector can be shown as active at once.
+      void SetHighlighted(bool onOff);
+
       // pool icons get a white outline around the logo shape (for dark logos)
       void SetDrawOutline(bool drawOutline) { this->drawOutline = drawOutline; }
 
@@ -88,6 +96,7 @@ namespace blunted {
       int fadeOutTime_ms;
 
       bool drawOutline = false;
+      bool highlighted = false;
 
   };
 

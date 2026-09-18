@@ -48,7 +48,7 @@ NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2P
   this->AddView(awayPanelCaption);
   awayPanelCaption->Hide();
 
-  helpCaption = new Gui2Caption(windowManager, "caption_network_lobby_help", 20, 88, 60, 3, "");
+  helpCaption = new Gui2Caption(windowManager, "caption_network_lobby_help", 20, 88, 60, 3, "Up/Down: level    Left/Right: select    Ready: confirm    Esc/B: back");
   this->AddView(helpCaption);
   helpCaption->Show();
 
@@ -134,7 +134,9 @@ void NetworkLobbyPage::BuildTeamPanels() {
     leagueSelect[s]->sig_OnChange.connect(boost::bind(&NetworkLobbyPage::OnLeagueChanged, this, s));
     teamSelect[s]->sig_OnChange.connect(boost::bind(&NetworkLobbyPage::OnTeamChanged, this, s));
     // Enter/A on a selector moves focus down: national teams skip the league
-    // stage, and the team list moves on to Ready (same as the local flow).
+    // stage, and the team list moves on to Ready. Up/Down (the grid moving focus
+    // between rows) does the same freely, so both ways work. An empty league row
+    // is non-selectable and therefore skipped for national teams (ApplyTeamState).
     countrySelect[s]->sig_OnClick.connect([this, s]() {
       if (countrySelect[s]->GetSelectedEntryID() == "national") teamSelect[s]->SetFocus();
       else leagueSelect[s]->SetFocus();

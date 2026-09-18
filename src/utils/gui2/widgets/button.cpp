@@ -42,7 +42,7 @@ namespace blunted {
     //printf("gui2button %s :: processing\n", name.c_str());
     if (fadeOut_ms <= fadeOutTime_ms) {
       fadeOut_ms += windowManager->GetTimeStep_ms();
-      if (!IsFocussed() && fadeOut_ms <= fadeOutTime_ms) { // cool fadeout effect!
+      if (!IsFocussed() && !highlighted && fadeOut_ms <= fadeOutTime_ms) { // cool fadeout effect!
         Redraw();
       }
     }
@@ -69,7 +69,7 @@ namespace blunted {
     if (toggleable && toggled && uncolorWhenToggled) {
       alpha = 0; // latched: no fill at all (Ready)
       color1 = Vector3(0, 0, 0);
-    } else if (IsFocussed()) {
+    } else if (IsFocussed() || highlighted) {
       alpha = 200;
 
       color1 = windowManager->GetStyle()->GetColor(e_DecorationType_Bright2);
@@ -95,6 +95,13 @@ namespace blunted {
     image->DrawRectangle(x_margin, 0, w - x_margin * 2, h, color1, alpha);
 
     image->OnChange();
+  }
+
+  void Gui2Button::SetHighlighted(bool onOff) {
+    if (highlighted == onOff) return;
+    highlighted = onOff;
+    if (!onOff && !IsFocussed()) fadeOut_ms = 0;
+    Redraw();
   }
 
   void Gui2Button::ProcessWindowingEvent(WindowingEvent *event) {

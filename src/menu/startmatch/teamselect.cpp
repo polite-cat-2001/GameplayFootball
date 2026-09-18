@@ -8,7 +8,14 @@
 
 #include "utils/database.hpp"
 
+#include "hid/gamepad.hpp"
+
+#include "managers/environmentmanager.hpp"
+#include "managers/usereventmanager.hpp"
+
 #include "../pagefactory.hpp"
+
+#include <SDL3/SDL.h>
 
 using namespace blunted;
 
@@ -105,17 +112,95 @@ void AddTeams(Gui2IconSelector *selector, const std::string &competition_id) {
   selector->Show();
 }
 
+namespace {
+
+  struct TeamSelectionPath {
+    bool national = false;
+    std::string country;
+    std::string league;
+    std::string team;
+  };
+
+  // Resolve the country/league/team entry ids a stored team id belongs to, so a
+  // returning page can preselect the same carousel positions. National teams
+  // live in the league-less "National Teams" bucket (country_id NULL).
+  bool ResolveTeamSelection(int teamID, TeamSelectionPath &path) {
+    if (teamID <= 0) return false;
+
+    DatabaseResult *result = GetDB()->Query("select league_id from teams where id = " + int_to_str(teamID) + " limit 1");
+    if (result->data.size() == 0) { delete result; return false; }
+    std::string leagueID = result->data.at(0).at(0);
+    delete result;
+    if (leagueID.empty() || leagueID == "0") return false;
+
+    result = GetDB()->Query("select country_id, name from leagues where id = " + leagueID + " limit 1");
+    if (result->data.size() == 0) { delete result; return false; }
+    std::string countryID = result->data.at(0).at(0);
+    std::string leagueName = result->data.at(0).at(1);
+    delete result;
+
+    path.team = int_to_str(teamID);
+    path.league = leagueID;
+    if (countryID.empty() || countryID == "0" || leagueName == "National Teams") {
+      path.national = true;
+      path.country = "national";
+    } else {
+      path.national = false;
+      path.country = countryID;
+    }
+    return true;
+  }
+
+}
+
 TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
-  team2Initialized = false;
+  for (int s = 0; s < 2; s++) {
+    countrySelect[s] = 0;
+    competitionSelect[s] = 0;
+    teamSelect[s] = 0;
+    readyButton[s] = 0;
+    teamGrid[s] = 0;
+    teamBg[s] = 0;
+    panelCaption[s] = 0;
+    cursorRow[s] = e_Row_Country;
+    sideReady[s] = false;
+    sideActive[s] = false;
+    deviceKind[s] = -1;
+    deviceGamepad[s] = -1;
+    lastMove_ms[s] = 0;
+    lastRowMove_ms[s] = 0;
+  }
 
-  Gui2Image *bg1 = new Gui2Image(windowManager, "teamselect_image_bg1", 19, 24, 30, 42);
-  this->AddView(bg1);
-  bg1->LoadImage("media/menu/backgrounds/black.png");
-  bg1->Show();
-
-  bg2 = new Gui2Image(windowManager, "teamselect_image_bg2", 51, 24, 30, 42);
-  this->AddView(bg2);
-  bg2->LoadImage("media/menu/backgrounds/black.png");
+  // Resolve which device controls each side from the queued side selection. Two
+  // locally controlled sides (with different devices) mean both players may pick
+  // their team at the same time; otherwise the CPU opponent's team is picked in
+  // turn with the single device.
+  parallel = false;
+  {
+    const std::vector<SideSelection> sides = GetMenuTask()->GetControllerSetup();
+    int kind[2] = { -1, -1 };
+    int pad[2] = { -1, -1 };
+    for (unsigned int i = 0; i < sides.size(); i++) {
+      int idx = -1;
+      if (sides.at(i).side < 0) idx = 0;
+      else if (sides.at(i).side > 0) idx = 1;
+      if (idx < 0) continue;
+      int ci = sides.at(i).controllerID;
+      if (ci >= 0 && ci < (signed int)GetControllers().size() &&
+          GetControllers().at(ci)->GetDeviceType() == e_HIDeviceType_Gamepad) {
+        kind[idx] = 1;
+        pad[idx] = static_cast<HIDGamepad*>(GetControllers().at(ci))->GetGamepadID();
+      } else {
+        kind[idx] = 0;
+        pad[idx] = -1;
+      }
+    }
+    if (kind[0] < 0) kind[0] = 0; // fall back to the keyboard for the first human
+    parallel = (kind[0] >= 0 && kind[1] >= 0);
+    if (kind[0] == 0 && kind[1] == 0) parallel = false;                 // one keyboard can't drive two cursors
+    if (kind[0] == 1 && kind[1] == 1 && pad[0] == pad[1]) parallel = false; // same gamepad twice
+    for (int s = 0; s < 2; s++) { deviceKind[s] = kind[s]; deviceGamepad[s] = pad[s]; }
+  }
 
   Gui2Caption *teamEmblemCredits = new Gui2Caption(windowManager, "teamselect_emblemcredits", 19, 70, 28, 3, "Team emblems by TureckiRumun, broxopios, balder, and NLP !");
   this->AddView(teamEmblemCredits);
@@ -124,72 +209,36 @@ TeamSelectPage::TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   teamEmblemCredits->SetPosition(50 - teamEmblemCredits->GetTextWidthPercent() / 2, 70);
   teamEmblemCredits->Show();
 
-  Gui2Caption *p1 = new Gui2Caption(windowManager, "teamselect_caption_p1", 19, 20, 28, 3, "Player 1");
-  p2 = new Gui2Caption(windowManager, "teamselect_caption_p2", 51, 20, 28, 3, "Player 2");
-  Gui2Grid *grid1 = new Gui2Grid(windowManager, "teamselect_grid_team1", 19, 24, 30, 41);
-  grid2 = new Gui2Grid(windowManager, "teamselect_grid_team2", 51, 24, 30, 41);
+  Gui2Caption *helpCaption = new Gui2Caption(windowManager, "teamselect_help", 20, 88, 60, 3, "Up/Down: level    Left/Right: select    Ready button: confirm    Esc/B: back");
+  this->AddView(helpCaption);
+  helpCaption->Show();
 
-  countrySelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_country1", 0, 0, 29, 18, "Country select");
-  countrySelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_country2", 0, 0, 29, 18, "Country select");
-  competitionSelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition1", 0, 0, 29, 18, "Competition select");
-  competitionSelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition2", 0, 0, 29, 18, "Competition select");
-  teamSelect1 = new Gui2IconSelector(windowManager, "teamselect_iconselector_team1", 0, 0, 29, 18, "Team select");
-  teamSelect2 = new Gui2IconSelector(windowManager, "teamselect_iconselector_team2", 0, 0, 29, 18, "Team select");
+  BuildSide(0);
+  BuildSide(1);
 
-  // many league/team logos are mostly dark and blend into the dark selector
-  // background; a white outline around the logo shape keeps them visible
-  competitionSelect1->SetDrawOutline(true);
-  competitionSelect2->SetDrawOutline(true);
-  teamSelect1->SetDrawOutline(true);
-  teamSelect2->SetDrawOutline(true);
-  buttonStart1 = new Gui2Button(windowManager, "teamselect_button_start1", 0, 0, 29, 3, "Ready");
-  buttonStart2 = new Gui2Button(windowManager, "teamselect_button_start2", 0, 0, 29, 3, "Ready");
+  // Returning from the pre-match hub keeps the teams each side had there.
+  if (pageData.properties && pageData.properties->GetBool("restoreSelections")) {
+    RestoreSelection(0, GetMenuTask()->GetTeamID(0));
+    RestoreSelection(1, GetMenuTask()->GetTeamID(1));
+  }
 
-  countrySelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect1, this));
-  competitionSelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusTeamSelect1, this));
-  teamSelect1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusStart1, this));
-  buttonStart1->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect2, this));
-  countrySelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusCompetitionSelect2, this));
-  competitionSelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusTeamSelect2, this));
-  teamSelect2->sig_OnClick.connect(boost::bind(&TeamSelectPage::FocusStart2, this));
-  buttonStart2->sig_OnClick.connect(boost::bind(&TeamSelectPage::GoOptionsMenu, this));
+  cursorRow[0] = e_Row_Country;
+  cursorRow[1] = e_Row_Country;
+  sideActive[0] = true;
+  sideActive[1] = parallel;
 
-  countrySelect1->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupCompetitionSelect1, this));
-  competitionSelect1->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupTeamSelect1, this));
-  countrySelect2->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupCompetitionSelect2, this));
-  competitionSelect2->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupTeamSelect2, this));
+  ShowSide(0);
+  if (parallel) ShowSide(1); else HideSide(1);
 
-  this->AddView(p1);
-  p1->Show();
-  this->AddView(grid1);
-  grid1->AddView(countrySelect1, 0, 0);
-  grid1->AddView(competitionSelect1, 1, 0);
-  grid1->AddView(teamSelect1, 2, 0);
-  grid1->AddView(buttonStart1, 3, 0);
-  grid1->UpdateLayout(0.5);
-  grid1->Show();
+  HighlightSide(0);
+  HighlightSide(1);
 
-  AddCountries(countrySelect1);
-  countrySelect1->SetSelectedEntry(0); // default: "National Teams"
-  SetupCompetitionSelect1();
+  // Drive both panels ourselves from raw keyboard/joystick events: the global
+  // menu focus only ever has one cursor, so it must not translate input.
+  GetMenuTask()->SetActiveJoystickID(-1);
+  GetMenuTask()->DisableKeyboard();
 
-  this->AddView(p2);
-  this->AddView(grid2);
-  grid2->AddView(countrySelect2, 0, 0);
-  grid2->AddView(competitionSelect2, 1, 0);
-  grid2->AddView(teamSelect2, 2, 0);
-  grid2->AddView(buttonStart2, 3, 0);
-  grid2->UpdateLayout(0.5);
-  // team 2 selectors are populated lazily in FocusCompetitionSelect2 to keep
-  // page creation fast
-
-  countrySelect1->SetFocus();
-
-  SetActiveController(-1, true);
-
-  p2->Hide();
-  grid2->Hide();
-  bg2->Hide();
+  this->SetFocus();
 
   this->Show();
 }
@@ -199,88 +248,220 @@ TeamSelectPage::~TeamSelectPage() {
   GetMenuTask()->EnableKeyboard();
 }
 
-void TeamSelectPage::FocusCompetitionSelect1() {
-  // national teams skip the league stage
-  if (countrySelect1->GetSelectedEntryID() == "national") teamSelect1->SetFocus();
-  else competitionSelect1->SetFocus();
+void TeamSelectPage::BuildSide(int s) {
+  float gx = (s == 0) ? 19 : 51;
+
+  teamBg[s] = new Gui2Image(windowManager, "teamselect_image_bg" + int_to_str(s + 1), gx, 24, 30, 42);
+  this->AddView(teamBg[s]);
+  teamBg[s]->LoadImage("media/menu/backgrounds/black.png");
+
+  panelCaption[s] = new Gui2Caption(windowManager, "teamselect_caption_p" + int_to_str(s + 1), gx, 20, 28, 3, (s == 0) ? "Player 1" : "Player 2");
+  this->AddView(panelCaption[s]);
+
+  countrySelect[s] = new Gui2IconSelector(windowManager, "teamselect_iconselector_country" + int_to_str(s + 1), 0, 0, 29, 18, "Country select");
+  competitionSelect[s] = new Gui2IconSelector(windowManager, "teamselect_iconselector_competition" + int_to_str(s + 1), 0, 0, 29, 18, "Competition select");
+  teamSelect[s] = new Gui2IconSelector(windowManager, "teamselect_iconselector_team" + int_to_str(s + 1), 0, 0, 29, 18, "Team select");
+
+  // many league/team logos are mostly dark and blend into the dark selector
+  // background; a white outline around the logo shape keeps them visible
+  competitionSelect[s]->SetDrawOutline(true);
+  teamSelect[s]->SetDrawOutline(true);
+
+  readyButton[s] = new Gui2Button(windowManager, "teamselect_button_start" + int_to_str(s + 1), 0, 0, 29, 3, "Ready");
+  readyButton[s]->SetToggleable(true);
+
+  countrySelect[s]->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupCompetitionSelect, this, s));
+  competitionSelect[s]->sig_OnChange.connect(boost::bind(&TeamSelectPage::SetupTeamSelect, this, s));
+
+  teamGrid[s] = new Gui2Grid(windowManager, "teamselect_grid_team" + int_to_str(s + 1), gx, 24, 30, 41);
+  teamGrid[s]->AddView(countrySelect[s], 0, 0);
+  teamGrid[s]->AddView(competitionSelect[s], 1, 0);
+  teamGrid[s]->AddView(teamSelect[s], 2, 0);
+  teamGrid[s]->AddView(readyButton[s], 3, 0);
+  teamGrid[s]->UpdateLayout(0.5);
+  this->AddView(teamGrid[s]);
+
+  AddCountries(countrySelect[s]);
+  int nationalIndex = countrySelect[s]->FindEntryIndex("national");
+  countrySelect[s]->SetSelectedEntry(nationalIndex >= 0 ? nationalIndex : 0);
+  SetupCompetitionSelect(s);
 }
 
-void TeamSelectPage::FocusTeamSelect1() {
-  teamSelect1->SetFocus();
-}
+void TeamSelectPage::RestoreSelection(int s, int teamID) {
+  TeamSelectionPath path;
+  if (!ResolveTeamSelection(teamID, path)) return;
 
-void TeamSelectPage::FocusStart1() {
-  buttonStart1->SetFocus();
-}
+  int countryIndex = countrySelect[s]->FindEntryIndex(path.country);
+  if (countryIndex < 0) return;
+  countrySelect[s]->SetSelectedEntry(countryIndex);
+  SetupCompetitionSelect(s);
 
-void TeamSelectPage::FocusCompetitionSelect2() {
-  if (!team2Initialized) {
-    team2Initialized = true;
-    AddCountries(countrySelect2);
-    countrySelect2->SetSelectedEntry(0); // default: "National Teams"
-    SetupCompetitionSelect2();
+  if (!path.national) {
+    int leagueIndex = competitionSelect[s]->FindEntryIndex(path.league);
+    if (leagueIndex >= 0) competitionSelect[s]->SetSelectedEntry(leagueIndex);
+    SetupTeamSelect(s);
   }
 
-  p2->Show();
-  grid2->Show();
-  bg2->Show();
-
-  // national teams skip the league stage
-  if (countrySelect2->GetSelectedEntryID() == "national") teamSelect2->SetFocus();
-  else competitionSelect2->SetFocus();
-
-  SetActiveController(1, true);
+  int teamIndex = teamSelect[s]->FindEntryIndex(path.team);
+  if (teamIndex >= 0) teamSelect[s]->SetSelectedEntry(teamIndex);
 }
 
-void TeamSelectPage::FocusTeamSelect2() {
-  teamSelect2->SetFocus();
+void TeamSelectPage::ShowSide(int s) {
+  teamBg[s]->Show();
+  panelCaption[s]->Show();
+  teamGrid[s]->Show();
 }
 
-void TeamSelectPage::FocusStart2() {
-  buttonStart2->SetFocus();
+void TeamSelectPage::HideSide(int s) {
+  teamBg[s]->Hide();
+  panelCaption[s]->Hide();
+  teamGrid[s]->Hide();
 }
 
-void TeamSelectPage::SetupCompetitionSelect1() {
-  if (countrySelect1->GetSelectedEntryID() == "national") {
-    competitionSelect1->ClearEntries();
-    competitionSelect1->SetSelectable(false);
-    teamSelect1->ClearEntries();
-    AddTeams(teamSelect1, GetNationalTeamsLeagueID());
+bool TeamSelectPage::IsNational(int s) {
+  return countrySelect[s]->GetSelectedEntryID() == "national";
+}
+
+void TeamSelectPage::HighlightSide(int s) {
+  bool active = sideActive[s] && !sideReady[s];
+  countrySelect[s]->SetHighlighted(active && cursorRow[s] == e_Row_Country);
+  competitionSelect[s]->SetHighlighted(active && cursorRow[s] == e_Row_Competition);
+  teamSelect[s]->SetHighlighted(active && cursorRow[s] == e_Row_Team);
+  readyButton[s]->SetHighlighted(active && cursorRow[s] == e_Row_Ready);
+}
+
+void TeamSelectPage::MoveSideSelection(int s, int delta) {
+  if (sideReady[s]) return;
+  Gui2IconSelector *sel = 0;
+  if (cursorRow[s] == e_Row_Country) sel = countrySelect[s];
+  else if (cursorRow[s] == e_Row_Competition) sel = competitionSelect[s];
+  else if (cursorRow[s] == e_Row_Team) sel = teamSelect[s];
+  if (sel) sel->MoveSelection(delta);
+}
+
+void TeamSelectPage::MoveSideRow(int s, int delta) {
+  if (sideReady[s] || delta == 0) return;
+  int row = cursorRow[s];
+  for (int guard = 0; guard < 4; guard++) {
+    row += delta;
+    if (row < e_Row_Country) row = e_Row_Ready;
+    if (row > e_Row_Ready) row = e_Row_Country;
+    if (row != e_Row_Competition || !IsNational(s)) break; // national teams skip the league level
+  }
+  cursorRow[s] = row;
+  HighlightSide(s);
+}
+
+void TeamSelectPage::ActivateSide(int s) {
+  if (sideReady[s]) return;
+  // Enter/A advances to the next section; Up/Down jump between sections too and
+  // Ready confirms the currently shown selection.
+  if (cursorRow[s] == e_Row_Country) {
+    cursorRow[s] = IsNational(s) ? e_Row_Team : e_Row_Competition;
+  } else if (cursorRow[s] == e_Row_Competition) {
+    cursorRow[s] = e_Row_Team;
+  } else if (cursorRow[s] == e_Row_Team) {
+    cursorRow[s] = e_Row_Ready;
+  } else if (cursorRow[s] == e_Row_Ready) {
+    SetSideReady(s, true); // may navigate away and delete this
+    return;
+  }
+  HighlightSide(s);
+}
+
+void TeamSelectPage::CancelSide(int s) {
+  if (sideReady[s]) { SetSideReady(s, false); return; }
+  if (cursorRow[s] == e_Row_Ready) {
+    cursorRow[s] = e_Row_Team;
+  } else if (cursorRow[s] == e_Row_Team) {
+    cursorRow[s] = IsNational(s) ? e_Row_Country : e_Row_Competition;
+  } else if (cursorRow[s] == e_Row_Competition) {
+    cursorRow[s] = e_Row_Country;
+  } else if (cursorRow[s] == e_Row_Country) {
+    if (!parallel && s == 1) {
+      // CPU-opponent case: step back to the home side's Ready instead of leaving
+      sideActive[1] = false;
+      sideActive[0] = true;
+      sideReady[0] = false;
+      readyButton[0]->SetToggled(false);
+      deviceKind[1] = -1;
+      deviceGamepad[1] = -1;
+      cursorRow[0] = e_Row_Ready;
+      cursorRow[1] = e_Row_Country;
+      HideSide(1);
+      HighlightSide(0);
+      HighlightSide(1);
+      return;
+    }
+    GoBack(); // may delete this
+    return;
+  }
+  HighlightSide(s);
+}
+
+void TeamSelectPage::SetSideReady(int s, bool ready) {
+  sideReady[s] = ready;
+  readyButton[s]->SetToggled(ready);
+
+  if (!ready) { HighlightSide(s); return; }
+
+  if (parallel) {
+    if (sideReady[0] && sideReady[1]) { GoOptionsMenu(); return; } // may delete this
   } else {
-    competitionSelect1->SetSelectable(true);
-    AddLeagues(competitionSelect1, countrySelect1->GetSelectedEntryID());
-    teamSelect1->ClearEntries();
-    AddTeams(teamSelect1, competitionSelect1->GetSelectedEntryID());
+    if (s == 0) { RevealAway(); return; }
+    GoOptionsMenu(); // may delete this
+    return;
   }
+  HighlightSide(s);
 }
 
-void TeamSelectPage::SetupCompetitionSelect2() {
-  if (countrySelect2->GetSelectedEntryID() == "national") {
-    competitionSelect2->ClearEntries();
-    competitionSelect2->SetSelectable(false);
-    teamSelect2->ClearEntries();
-    AddTeams(teamSelect2, GetNationalTeamsLeagueID());
+void TeamSelectPage::RevealAway() {
+  // the single device now drives the CPU opponent's panel
+  deviceKind[1] = deviceKind[0];
+  deviceGamepad[1] = deviceGamepad[0];
+  sideActive[0] = false;
+  sideActive[1] = true;
+  cursorRow[1] = e_Row_Country;
+  ShowSide(1);
+  HighlightSide(0);
+  HighlightSide(1);
+}
+
+void TeamSelectPage::SetupCompetitionSelect(int s) {
+  if (IsNational(s)) {
+    competitionSelect[s]->ClearEntries();
+    competitionSelect[s]->SetSelectable(false);
+    teamSelect[s]->ClearEntries();
+    AddTeams(teamSelect[s], GetNationalTeamsLeagueID());
   } else {
-    competitionSelect2->SetSelectable(true);
-    AddLeagues(competitionSelect2, countrySelect2->GetSelectedEntryID());
-    teamSelect2->ClearEntries();
-    AddTeams(teamSelect2, competitionSelect2->GetSelectedEntryID());
+    competitionSelect[s]->SetSelectable(true);
+    AddLeagues(competitionSelect[s], countrySelect[s]->GetSelectedEntryID());
+    teamSelect[s]->ClearEntries();
+    AddTeams(teamSelect[s], competitionSelect[s]->GetSelectedEntryID());
   }
 }
 
-void TeamSelectPage::SetupTeamSelect1() {
-  teamSelect1->ClearEntries();
-  AddTeams(teamSelect1, competitionSelect1->GetSelectedEntryID());
+void TeamSelectPage::SetupTeamSelect(int s) {
+  teamSelect[s]->ClearEntries();
+  AddTeams(teamSelect[s], competitionSelect[s]->GetSelectedEntryID());
 }
 
-void TeamSelectPage::SetupTeamSelect2() {
-  teamSelect2->ClearEntries();
-  AddTeams(teamSelect2, competitionSelect2->GetSelectedEntryID());
+HIDGamepad *TeamSelectPage::FindGamepad(int gamepadID) {
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+  for (unsigned int c = 1; c < controllers.size(); c++) {
+    if (controllers.at(c)->GetDeviceType() == e_HIDeviceType_Gamepad &&
+        static_cast<HIDGamepad*>(controllers.at(c))->GetGamepadID() == gamepadID) {
+      return static_cast<HIDGamepad*>(controllers.at(c));
+    }
+  }
+  return 0;
 }
 
 void TeamSelectPage::GoOptionsMenu() {
-  GetMenuTask()->SetTeamIDs(teamSelect1->GetSelectedEntryID(), teamSelect2->GetSelectedEntryID());
-  //printf("teams: %i vs %i\n", atoi(teamSelect1->GetSelectedEntryID().c_str()), atoi(teamSelect2->GetSelectedEntryID().c_str()));
+  GetMenuTask()->SetTeamIDs(teamSelect[0]->GetSelectedEntryID(), teamSelect[1]->GetSelectedEntryID());
+  // Remember (in this page's shared page data) that a later Back from the hub
+  // must restore these teams instead of falling back to the defaults.
+  if (pageData.properties) pageData.properties->SetBool("restoreSelections", true);
 
   this->Exit();
 
@@ -290,35 +471,89 @@ void TeamSelectPage::GoOptionsMenu() {
   delete this;
 }
 
-void TeamSelectPage::ProcessWindowingEvent(WindowingEvent *event) {
-  if (event->IsEscape()) {
-    if (windowManager->GetFocus() == countrySelect1) {
-      Gui2Page::ProcessWindowingEvent(event);
-    } else if (windowManager->GetFocus() == competitionSelect1) {
-      windowManager->SetFocus(countrySelect1);
-    } else if (windowManager->GetFocus() == teamSelect1) {
-      if (countrySelect1->GetSelectedEntryID() == "national") windowManager->SetFocus(countrySelect1);
-      else windowManager->SetFocus(competitionSelect1);
-    } else if (windowManager->GetFocus() == buttonStart1) {
-      windowManager->SetFocus(teamSelect1);
-    } else if (windowManager->GetFocus() == countrySelect2) {
-      windowManager->SetFocus(buttonStart1);
+void TeamSelectPage::ProcessKeyboardEvent(KeyboardEvent *event) {
+  int s = -1;
+  for (int i = 0; i < 2; i++) {
+    if (sideActive[i] && deviceKind[i] == 0) { s = i; break; }
+  }
+  if (s < 0) return;
 
-      p2->Hide();
-      grid2->Hide();
-      bg2->Hide();
-
-      SetActiveController(-1, true);
-
-    } else if (windowManager->GetFocus() == competitionSelect2) {
-      windowManager->SetFocus(countrySelect2);
-    } else if (windowManager->GetFocus() == teamSelect2) {
-      if (countrySelect2->GetSelectedEntryID() == "national") windowManager->SetFocus(countrySelect2);
-      else windowManager->SetFocus(competitionSelect2);
-    } else if (windowManager->GetFocus() == buttonStart2) {
-      windowManager->SetFocus(teamSelect2);
-    }
-
+  unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
+  bool up = event->GetKeyRepeated(SDLK_UP);
+  bool down = event->GetKeyRepeated(SDLK_DOWN);
+  if ((up || down) && now_ms - lastRowMove_ms[s] > 200) {
+    if (up && !down) MoveSideRow(s, -1);
+    else if (down && !up) MoveSideRow(s, 1);
+    lastRowMove_ms[s] = now_ms;
   }
 
+  if (event->GetKeyRepeated(SDLK_LEFT)) MoveSideSelection(s, -1);
+  if (event->GetKeyRepeated(SDLK_RIGHT)) MoveSideSelection(s, 1);
+  if (event->GetKeyOnce(SDLK_RETURN)) ActivateSide(s);       // may delete this
+  else if (event->GetKeyOnce(SDLK_ESCAPE)) CancelSide(s);    // may delete this
+}
+
+void TeamSelectPage::Process() {
+  Gui2View::Process();
+
+  // Direction is polled every frame so that both the analog stick and the
+  // digital D-pad move (the D-pad is not part of the default gamepad function
+  // mapping, which only covers the left stick). Polling also makes a held
+  // D-pad repeat, since it produces no per-frame joystick events.
+  unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
+  for (int s = 0; s < 2; s++) {
+    if (!sideActive[s] || deviceKind[s] != 1 || sideReady[s]) continue;
+    HIDGamepad *gamepad = FindGamepad(deviceGamepad[s]);
+    if (!gamepad) continue;
+    if (now_ms - lastMove_ms[s] <= 250) continue;
+
+    int joyID = gamepad->GetGamepadID();
+    float up = gamepad->GetButtonValue(e_ButtonFunction_Up);
+    float down = gamepad->GetButtonValue(e_ButtonFunction_Down);
+    float left = gamepad->GetButtonValue(e_ButtonFunction_Left);
+    float right = gamepad->GetButtonValue(e_ButtonFunction_Right);
+    UserEventManager &userEvents = UserEventManager::GetInstance();
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_UP)) up = 1.0f;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_DOWN)) down = 1.0f;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_LEFT)) left = 1.0f;
+    if (userEvents.GetJoyButtonState(joyID, SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) right = 1.0f;
+
+    if (up > 0.5f && up >= down) {
+      MoveSideRow(s, -1);
+      lastMove_ms[s] = now_ms;
+    } else if (down > 0.5f) {
+      MoveSideRow(s, 1);
+      lastMove_ms[s] = now_ms;
+    } else if (left > 0.5f) {
+      MoveSideSelection(s, -1);
+      lastMove_ms[s] = now_ms;
+    } else if (right > 0.5f) {
+      MoveSideSelection(s, 1);
+      lastMove_ms[s] = now_ms;
+    }
+  }
+}
+
+void TeamSelectPage::ProcessJoystickEvent(JoystickEvent *event) {
+  for (int s = 0; s < 2; s++) {
+    if (!sideActive[s] || deviceKind[s] != 1) continue;
+    HIDGamepad *gamepad = FindGamepad(deviceGamepad[s]);
+    if (!gamepad) continue;
+    int joyID = gamepad->GetGamepadID();
+
+    if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_B))) {
+      CancelSide(s); // may delete this
+      return;
+    }
+    if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A))) {
+      ActivateSide(s); // may delete this
+      return;
+    }
+  }
+}
+
+void TeamSelectPage::ProcessWindowingEvent(WindowingEvent *event) {
+  // input is routed per side from raw events above; the base page's Escape
+  // handling (GoBack) must not fire on top of that
+  event->Ignore();
 }

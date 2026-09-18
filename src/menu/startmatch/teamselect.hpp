@@ -19,47 +19,68 @@
 
 using namespace blunted;
 
+class HIDGamepad;
+
 // Selector population helpers shared with the LAN lobby team-select phase.
 std::string GetNationalTeamsLeagueID();
 void AddCountries(Gui2IconSelector *selector);
 void AddLeagues(Gui2IconSelector *selector, const std::string &country_id);
 void AddTeams(Gui2IconSelector *selector, const std::string &competition_id);
 
+// Local kick-off team selection. Both sides have their own cursor so two local
+// players can pick their team at the same time with their own device. When only
+// one side is human (the other is the CPU) the two panels are picked in turn
+// with the single device, as before.
 class TeamSelectPage : public Gui2Page {
 
   public:
     TeamSelectPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData);
     virtual ~TeamSelectPage();
 
-    void FocusCompetitionSelect1();
-    void FocusTeamSelect1();
-    void FocusStart1();
-    void FocusCompetitionSelect2();
-    void FocusTeamSelect2();
-    void FocusStart2();
-    void SetupCompetitionSelect1();
-    void SetupCompetitionSelect2();
-    void SetupTeamSelect1();
-    void SetupTeamSelect2();
-    void GoOptionsMenu();
-
+    virtual void OnGainFocus() { /* stay focusable ourselves and route input per side */ }
+    virtual void Process();
+    virtual void ProcessKeyboardEvent(KeyboardEvent *event);
+    virtual void ProcessJoystickEvent(JoystickEvent *event);
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
-    Gui2Button *buttonStart1;
-    Gui2Button *buttonStart2;
-    Gui2Caption *p2;
-    Gui2Grid *grid2;
-    Gui2Image *bg2;
-
   protected:
-    Gui2IconSelector *teamSelect1;
-    Gui2IconSelector *teamSelect2;
-    Gui2IconSelector *competitionSelect1;
-    Gui2IconSelector *competitionSelect2;
-    Gui2IconSelector *countrySelect1;
-    Gui2IconSelector *countrySelect2;
+    enum e_CursorRow { e_Row_Country = 0, e_Row_Competition = 1, e_Row_Team = 2, e_Row_Ready = 3 };
 
-    bool team2Initialized;
+    void BuildSide(int s);
+    void RestoreSelection(int s, int teamID);
+    void ShowSide(int s);
+    void HideSide(int s);
+    void SetupCompetitionSelect(int s);
+    void SetupTeamSelect(int s);
+    void HighlightSide(int s);
+    void MoveSideSelection(int s, int delta);
+    void MoveSideRow(int s, int delta);
+    void ActivateSide(int s);
+    void CancelSide(int s);
+    void SetSideReady(int s, bool ready);
+    void RevealAway();
+    bool IsNational(int s);
+    HIDGamepad *FindGamepad(int gamepadID);
+    void GoOptionsMenu();
+
+    // s: 0 = home/left (player 1), 1 = away/right (player 2)
+    Gui2IconSelector *countrySelect[2];
+    Gui2IconSelector *competitionSelect[2];
+    Gui2IconSelector *teamSelect[2];
+    Gui2Button *readyButton[2];
+    Gui2Grid *teamGrid[2];
+    Gui2Image *teamBg[2];
+    Gui2Caption *panelCaption[2];
+
+    int cursorRow[2];
+    bool sideReady[2];
+    bool sideActive[2];   // side accepts input (both true when two local humans)
+    int deviceKind[2];    // -1 none, 0 keyboard, 1 gamepad
+    int deviceGamepad[2]; // HIDGamepad id when deviceKind == 1
+    unsigned long lastMove_ms[2];
+    unsigned long lastRowMove_ms[2];
+
+    bool parallel;      // both sides are local humans with their own device
 
 };
 

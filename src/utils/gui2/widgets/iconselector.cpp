@@ -47,7 +47,7 @@ namespace blunted {
 
     if (fadeOut_ms <= fadeOutTime_ms) {
       fadeOut_ms += windowManager->GetTimeStep_ms();
-      if (!IsFocussed()) {// && fadeOut_ms <= fadeOutTime_ms) { // cool fadeout effect!
+      if (!IsFocussed() && !highlighted) {// && fadeOut_ms <= fadeOutTime_ms) { // cool fadeout effect!
         redraw = true;
       }
     }
@@ -103,7 +103,7 @@ namespace blunted {
 
     //printf("redrawing %s\n", GetName().c_str());
     int alpha = 0;
-    if (IsFocussed()) {
+    if (IsFocussed() || highlighted) {
       alpha = 200;
     } else {
       alpha = int(floor(200 - (clamp(fadeOut_ms, 0, fadeOutTime_ms) / (float)fadeOutTime_ms * 150)));
@@ -169,6 +169,20 @@ namespace blunted {
     if (entries.size() == 0) return;
     selectedEntry = clamp(index, 0, (signed int)entries.size() - 1);
     visibleSelectedEntry = (float)selectedEntry;
+    Redraw();
+  }
+
+  void Gui2IconSelector::MoveSelection(int delta) {
+    if (entries.size() == 0 || delta == 0) return;
+    int prevSelectedEntry = selectedEntry;
+    selectedEntry = clamp(selectedEntry + delta, 0, (signed int)entries.size() - 1);
+    if (selectedEntry != prevSelectedEntry) sig_OnChange();
+  }
+
+  void Gui2IconSelector::SetHighlighted(bool onOff) {
+    if (highlighted == onOff) return;
+    highlighted = onOff;
+    if (!onOff && !IsFocussed()) fadeOut_ms = 0;
     Redraw();
   }
 
