@@ -38,6 +38,10 @@ class Team {
     PlayerData *GetPlayerData(int playerID);
     FormationEntry GetFormationEntry(int playerID);
     void SetFormationEntry(int playerID, FormationEntry entry);
+    // In-match formation edit: overrides the player's role/position at runtime
+    // (covers substituted-in players, whose TeamData slot has no entry). Not
+    // persisted; lives with the Match.
+    void SetRuntimeFormationEntry(int playerID, FormationEntry entry);
     const std::vector<Player*> &GetAllPlayers() { return players; }
     void GetAllPlayers(std::vector<Player*> &allPlayers) { allPlayers.insert(allPlayers.end(), players.begin(), players.end()); }
     void GetActivePlayers(std::vector<Player*> &activePlayers);

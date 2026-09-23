@@ -168,6 +168,18 @@ NetPlanSwap ReadPlanSwap(NetBuffer &buffer) {
   return swap;
 }
 
+void WritePlanScheme(NetBuffer &buffer, const NetPlanScheme &scheme) {
+  buffer.PutU32((uint32_t)scheme.side);
+  buffer.PutU32((uint32_t)scheme.scheme);
+}
+
+NetPlanScheme ReadPlanScheme(NetBuffer &buffer) {
+  NetPlanScheme scheme;
+  scheme.side = (int)buffer.GetU32();
+  scheme.scheme = (int)buffer.GetU32();
+  return scheme;
+}
+
 void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names) {
   buffer.PutU32((uint32_t)names.size());
   for (unsigned int i = 0; i < names.size(); i++) {

@@ -275,6 +275,7 @@ add_library(menulib STATIC
         src/menu/league/league_forward.cpp
         src/menu/league/league_standings.cpp
         src/menu/gameplan.cpp
+        src/menu/tacticschemes.cpp
         src/menu/widgets/planmap.cpp
         src/menu/widgets/gameplansubmenu.cpp
         src/menu/startmatch/teamselect.cpp

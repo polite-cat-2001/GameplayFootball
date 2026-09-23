@@ -233,6 +233,10 @@ void Team::SetFormationEntry(int playerID, FormationEntry entry) {
   }
 }
 
+void Team::SetRuntimeFormationEntry(int playerID, FormationEntry entry) {
+  runtimeFormation[playerID] = entry;
+}
+
 void Team::GetActivePlayers(std::vector<Player*> &activePlayers) {
   for (auto player : players) {
     if (player->IsActive()) activePlayers.push_back(player);

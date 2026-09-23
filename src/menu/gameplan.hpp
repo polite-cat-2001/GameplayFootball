@@ -19,6 +19,7 @@
 
 #include "../data/teamdata.hpp"
 
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -52,6 +53,8 @@ struct PlanEntry {
   float cardCenterX;
   float roleY;
   float nameY;
+  float cardW;                // pitch card geometry, for in-place preview moves
+  float cardPhotoH;
 };
 
 // One editable team: its pitch plus a bench column to the right of it.
@@ -60,7 +63,8 @@ struct PlanPanel {
                 px(0), py(0), pw(0), ph(0), bx(0), by(0), bw(0),
                 cursorIndex(-1), heldIndex(-1), benchCount(0), benchScroll(0),
                 benchMaxVisible(1), benchStep(4.0f), benchRowHeight(2.5f), voteReady(false),
-                activeSection(-1), barCursor(0), barFocused(false), sectionCaption(0), barCenterX(50.0f) {}
+                activeSection(-1), barCursor(0), barFocused(false), sectionCaption(0), barCenterX(50.0f),
+                benchHeader(0), schemeCursor(0), committedScheme(-1) {}
 
   int teamID;
   TeamData *teamData;
@@ -91,6 +95,15 @@ struct PlanPanel {
   std::vector<Gui2Button*> sectionButtons;
   Gui2Caption *sectionCaption;
   float barCenterX;
+
+  // Tactics section: the bench column becomes a scheme list. Scrolling previews
+  // the highlighted scheme on the pitch; Enter commits, Back returns to the bar.
+  Gui2Caption *benchHeader;             // "Subs" or "Scheme"
+  std::vector<Gui2Button*> schemeButtons;
+  int schemeCursor;                     // highlighted scheme
+  int committedScheme;                  // scheme the formation currently matches, or -1
+  std::map<int, FormationEntry> pitchBase; // slot -> actual (non-preview) formation
+  float pitchBottomLimit;               // pitch card bottom clamp, from the real GK
 };
 
 // Game plan screen. Normally one editable team (+ read-only opponent). In a
@@ -145,9 +158,22 @@ class GamePlanPage : public Gui2Page {
     void RefreshSectionBar(PlanPanel &panel);
     int PanelIndex(PlanPanel &panel);
     bool PositionsActive(const PlanPanel &panel) const;
+    bool TacticsActive(const PlanPanel &panel) const;
     void SetSection(PlanPanel &panel, int section);
     std::string SectionName(int section);
     std::string SectionDescription(int section);
+
+    // Tactics section: scheme list in place of the bench column.
+    void BuildSchemeList(PlanPanel &panel);
+    void LayoutSchemes(PlanPanel &panel);
+    void RefreshSchemes(PlanPanel &panel);
+    void MoveSchemeCursor(PlanPanel &panel, int delta);
+    void CommitScheme(PlanPanel &panel);
+    void PreviewSchemes(PlanPanel &panel);
+    Vector3 PitchAnchor(PlanPanel &panel, const FormationEntry &entry);
+    void PositionPitchCard(PlanEntry &entry, PlanPanel &panel, float anchorX, float anchorY, float maxBottom);
+    void SchemeClicked(int panelIndex, int scheme);
+    void SendPlanScheme(int side, int scheme);
 
     void Refresh();
     void RefreshPanel(PlanPanel &panel);
@@ -167,6 +193,9 @@ class GamePlanPage : public Gui2Page {
     void SendPlanSwap(int side, int dbA, int dbB);
 
     std::vector<PlanEntry> entries;
+    // Read-only opponent cards. Unlike `entries`, these are plain views (no
+    // interaction), but they must be tracked and freed on rebuild or they stack.
+    std::vector<Gui2View*> opponentViews;
     std::vector<PlanPanel> panels;
     bool dualPanel;
     int moveCooldown_ms;

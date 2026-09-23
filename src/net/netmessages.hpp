@@ -80,7 +80,11 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_PlanSwap,
   // Hub vote: value = e_NetHubVote (0 withdraws). All peers must agree before the
   // host executes the action (leave the hub, start the match).
-  e_NetLobbyAction_HubVote
+  e_NetLobbyAction_HubVote,
+  // Tactical scheme pick from the game plan's Tactics section: side = teamID,
+  // value = scheme index. The host validates side ownership, applies the
+  // deterministic assignment (pre-match TeamData or live Team) and relays it.
+  e_NetLobbyAction_PlanScheme
 };
 
 // Shared pre-match hub action requiring confirmation from every peer.
@@ -195,6 +199,19 @@ struct NetPlanSwap {
 
 void WritePlanSwap(NetBuffer &buffer, const NetPlanSwap &swap);
 NetPlanSwap ReadPlanSwap(NetBuffer &buffer);
+
+// Authoritative tactical scheme pick, broadcast by the host after validating a
+// client's PlanScheme request (or applying its own edit). Peers apply the same
+// deterministic assignment locally.
+struct NetPlanScheme {
+  NetPlanScheme() : side(0), scheme(-1) {}
+
+  int side;
+  int scheme;
+};
+
+void WritePlanScheme(NetBuffer &buffer, const NetPlanScheme &scheme);
+NetPlanScheme ReadPlanScheme(NetBuffer &buffer);
 
 // Host animation collection listing, in host index order. The client resolves
 // each name to its own Animation* so snapshots can carry a compact animID.

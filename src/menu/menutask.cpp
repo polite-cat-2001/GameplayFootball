@@ -11,6 +11,8 @@
 
 #include "pagefactory.hpp"
 
+#include "tacticschemes.hpp"
+
 #include "mainmenu.hpp"
 #include "ingame/ingame.hpp"
 #include "visualoptions.hpp"
@@ -251,6 +253,23 @@ void MenuTask::ApplyPlanSwap(int side, int dbA, int dbB) {
   planRevision++;
 }
 
+void MenuTask::ApplyPlanScheme(int side, int scheme) {
+  Match *match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
+  if (match) {
+    // In-match: edit the live team's runtime formation.
+    Team *team = match->GetTeam(side);
+    if (!team) return;
+    ApplySchemeToTeam(team, scheme);
+  } else {
+    // Pre-match: edit the shared MatchData lineup.
+    MatchData *matchData = GetMatchData();
+    TeamData *teamData = matchData ? matchData->GetTeamData(side) : 0;
+    if (!teamData) return;
+    ApplySchemeToTeamData(teamData, scheme);
+  }
+  planRevision++;
+}
+
 void MenuTask::ProcessNetworkPlanEdits() {
   if (netServer) {
     // Host: apply client edits under ownership check, then relay to everyone.
@@ -264,9 +283,20 @@ void MenuTask::ProcessNetworkPlanEdits() {
       swap.dbB = request.dbB;
       netServer->BroadcastPlanSwap(swap);
     }
+    NetPlanSchemeRequest schemeRequest;
+    while (netServer->ConsumePlanSchemeRequest(schemeRequest)) {
+      if (!PlayerOwnsSide(schemeRequest.playerId, schemeRequest.side)) continue;
+      ApplyPlanScheme(schemeRequest.side, schemeRequest.scheme);
+      NetPlanScheme scheme;
+      scheme.side = schemeRequest.side;
+      scheme.scheme = schemeRequest.scheme;
+      netServer->BroadcastPlanScheme(scheme);
+    }
   } else if (netClient) {
     NetPlanSwap swap;
     while (netClient->ConsumePlanSwap(swap)) ApplyPlanSwap(swap.side, swap.dbA, swap.dbB);
+    NetPlanScheme scheme;
+    while (netClient->ConsumePlanScheme(scheme)) ApplyPlanScheme(scheme.side, scheme.scheme);
   }
 }
 

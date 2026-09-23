@@ -54,6 +54,8 @@ class NetClient {
     // Authoritative pre-match lineup swaps relayed by the host (host-applied
     // client edits). One-shot reads, applied to the local MatchData.
     bool ConsumePlanSwap(NetPlanSwap &swap);
+    // Authoritative tactical scheme picks relayed by the host. One-shot reads.
+    bool ConsumePlanScheme(NetPlanScheme &scheme);
 
   private:
     void Run();
@@ -129,6 +131,7 @@ class NetClient {
     bool pauseState;
     bool replayStopPending;
     std::deque<NetPlanSwap> planSwaps; // guarded by pendingMutex
+    std::deque<NetPlanScheme> planSchemes; // guarded by pendingMutex
 };
 
 #endif

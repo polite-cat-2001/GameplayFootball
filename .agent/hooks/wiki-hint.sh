@@ -34,6 +34,9 @@ case "$b" in
   # Симуляция матча
   match.cpp|match.hpp|team.cpp|team.hpp|ball.cpp|ball.hpp|player.cpp|player.hpp|playerbase.cpp|playerbase.hpp|referee.cpp|referee.hpp|officials.cpp|officials.hpp|elizacontroller.cpp|elizacontroller.hpp|strategy.cpp|strategy.hpp|mentalimage.cpp|mentalimage.hpp|AIfunctions.cpp|AIfunctions.hpp|teamAIcontroller.cpp|teamAIcontroller.hpp|proceduralpitch.cpp|proceduralpitch.hpp|humangamer.cpp|humangamer.hpp|humancontroller.cpp|humancontroller.hpp)
     pages="матч" ;;
+  # Экран плана игры (замены, роли, тактические схемы)
+  gameplan.cpp|gameplan.hpp|tacticschemes.cpp|tacticschemes.hpp)
+    pages="матч" ;;
   # Данные и БД
   database.cpp|database.hpp|leaguecode.cpp|leaguecode.hpp|dbquery.cpp|dbquery.hpp|matchdata.cpp|matchdata.hpp|teamdata.cpp|teamdata.hpp|playerdata.cpp|playerdata.hpp)
     pages="база-данных" ;;

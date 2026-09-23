@@ -11,6 +11,10 @@
 #include "../gamedefines.hpp"
 #include "playerdata.hpp"
 
+// Hardcoded formation position belonging to a role; used to adapt custom
+// database positions (see TeamData::InitFromRaw).
+Vector3 GetDefaultRolePosition(e_PlayerRole role);
+
 struct TeamTactics {
 
   TeamTactics() {

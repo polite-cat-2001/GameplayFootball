@@ -528,6 +528,20 @@ void NetServer::BroadcastPlanSwap(const NetPlanSwap &swap) {
   BroadcastMessage(e_NetMessage_PlanSwap, buffer);
 }
 
+bool NetServer::ConsumePlanSchemeRequest(NetPlanSchemeRequest &request) {
+  boost::mutex::scoped_lock lock(planSchemeMutex);
+  if (planSchemeRequests.empty()) return false;
+  request = planSchemeRequests.front();
+  planSchemeRequests.erase(planSchemeRequests.begin());
+  return true;
+}
+
+void NetServer::BroadcastPlanScheme(const NetPlanScheme &scheme) {
+  NetBuffer buffer;
+  WritePlanScheme(buffer, scheme);
+  BroadcastMessage(e_NetMessage_PlanScheme, buffer);
+}
+
 bool NetServer::ConsumeHubVoteResult(int &vote) {
   boost::mutex::scoped_lock lock(hubVoteMutex);
   if (!hubVoteResultPending) return false;
@@ -849,6 +863,18 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         {
           boost::mutex::scoped_lock lock(planSwapMutex);
           planSwapRequests.push_back(request);
+        }
+        return;
+      } else if (action.type == e_NetLobbyAction_PlanScheme) {
+        // Client tactical scheme pick: queue it for the host menu layer, which
+        // validates side ownership, applies it and relays the scheme.
+        NetPlanSchemeRequest request;
+        request.playerId = action.playerId;
+        request.side = action.side;
+        request.scheme = action.value;
+        {
+          boost::mutex::scoped_lock lock(planSchemeMutex);
+          planSchemeRequests.push_back(request);
         }
         return;
       } else if (action.type == e_NetLobbyAction_HubVote) {

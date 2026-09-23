@@ -367,6 +367,9 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   } else if (type == e_NetMessage_PlanSwap) {
     boost::mutex::scoped_lock lock(pendingMutex);
     planSwaps.push_back(ReadPlanSwap(buffer));
+  } else if (type == e_NetMessage_PlanScheme) {
+    boost::mutex::scoped_lock lock(pendingMutex);
+    planSchemes.push_back(ReadPlanScheme(buffer));
   } else if (type == e_NetMessage_Keepalive) {
     HandleKeepalive(ReadKeepalive(buffer));
   }
@@ -415,6 +418,14 @@ bool NetClient::ConsumePlanSwap(NetPlanSwap &swap) {
   if (planSwaps.empty()) return false;
   swap = planSwaps.front();
   planSwaps.pop_front();
+  return true;
+}
+
+bool NetClient::ConsumePlanScheme(NetPlanScheme &scheme) {
+  boost::mutex::scoped_lock lock(pendingMutex);
+  if (planSchemes.empty()) return false;
+  scheme = planSchemes.front();
+  planSchemes.pop_front();
   return true;
 }
 

@@ -40,6 +40,16 @@ struct NetPlanSwapRequest {
   int dbB;
 };
 
+// A client tactical scheme pick, attributed to the requesting peer. The host
+// menu layer validates side ownership, applies it and relays it.
+struct NetPlanSchemeRequest {
+  NetPlanSchemeRequest() : playerId(0), side(0), scheme(-1) {}
+
+  uint32_t playerId;
+  int side;
+  int scheme;
+};
+
 class NetServer {
 
   public:
@@ -121,6 +131,11 @@ class NetServer {
     bool ConsumePlanSwapRequest(NetPlanSwapRequest &request);
     void BroadcastPlanSwap(const NetPlanSwap &swap);
 
+    // Client tactical scheme picks, consumed by the host menu layer, which
+    // validates ownership, applies them and calls BroadcastPlanScheme.
+    bool ConsumePlanSchemeRequest(NetPlanSchemeRequest &request);
+    void BroadcastPlanScheme(const NetPlanScheme &scheme);
+
     // All peers agreed on a hub action (e_NetHubVote); consumed once by the host.
     bool ConsumeHubVoteResult(int &vote);
 
@@ -191,6 +206,9 @@ class NetServer {
 
     boost::mutex planSwapMutex;
     std::vector<NetPlanSwapRequest> planSwapRequests;
+
+    boost::mutex planSchemeMutex;
+    std::vector<NetPlanSchemeRequest> planSchemeRequests;
 
     boost::mutex hubVoteMutex;
     bool hubVoteResultPending;

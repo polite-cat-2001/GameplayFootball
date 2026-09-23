@@ -114,6 +114,7 @@ class MenuTask : public Gui2Task {
     // host-relayed swaps (client) to the shared MatchData.
     void ProcessNetworkPlanEdits();
     void ApplyPlanSwap(int side, int dbA, int dbB);
+    void ApplyPlanScheme(int side, int scheme);
     bool PlayerOwnsSide(uint32_t playerId, int side);
 
     // Pre-match: host consumes the agreed hub action (leave hub / start).

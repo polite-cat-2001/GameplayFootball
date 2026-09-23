@@ -4,6 +4,8 @@
 
 #include "gameplan.hpp"
 
+#include "tacticschemes.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -59,6 +61,9 @@ const float sectionCaptionH = 2.4f;
 // the bar of a side sits in its screen half, centered on the side's panel
 const float sectionHalfCenterL = 25.0f;
 const float sectionHalfCenterR = 75.0f;
+
+// tactics section: scheme rows fill the bench column
+const float schemeRowMaxH = 4.6f;
 
 Vector3 PitchToScreen(const Vector3 &pos, float x, float y, float w, float h) {
   float depth = pos.coords[0] * 0.5f + 0.5f; // 0 == own goal (bottom), 1 == opponent goal (top)
@@ -330,9 +335,9 @@ void GamePlanPage::BuildPlan() {
     this->AddView(benchPanel);
     benchPanel->Show();
 
-    Gui2Caption *benchHeader = new Gui2Caption(windowManager, "gameplan_bench_header_" + suffix, panel.bx, panel.by - 3, panel.bw, 3, "Subs");
-    this->AddView(benchHeader);
-    benchHeader->Show();
+    panel.benchHeader = new Gui2Caption(windowManager, "gameplan_bench_header_" + suffix, panel.bx, panel.by - 3, panel.bw, 3, "Subs");
+    this->AddView(panel.benchHeader);
+    panel.benchHeader->Show();
 
     Gui2Caption *teamHeader = new Gui2Caption(windowManager, "gameplan_team_header_" + suffix, panel.px, panel.py - 3, panel.pw, 3,
                                                panel.teamData ? panel.teamData->GetName() : "");
@@ -340,6 +345,7 @@ void GamePlanPage::BuildPlan() {
     teamHeader->Show();
 
     BuildSectionBar(panel);
+    BuildSchemeList(panel);
   }
 
   if (!dualPanel) {
@@ -387,6 +393,169 @@ void GamePlanPage::BuildOpponentReady(float centerX) {
   CenterCaption(opponentReady, centerX, sectionBarY, sectionBtnH, "READY");
 }
 
+void GamePlanPage::BuildSchemeList(PlanPanel &panel) {
+  const std::vector<TacticalScheme> &schemes = GetTacticalSchemes();
+  int count = (int)schemes.size();
+  if (count <= 0) return;
+
+  float step = panel.ph / count;
+  float rowH = std::min(schemeRowMaxH, step - 1.0f);
+  if (rowH < 1.5f) rowH = 1.5f;
+
+  int pi = PanelIndex(panel);
+  std::string suffix = int_to_str(panel.teamID);
+  panel.schemeButtons.clear();
+  for (int i = 0; i < count; i++) {
+    float y = panel.by + i * step + (step - rowH) * 0.5f;
+    Gui2Button *button = new Gui2Button(windowManager, "gameplan_scheme_" + suffix + "_" + int_to_str(i), panel.bx + 0.5f, y, panel.bw - 1.0f, rowH, schemes.at(i).name);
+    button->SetToggleable(true);
+    button->sig_OnClick.connect(boost::bind(&GamePlanPage::SchemeClicked, this, pi, i));
+    this->AddView(button);
+    button->Hide();
+    panel.schemeButtons.push_back(button);
+  }
+}
+
+void GamePlanPage::LayoutSchemes(PlanPanel &panel) {
+  bool tactics = TacticsActive(panel);
+  if (panel.benchHeader) panel.benchHeader->SetCaption(tactics ? "Scheme" : "Subs");
+
+  // The scheme list takes over the bench column: hide the substitute rows.
+  if (tactics) {
+    for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
+      PlanEntry &entry = entries.at(panel.entryIndices.at(k));
+      if (entry.onPitch) continue;
+      if (entry.button) entry.button->Hide();
+      if (entry.roleCaption) entry.roleCaption->Hide();
+      if (entry.ratingCaption) entry.ratingCaption->Hide();
+      if (entry.fatigueCaption) entry.fatigueCaption->Hide();
+    }
+  }
+
+  for (unsigned int i = 0; i < panel.schemeButtons.size(); i++) {
+    if (tactics) panel.schemeButtons.at(i)->Show();
+    else panel.schemeButtons.at(i)->Hide();
+  }
+}
+
+void GamePlanPage::RefreshSchemes(PlanPanel &panel) {
+  bool tactics = TacticsActive(panel);
+  for (unsigned int i = 0; i < panel.schemeButtons.size(); i++) {
+    bool committed = ((int)i == panel.committedScheme);
+    bool cursor = tactics && !panel.barFocused && ((int)i == panel.schemeCursor);
+    panel.schemeButtons.at(i)->SetToggled(committed);
+    panel.schemeButtons.at(i)->SetHighlighted(committed || cursor);
+    if (cursor) panel.schemeButtons.at(i)->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright2));
+    else panel.schemeButtons.at(i)->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
+  }
+}
+
+void GamePlanPage::MoveSchemeCursor(PlanPanel &panel, int delta) {
+  const std::vector<TacticalScheme> &schemes = GetTacticalSchemes();
+  if (schemes.empty()) return;
+  int count = (int)schemes.size();
+  int next = panel.schemeCursor + delta;
+  if (next < 0) next = 0;
+  if (next > count - 1) next = count - 1;
+  if (next == panel.schemeCursor) return;
+  panel.schemeCursor = next;
+  if (!dualPanel && !panel.schemeButtons.empty()) panel.schemeButtons.at(panel.schemeCursor)->SetFocus();
+  // Move the existing cards in place: a full rebuild here made both teams'
+  // squads flicker (widgets deleted/recreated while the render thread samples).
+  PreviewSchemes(panel);
+  RefreshPanel(panel);
+}
+
+void GamePlanPage::CommitScheme(PlanPanel &panel) {
+  const std::vector<TacticalScheme> &schemes = GetTacticalSchemes();
+  if (panel.schemeCursor < 0 || panel.schemeCursor >= (int)schemes.size()) return;
+
+  if (GetMenuTask()->GetNetClient() || GetMenuTask()->GetNetServer()) {
+    // Host-authoritative: send the intent; the applied scheme comes back via the
+    // plan revision and the rebuild below.
+    SendPlanScheme(panel.teamID, panel.schemeCursor);
+  } else if (InMatch()) {
+    ApplySchemeToTeam(panel.team, panel.schemeCursor);
+  } else {
+    ApplySchemeToTeamData(panel.teamData, panel.schemeCursor);
+  }
+
+  panel.committedScheme = panel.schemeCursor;
+  rebuildFocusTeam = panel.teamID;
+  rebuildFocusSlot = -1;
+  rebuildPending = true;
+}
+
+void GamePlanPage::SchemeClicked(int panelIndex, int scheme) {
+  if (panelIndex < 0 || panelIndex >= (int)panels.size()) return;
+  PlanPanel &panel = panels.at(panelIndex);
+  const std::vector<TacticalScheme> &schemes = GetTacticalSchemes();
+  if (scheme < 0 || scheme >= (int)schemes.size()) return;
+  if (panel.schemeCursor != scheme) panel.schemeCursor = scheme;
+  CommitScheme(panel);
+}
+
+Vector3 GamePlanPage::PitchAnchor(PlanPanel &panel, const FormationEntry &entry) {
+  Vector3 pos = entry.databasePosition;
+  if (entry.role != e_PlayerRole_GK) pos.coords[0] = pos.coords[0] * 0.8f + 0.1f;
+  return PitchToScreen(pos, panel.px, panel.py, panel.pw, panel.ph);
+}
+
+void GamePlanPage::PositionPitchCard(PlanEntry &entry, PlanPanel &panel, float anchorX, float anchorY, float maxBottom) {
+  if (entry.cardPhotoH <= 0.0f) return;
+  float cardH = entry.cardPhotoH + cardGap + badgeH + cardGap + cardNameH;
+  float cx = Clampf(anchorX - entry.cardW * 0.5f, panel.px, panel.px + panel.pw - entry.cardW);
+  float cy = anchorY - entry.cardPhotoH * 0.5f;
+  if (cy + cardH > maxBottom) cy = maxBottom - cardH;
+  cy = Clampf(cy, panel.py, panel.py + panel.ph - cardH);
+
+  entry.cardCenterX = cx + entry.cardW * 0.5f;
+  if (entry.photo) entry.photo->SetPosition(cx + (entry.cardW - entry.cardPhotoH) * 0.5f, cy);
+  entry.roleY = cy + entry.cardPhotoH + cardGap;
+  if (entry.roleCaption) entry.roleCaption->SetPosition(cx, entry.roleY);
+  if (entry.fatigueCaption) entry.fatigueCaption->SetPosition(cx, entry.roleY);
+  entry.nameY = entry.roleY + badgeH + cardGap;
+  if (entry.button) entry.button->SetPosition(cx, entry.nameY);
+  if (entry.nameCaption) entry.nameCaption->SetPosition(cx, entry.nameY);
+  entry.pos = Vector3(anchorX, anchorY, 0);
+}
+
+void GamePlanPage::PreviewSchemes(PlanPanel &panel) {
+  const std::vector<TacticalScheme> &schemes = GetTacticalSchemes();
+  bool preview = TacticsActive(panel) && !panel.barFocused && !schemes.empty();
+  if (preview && (panel.schemeCursor < 0 || panel.schemeCursor >= (int)schemes.size())) panel.schemeCursor = 0;
+
+  std::vector<int> pitchPositions;
+  std::vector<SchemeCandidate> candidates;
+  for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
+    int entryPos = panel.entryIndices.at(k);
+    PlanEntry &entry = entries.at(entryPos);
+    if (!entry.onPitch) continue;
+    std::map<int, FormationEntry>::iterator it = panel.pitchBase.find(entry.index);
+    if (it == panel.pitchBase.end()) continue;
+    pitchPositions.push_back(entryPos);
+    SchemeCandidate candidate;
+    candidate.slot = entry.index;
+    candidate.role = it->second.role;
+    candidate.position = it->second.databasePosition;
+    candidates.push_back(candidate);
+  }
+
+  std::vector<FormationEntry> assignment;
+  if (preview) assignment = AssignScheme(candidates, schemes.at(panel.schemeCursor));
+
+  for (unsigned int i = 0; i < pitchPositions.size(); i++) {
+    PlanEntry &entry = entries.at(pitchPositions.at(i));
+    FormationEntry fe;
+    if (preview && i < assignment.size()) fe = assignment.at(i);
+    else fe = panel.pitchBase[entry.index];
+    entry.role = fe.role;
+    Vector3 s = PitchAnchor(panel, fe);
+    float maxBottom = (fe.role == e_PlayerRole_GK) ? (panel.py + panel.ph) : panel.pitchBottomLimit;
+    PositionPitchCard(entry, panel, s.coords[0], s.coords[1], maxBottom);
+  }
+}
+
 void GamePlanPage::FocusSectionBar(PlanPanel &panel) {
   if (panel.sectionButtons.empty()) return;
   panel.barFocused = true;
@@ -396,6 +565,8 @@ void GamePlanPage::FocusSectionBar(PlanPanel &panel) {
   panel.heldIndex = -1;
   panel.cursorIndex = -1;
   if (!dualPanel) panel.sectionButtons.at(panel.barCursor)->SetFocus();
+  // Leaving the scheme list discards an uncommitted preview, in place.
+  if (TacticsActive(panel)) PreviewSchemes(panel);
   RefreshPanel(panel);
   RefreshSectionBar(panel);
   UpdateInfo();
@@ -403,6 +574,14 @@ void GamePlanPage::FocusSectionBar(PlanPanel &panel) {
 
 void GamePlanPage::FocusContent(PlanPanel &panel) {
   panel.barFocused = false;
+  if (TacticsActive(panel)) {
+    if (!dualPanel && !panel.schemeButtons.empty()) panel.schemeButtons.at(panel.schemeCursor)->SetFocus();
+    PreviewSchemes(panel);
+    RefreshPanel(panel);
+    RefreshSectionBar(panel);
+    UpdateInfo();
+    return;
+  }
   if (panel.cursorIndex < 0 && !panel.entryIndices.empty()) {
     SelectCursor(panel, panel.entryIndices.front()); // also refreshes + info
   } else {
@@ -426,7 +605,7 @@ void GamePlanPage::SectionClicked(int panelIndex, int section) {
   PlanPanel &panel = panels.at(panelIndex);
   SetSection(panel, section);
   // Stub sections have nothing to interact with: keep the bar focused.
-  if (PositionsActive(panel)) FocusContent(panel);
+  if (PositionsActive(panel) || TacticsActive(panel)) FocusContent(panel);
   else FocusSectionBar(panel);
 }
 
@@ -455,11 +634,20 @@ bool GamePlanPage::PositionsActive(const PlanPanel &panel) const {
   return panel.activeSection == e_GamePlanSection_Positions;
 }
 
+bool GamePlanPage::TacticsActive(const PlanPanel &panel) const {
+  return panel.activeSection == e_GamePlanSection_Tactics;
+}
+
 void GamePlanPage::SetSection(PlanPanel &panel, int section) {
   if (section < 0 || section >= e_GamePlanSection_Size) return;
   panel.activeSection = section;
   panel.barCursor = section;
   panel.heldIndex = -1;
+  // Restore/preview the pitch and re-lay the column in place (no widget churn),
+  // so switching between the substitute list and the scheme list is not a frame
+  // late and nothing flickers.
+  PreviewSchemes(panel);
+  LayoutBench(panel);
   RefreshSectionBar(panel);
   Refresh();
 }
@@ -475,7 +663,7 @@ std::string GamePlanPage::SectionName(int section) {
 
 std::string GamePlanPage::SectionDescription(int section) {
   switch (section) {
-    case e_GamePlanSection_Tactics: return "Tactical scheme (coming soon)";
+    case e_GamePlanSection_Tactics: return "Choose a tactical scheme";
     case e_GamePlanSection_Positions: return "Change positions";
     case e_GamePlanSection_Roles: return "Designated roles (coming soon)";
     default: return "";
@@ -500,6 +688,10 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     float bx = panel.px, by = panel.py, bw = panel.pw, bh = panel.ph;
     if (!onPitch) { bx = panel.bx; by = panel.by; bw = panel.bw; bh = panel.ph; }
 
+    // While the scheme list owns the bench column, bench rows are created hidden
+    // so the render thread never samples a frame with both lists visible.
+    bool visible = onPitch || !TacticsActive(panel);
+
     PlanEntry planEntry;
     planEntry.index = slot;
     planEntry.playerID = playerID;
@@ -512,9 +704,13 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     planEntry.fatigueCaption = 0;
     planEntry.nameCaption = 0;
     planEntry.photo = 0;
+    planEntry.cardW = 0.0f;
+    planEntry.cardPhotoH = 0.0f;
 
     if (ph > 0.0f) {
       float cardW = std::max(std::max(ph, badgeW), 8.5f);
+      planEntry.cardW = cardW;
+      planEntry.cardPhotoH = ph;
       float cardH = ph + cardGap + badgeH + cardGap + cardNameH;
       float cx = Clampf(anchorX - cardW * 0.5f, bx, bx + bw - cardW);
       float cy = anchorY - ph * 0.5f;
@@ -526,7 +722,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
       Gui2Image *photo = new Gui2Image(windowManager, "gameplan_photo_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx + (cardW - ph) * 0.5f, y, ph, ph);
       photo->LoadImage("media/menu/player_placeholder.png");
       this->AddView(photo);
-      photo->Show();
+      if (visible) photo->Show();
       planEntry.photo = photo;
       y += ph + cardGap;
 
@@ -534,12 +730,12 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
       planEntry.roleY = y;
       planEntry.roleCaption = new Gui2Caption(windowManager, "gameplan_role_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, badgeH, roleText);
       this->AddView(planEntry.roleCaption);
-      planEntry.roleCaption->Show();
+      if (visible) planEntry.roleCaption->Show();
       CenterCaption(planEntry.roleCaption, centerX, y, badgeH, roleText);
 
       planEntry.fatigueCaption = new Gui2Caption(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, badgeH, "");
       this->AddView(planEntry.fatigueCaption);
-      planEntry.fatigueCaption->Show();
+      if (visible) planEntry.fatigueCaption->Show();
 
       y += badgeH + cardGap;
 
@@ -556,29 +752,29 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
 
       planEntry.roleCaption = new Gui2Caption(windowManager, "gameplan_role_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), bx, cy, posW, rowH, roleText);
       this->AddView(planEntry.roleCaption);
-      planEntry.roleCaption->Show();
+      if (visible) planEntry.roleCaption->Show();
 
       planEntry.button = new Gui2Button(windowManager, "gameplan_player_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), bx + posW + 0.2f, cy, nameW, rowH,
                                         ShortName(player->GetLastName()));
 
       planEntry.ratingCaption = new Gui2Caption(windowManager, "gameplan_rating_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), ratingX, cy, ratingW, rowH, RatingText(player));
       this->AddView(planEntry.ratingCaption);
-      planEntry.ratingCaption->Show();
+      if (visible) planEntry.ratingCaption->Show();
 
       planEntry.fatigueCaption = new Gui2Caption(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), ratingX + ratingW + 0.2f, cy, fatigueW, rowH, "");
       this->AddView(planEntry.fatigueCaption);
-      planEntry.fatigueCaption->Show();
+      if (visible) planEntry.fatigueCaption->Show();
     }
 
     int entryPos = (int)entries.size();
     planEntry.button->SetToggleable(true);
     planEntry.button->sig_OnClick.connect(boost::bind(&GamePlanPage::EntryClicked, this, entryPos));
     this->AddView(planEntry.button);
-    planEntry.button->Show();
+    if (visible) planEntry.button->Show();
 
     if (planEntry.nameCaption) {
       this->AddView(planEntry.nameCaption);
-      planEntry.nameCaption->Show();
+      if (visible) planEntry.nameCaption->Show();
       CenterCaption(planEntry.nameCaption, planEntry.cardCenterX, planEntry.nameY, cardNameH,
                     ShortName(player->GetLastName()));
     }
@@ -632,6 +828,22 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     if (all.at(k).onPitch) pitchList.push_back(all.at(k)); else benchList.push_back(all.at(k));
   }
 
+  // Recognise the current formation and remember the real (non-preview)
+  // positions, so the Tactics preview can move cards in place without a rebuild.
+  panel.pitchBase.clear();
+  {
+    std::vector<FormationEntry> currentFormation;
+    for (unsigned int i = 0; i < pitchList.size(); i++) {
+      FormationEntry fe;
+      fe.role = pitchList.at(i).role;
+      fe.databasePosition = pitchList.at(i).pos;
+      fe.position = pitchList.at(i).pos;
+      currentFormation.push_back(fe);
+      panel.pitchBase[pitchList.at(i).slot] = fe;
+    }
+    panel.committedScheme = MatchScheme(currentFormation);
+  }
+
   float bottomLimit = panel.py + panel.ph - pitchCardH - 0.3f;
   for (unsigned int i = 0; i < pitchList.size(); i++) {
     if (pitchList.at(i).role != e_PlayerRole_GK) continue;
@@ -639,6 +851,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     bottomLimit = (std::min(gs.coords[1], panel.py + panel.ph) - pitchCardH) - 0.3f;
     break;
   }
+  panel.pitchBottomLimit = bottomLimit;
 
   for (unsigned int i = 0; i < pitchList.size(); i++) {
     const PlanPlayer &pp = pitchList.at(i);
@@ -666,6 +879,10 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     placeCard(pp.slot, pp.playerID, playerData.at(pp.slot), pp.role, panel.bx + panel.bw * 0.5f, rowY + panel.benchStep * 0.5f,
               false, selectable, 0.0f, GetRoleName(pp.role), rowY + panel.benchStep);
   }
+
+  // Cards are created at the real formation; if the Tactics preview is open,
+  // move them onto the highlighted scheme without another rebuild.
+  PreviewSchemes(panel);
 
   panel.cursorIndex = panel.entryIndices.empty() ? -1 : panel.entryIndices.front();
   panel.heldIndex = -1;
@@ -728,6 +945,7 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     photo->LoadImage("media/menu/player_placeholder.png");
     this->AddView(photo);
     photo->Show();
+    opponentViews.push_back(photo);
 
     float roleY = cy + photoSize + cardGap;
     Gui2Caption *role = new Gui2Caption(windowManager, "gameplan_opp_role_" + int_to_str((int)i), cx, roleY, cardW, badgeH,
@@ -735,6 +953,7 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     this->AddView(role);
     role->Show();
     CenterCaption(role, centerX, roleY, badgeH, RoleRatingText(entry.role, entry.player));
+    opponentViews.push_back(role);
 
     float nameY = roleY + badgeH + cardGap;
     Gui2Caption *name = new Gui2Caption(windowManager, "gameplan_opp_name_" + int_to_str((int)i), cx, nameY, cardW, cardNameH,
@@ -742,6 +961,7 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     this->AddView(name);
     name->Show();
     CenterCaption(name, centerX, nameY, cardNameH, ShortName(entry.player->GetLastName()));
+    opponentViews.push_back(name);
   }
 }
 
@@ -756,6 +976,12 @@ void GamePlanPage::ClearEntries() {
     if (e.button) { e.button->Exit(); delete e.button; e.button = 0; }
   }
   entries.clear();
+
+  for (unsigned int i = 0; i < opponentViews.size(); i++) {
+    opponentViews.at(i)->Exit();
+    delete opponentViews.at(i);
+  }
+  opponentViews.clear();
 }
 
 void GamePlanPage::LayoutBench(PlanPanel &panel) {
@@ -770,7 +996,7 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
     if (entry.onPitch) continue;
 
     float cy = panel.by + (row - panel.benchScroll) * panel.benchStep;
-    if (row < panel.benchScroll || row >= panel.benchScroll + panel.benchMaxVisible) {
+    if (TacticsActive(panel) || row < panel.benchScroll || row >= panel.benchScroll + panel.benchMaxVisible) {
       entry.button->Hide();
       if (entry.roleCaption) entry.roleCaption->Hide();
       if (entry.ratingCaption) entry.ratingCaption->Hide();
@@ -785,6 +1011,8 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
     entry.pos = Vector3(panel.bx + panel.bw * 0.5f, cy + panel.benchRowHeight * 0.5f, 0);
     row++;
   }
+
+  LayoutSchemes(panel);
 }
 
 void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
@@ -795,6 +1023,14 @@ void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
 
   for (unsigned int p = 0; p < panels.size(); p++) {
     PlanPanel &panel = panels.at(p);
+    if (TacticsActive(panel)) {
+      // The scheme list, not the pitch, owns the focus in this section.
+      panel.cursorIndex = -1;
+      panel.heldIndex = -1;
+      if (!dualPanel && !panel.barFocused && !panel.schemeButtons.empty())
+        panel.schemeButtons.at(panel.schemeCursor)->SetFocus();
+      continue;
+    }
     int focus = -1;
     if (panel.teamID == focusTeam) {
       for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
@@ -1012,7 +1248,7 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     std::string suffix = pending ? (pendingOut ? " -" : " +") : "";
     if (!entry.selectable) suffix += " (out)";
 
-    if (!PositionsActive(panel)) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2));
+    if (!PositionsActive(panel) && !TacticsActive(panel)) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2));
     else if (!entry.selectable) entry.button->SetColor(Vector3(110, 110, 110));
     else if (pos == panel.cursorIndex) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright2));
     else entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
@@ -1038,6 +1274,12 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
       }
     }
   }
+
+  // Apply the bench/scheme visibility here too: SetSection refreshes without a
+  // full rebuild, so otherwise the substitute list would flash for one frame
+  // when the Tactics tab opens.
+  LayoutSchemes(panel);
+  RefreshSchemes(panel);
 }
 
 void GamePlanPage::CenterCaption(Gui2Caption *caption, float centerX, float y, float height, const std::string &text) {
@@ -1143,7 +1385,21 @@ void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, 
       if (now_ms - panel.lastMove_ms < 180) return;
       if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); panel.lastMove_ms = now_ms; }
       else if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); panel.lastMove_ms = now_ms; }
-      else if (direction.coords[1] > 0.5f && PositionsActive(panel)) { FocusContent(panel); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel))) { FocusContent(panel); panel.lastMove_ms = now_ms; }
+      return;
+    }
+    return;
+  }
+
+  // Tactics: Up/Down scrolls the scheme list (live preview on the pitch), Enter
+  // commits the highlighted scheme, Back returns to the bar and drops a preview.
+  if (TacticsActive(panel)) {
+    if (back) { FocusSectionBar(panel); return; }
+    if (accept) { CommitScheme(panel); return; }
+    if (direction.GetLength() > 0.5f) {
+      if (now_ms - panel.lastMove_ms < 180) return;
+      if (direction.coords[1] < -0.5f) { MoveSchemeCursor(panel, -1); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[1] > 0.5f) { MoveSchemeCursor(panel, 1); panel.lastMove_ms = now_ms; }
       return;
     }
     return;
@@ -1282,6 +1538,17 @@ void GamePlanPage::SendPlanSwap(int side, int dbA, int dbB) {
   if (client) client->SendLobbyAction(action);
 }
 
+void GamePlanPage::SendPlanScheme(int side, int scheme) {
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_PlanScheme;
+  action.side = side;
+  action.value = scheme;
+  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+  if (server) { action.playerId = 0; server->ApplyLobbyAction(action); return; }
+  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+  if (client) client->SendLobbyAction(action);
+}
+
 void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
   if (dualPanel) { event->Ignore(); return; }
 
@@ -1300,11 +1567,25 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
       if (moveCooldown_ms < 180) { event->Accept(); return; }
       if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); moveCooldown_ms = 0; event->Accept(); return; }
       if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); moveCooldown_ms = 0; event->Accept(); return; }
-      if (direction.coords[1] > 0.5f && PositionsActive(panel)) { FocusContent(panel); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel))) { FocusContent(panel); moveCooldown_ms = 0; event->Accept(); return; }
       event->Accept();
       return;
     }
     // Enter/A is consumed by the focused bar button's own activate handler.
+    Gui2Page::ProcessWindowingEvent(event);
+    return;
+  }
+
+  if (TacticsActive(panel)) {
+    Vector3 direction = event->GetDirection();
+    if (direction.GetLength() > 0.5f) {
+      if (moveCooldown_ms < 180) { event->Accept(); return; }
+      if (direction.coords[1] < -0.5f) { MoveSchemeCursor(panel, -1); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[1] > 0.5f) { MoveSchemeCursor(panel, 1); moveCooldown_ms = 0; event->Accept(); return; }
+      event->Accept();
+      return;
+    }
+    // Enter/A is consumed by the focused scheme button's own activate handler.
     Gui2Page::ProcessWindowingEvent(event);
     return;
   }
@@ -1324,13 +1605,11 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
 }
 
 void GamePlanPage::Process() {
-  if (networkPrematch) {
-    // Each peer owns their local plan screen; rebuild when the host relays an
-    // authoritative lineup swap (own or the other peer's).
-    if (GetMenuTask()->GetPlanRevision() != seenPlanRevision) {
-      seenPlanRevision = GetMenuTask()->GetPlanRevision();
-      if (!panels.empty()) Rebuild(panels.at(0).teamID, -1);
-    }
+  // Each peer owns their local plan screen; rebuild when the host relays an
+  // authoritative edit (lineup swap or tactical scheme, own or the other peer's).
+  if (GetMenuTask()->GetPlanRevision() != seenPlanRevision) {
+    seenPlanRevision = GetMenuTask()->GetPlanRevision();
+    if (!panels.empty()) Rebuild(panels.at(0).teamID, -1);
   }
 
   if (rebuildPending) {
