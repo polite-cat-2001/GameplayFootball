@@ -561,7 +561,7 @@ void Ball::TriggerBallTouchSound(float gain) {
 
 void Ball::Process() {
 
-  if (!IsReleaseVersion() && UserEventManager::GetInstance().GetKeyboardState(SDLK_BACKSPACE)) {
+  if (!IsReleaseVersion() && UserEventManager::GetInstance().GetKeyboardState(SDLK_F9)) {
     Player *player = match->GetTeam(0)->GetDesignatedTeamPossessionPlayer();
     positionBuffer.Set(player->GetPosition() + player->GetDirectionVec() * 0.25f + player->GetMovement() * 0.06f + Vector3(0, 0, 0.2f));
     SetMomentum(player->GetMovement() * 1.2f);

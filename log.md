@@ -1763,3 +1763,24 @@ windowing-Escape глушится флагом `suppressLocalEscape` (однор
 **живой** `Team` (`GetAllPlayers` + `IsActive` + `GetFormationEntry` из `runtimeFormation`),
 как `BuildPanel`; без матча (пре-матч) источник остаётся `TeamData`. Сборка ок,
 `lanmatchtest` `PASS (34)`, `nettest` `PASS (60)`.
+
+## [2026-09-23] decision | «Назад» — только Escape/B, Backspace убран из игры
+Правило проекта (записано в AGENTS.md, раздел Conventions): «назад» в UI — это **Escape**
+(клавиатура) и **B** (геймпад); **Backspace не используется нигде** — ни как «назад», ни как
+отладочная клавиша. Убраны два места: `GamePlanPage::ProcessKeyboardEvent` (был `ESCAPE ||
+BACKSPACE`) и отладочный телепорт мяча в `Ball::Process` (был `SDLK_BACKSPACE`, перенесён на
+`SDLK_F9`). Причина: в плане игры Backspace уводил/не уводил не туда, а с редактора состава
+нужно возвращаться на панель разделов именно Escape/B.
+
+## [2026-09-23] feat | По-сторонние панели разделов в плане игры
+У `GamePlanPage` (`src/menu/gameplan.cpp`, `src/menu/gameplan.hpp`) появились нижние панели
+разделов **Tactics / Positions / Roles** (`e_GamePlanSection`) — **своя у каждой действующей
+стороны**, под её полем в её половине экрана; состояние раздела (`activeSection`, `barCursor`,
+`barFocused`) переехало в `PlanPanel`. Вход нейтральный на каждую сторону (стоит на своей панели):
+**Left/Right** выбирает раздел, **Enter** открывает, **Down** с поля (когда ниже игрока нет) или
+**Back** возвращает на панель, **Back** с панели — голос «выйти» (в локальном 2P навигация идёт
+через per-device `HandlePanelInput`; в однопанельном — через GUI-фокус). Сторона без локального
+управления (ИИ или удалённый пир) вместо панели показывает статичный **READY**. Шапка `GAME PLAN`
+убрана, на её месте — баннер **READY TO LEAVE N/M** во время голосования. Работает только
+**Positions**; **Tactics** и **Roles** (исполнители стандартов) — заглушки. Сборка `Release` x86
+(Win32) ок. Детали — [[открытые-вопросы]].

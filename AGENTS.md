@@ -221,6 +221,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - `real` — алиас `float` (`src/defines.hpp:37`). Координаты и скорости — метры/метры-в-секунду, время — мс.
 - Константы игровой логики — в `src/gamedefines.hpp` (и нигде больше; единственный дом —
   `docs/wiki/константы.md`).
+- **«Назад» в UI — только Escape (клавиатура) и B (геймпад). Backspace не используется в игре
+  нигде** (ни как «назад», ни как отладочная клавиша) — не заводить его заново.
 - Git: комментарии коммитов — английские, Conventional Commits не обязательны, но осмысленный
   subject в одну строку — да. Ветки с незавершённой работой (`google_brain`, `windows`) не вливать.
 - `.gitignore`: `*build*/` и `.idea/`. Каталог `build/` игнорируется целиком, в том числе от

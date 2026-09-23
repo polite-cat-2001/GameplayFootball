@@ -24,6 +24,15 @@
 
 using namespace blunted;
 
+// Bottom section bar of the plan screen. Only Positions drives the pitch editor
+// for now; Tactics and Roles switch to a placeholder until they are built.
+enum e_GamePlanSection {
+  e_GamePlanSection_Tactics,
+  e_GamePlanSection_Positions,
+  e_GamePlanSection_Roles,
+  e_GamePlanSection_Size
+};
+
 // One interactive squad slot on the plan: either a pitch position or a bench
 // row. `index` is the index into TeamData::playerData / Team::GetAllPlayers().
 struct PlanEntry {
@@ -50,7 +59,8 @@ struct PlanPanel {
   PlanPanel() : teamID(0), teamData(0), team(0), editable(false),
                 px(0), py(0), pw(0), ph(0), bx(0), by(0), bw(0),
                 cursorIndex(-1), heldIndex(-1), benchCount(0), benchScroll(0),
-                benchMaxVisible(1), benchStep(4.0f), benchRowHeight(2.5f), voteReady(false) {}
+                benchMaxVisible(1), benchStep(4.0f), benchRowHeight(2.5f), voteReady(false),
+                activeSection(-1), barCursor(0), barFocused(false), sectionCaption(0), barCenterX(50.0f) {}
 
   int teamID;
   TeamData *teamData;
@@ -73,6 +83,14 @@ struct PlanPanel {
   std::vector<std::pair<int, int> > pendingSubs; // (outSlot, inSlot), normalized
   bool voteReady;
   unsigned long lastMove_ms;
+
+  // Per-side section bar (Tactics / Positions / Roles) under this panel.
+  int activeSection;  // -1 == neutral: bar focused, no section opened yet
+  int barCursor;      // highlighted section on this side's bar
+  bool barFocused;    // this side's device is currently on its bar
+  std::vector<Gui2Button*> sectionButtons;
+  Gui2Caption *sectionCaption;
+  float barCenterX;
 };
 
 // Game plan screen. Normally one editable team (+ read-only opponent). In a
@@ -94,6 +112,8 @@ class GamePlanPage : public Gui2Page {
 
     void SetupPanels();
     void BuildPlan();
+    void BuildSectionBar(PlanPanel &panel);
+    void BuildOpponentReady(float centerX);
     void BuildEntries();
     void BuildPanel(PlanPanel &panel);
     void BuildOpponent(int teamID, float x, float y, float w, float h);
@@ -113,6 +133,21 @@ class GamePlanPage : public Gui2Page {
     int PanelForDevice(int controllerIndex, bool keyboard);
     void TryLeave();
     void RefreshExitStatus();
+
+    // Per-side bottom section bar. Down from the pitch (or Back) drops to the
+    // bar, Left/Right pick a section, Enter opens it, Back on the bar leaves.
+    // Each side's bar is driven by that side's device; single layout also uses
+    // GUI focus for the activate/Enter pipeline.
+    void FocusSectionBar(PlanPanel &panel);
+    void FocusContent(PlanPanel &panel);
+    void MoveSectionFocus(PlanPanel &panel, int delta);
+    void SectionClicked(int panelIndex, int section);
+    void RefreshSectionBar(PlanPanel &panel);
+    int PanelIndex(PlanPanel &panel);
+    bool PositionsActive(const PlanPanel &panel) const;
+    void SetSection(PlanPanel &panel, int section);
+    std::string SectionName(int section);
+    std::string SectionDescription(int section);
 
     void Refresh();
     void RefreshPanel(PlanPanel &panel);
@@ -154,8 +189,11 @@ class GamePlanPage : public Gui2Page {
     float oppX;
     float oppW;
 
+    // Single layout only: non-editable opponent (AI or remote peer) shows a
+    // static READY instead of a section bar.
+    Gui2Caption *opponentReady;
+
     Gui2Caption *header;
-    Gui2Caption *exitStatus;
     Gui2Image *infoPhotoA;
     Gui2Image *infoPhotoB;
     Gui2Caption *infoBadgeA;

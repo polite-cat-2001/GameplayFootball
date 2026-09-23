@@ -49,6 +49,17 @@ const float benchFatigueW = 3.4f;
 const float benchRowH = 2.5f;
 const float captionGap = 0.4f;
 
+// bottom section bar (Tactics / Positions / Roles), one per side
+const float sectionBtnW = 15.0f;
+const float sectionBtnH = 3.4f;
+const float sectionBtnGap = 1.5f;
+const float sectionBarY = 92.4f;
+const float sectionCaptionY = 96.2f;
+const float sectionCaptionH = 2.4f;
+// the bar of a side sits in its screen half, centered on the side's panel
+const float sectionHalfCenterL = 25.0f;
+const float sectionHalfCenterR = 75.0f;
+
 Vector3 PitchToScreen(const Vector3 &pos, float x, float y, float w, float h) {
   float depth = pos.coords[0] * 0.5f + 0.5f; // 0 == own goal (bottom), 1 == opponent goal (top)
   float side = pos.coords[1] * 0.5f + 0.5f;  // 0 == left, 1 == right
@@ -113,6 +124,7 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   rebuildFocusSlot = -1;
   dualPanel = false;
   panelDevice[0] = panelDevice[1] = -1;
+  opponentReady = 0;
 
   networkPrematch = !InMatch() && (GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0);
   seenPlanRevision = GetMenuTask()->GetPlanRevision();
@@ -140,13 +152,16 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   this->AddView(bg);
   bg->Show();
 
-  header = new Gui2Caption(windowManager, "gameplan_header", 4, 5, 92, 4, "Game plan");
+  // Header doubles as the leave-vote banner (the old "Game plan" title moved to
+  // the page name only); it stays empty until a side is ready to leave.
+  header = new Gui2Caption(windowManager, "gameplan_header", 0, 5, 0, 4, "");
   this->AddView(header);
   header->Show();
 
-  exitStatus = new Gui2Caption(windowManager, "gameplan_exit_status", 30, 8.5f, 40, 2.6f, "");
-  this->AddView(exitStatus);
-  exitStatus->Show();
+  Gui2Caption *sectionHint = new Gui2Caption(windowManager, "gameplan_section_hint", 0, 5, 0, 3, "");
+  this->AddView(sectionHint);
+  sectionHint->Show();
+  CenterCaption(sectionHint, 80.0f, 5.0f, 3.0f, "Back: sections, Enter: open");
 
   BuildPlan();
 
@@ -173,14 +188,24 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   this->AddView(infoNameB);
   infoNameB->Show();
 
+  // Single layout: the local team can sit on the right (network away game), so
+  // keep the focused-player info under the side the local player controls.
+  // (UpdateInfoDetail recenters the badge/name on the photo each refresh.)
+  if (!dualPanel && !panels.empty() && panels.at(0).px >= 50.0f) {
+    infoPhotoA->SetPosition(54.0f, 79.0f);
+    infoPhotoB->SetPosition(67.0f, 79.0f);
+  }
+
   for (unsigned int p = 0; p < panels.size(); p++) {
     PlanPanel &panel = panels.at(p);
     if (!panel.entryIndices.empty()) SelectCursor(panel, panel.entryIndices.front());
   }
   Refresh();
 
+  // Neutral entry: each side starts on its own section bar with no player focus.
   // In dual mode no button holds the single GUI focus; keep it on the page so
   // the per-device keyboard/joystick handlers receive events.
+  for (unsigned int p = 0; p < panels.size(); p++) FocusSectionBar(panels.at(p));
   if (dualPanel) this->SetFocus();
 
   this->Show();
@@ -268,6 +293,13 @@ void GamePlanPage::SetupPanels() {
     panel.py = pitchY; panel.ph = pitchH; panel.by = pitchY;
     panel.lastMove_ms = 0;
 
+    // Neutral entry: the side starts on its own section bar, nothing opened.
+    panel.activeSection = -1;
+    panel.barCursor = 0;
+    panel.barFocused = true;
+    float mid = (panel.px + panel.bx + panel.bw) * 0.5f;
+    panel.barCenterX = (mid < 50.0f) ? sectionHalfCenterL : sectionHalfCenterR;
+
     panelDevice[i] = devices.at(i);
     panels.push_back(panel);
   }
@@ -306,6 +338,8 @@ void GamePlanPage::BuildPlan() {
                                                panel.teamData ? panel.teamData->GetName() : "");
     this->AddView(teamHeader);
     teamHeader->Show();
+
+    BuildSectionBar(panel);
   }
 
   if (!dualPanel) {
@@ -314,9 +348,138 @@ void GamePlanPage::BuildPlan() {
     oppPitch->LoadImage("media/menu/planmap_vertical.png");
     this->AddView(oppPitch);
     oppPitch->Show();
+
+    // The opponent is never locally editable (AI or a remote peer): show READY
+    // instead of a section bar.
+    float oppMid = oppX + oppW * 0.5f;
+    BuildOpponentReady((oppMid < 50.0f) ? sectionHalfCenterL : sectionHalfCenterR);
   }
 
   BuildEntries();
+}
+
+void GamePlanPage::BuildSectionBar(PlanPanel &panel) {
+  int count = e_GamePlanSection_Size;
+  float totalW = count * sectionBtnW + (count - 1) * sectionBtnGap;
+  float x = panel.barCenterX - totalW * 0.5f;
+  int pi = PanelIndex(panel);
+  std::string suffix = int_to_str(panel.teamID);
+  for (int i = 0; i < count; i++) {
+    Gui2Button *button = new Gui2Button(windowManager, "gameplan_section_" + suffix + "_" + int_to_str(i), x, sectionBarY, sectionBtnW, sectionBtnH, SectionName(i));
+    button->SetToggleable(true);
+    button->sig_OnClick.connect(boost::bind(&GamePlanPage::SectionClicked, this, pi, i));
+    this->AddView(button);
+    button->Show();
+    panel.sectionButtons.push_back(button);
+    x += sectionBtnW + sectionBtnGap;
+  }
+
+  panel.sectionCaption = new Gui2Caption(windowManager, "gameplan_section_caption_" + suffix, 0, sectionCaptionY, 0, sectionCaptionH, "");
+  this->AddView(panel.sectionCaption);
+  panel.sectionCaption->Show();
+  RefreshSectionBar(panel);
+}
+
+void GamePlanPage::BuildOpponentReady(float centerX) {
+  opponentReady = new Gui2Caption(windowManager, "gameplan_opponent_ready", 0, sectionBarY, 0, sectionBtnH, "");
+  this->AddView(opponentReady);
+  opponentReady->Show();
+  CenterCaption(opponentReady, centerX, sectionBarY, sectionBtnH, "READY");
+}
+
+void GamePlanPage::FocusSectionBar(PlanPanel &panel) {
+  if (panel.sectionButtons.empty()) return;
+  panel.barFocused = true;
+  if (panel.activeSection >= 0) panel.barCursor = panel.activeSection;
+  // Leaving the pitch clears the player focus, so returning to a section starts
+  // from a clean slate instead of the last highlighted/held player.
+  panel.heldIndex = -1;
+  panel.cursorIndex = -1;
+  if (!dualPanel) panel.sectionButtons.at(panel.barCursor)->SetFocus();
+  RefreshPanel(panel);
+  RefreshSectionBar(panel);
+  UpdateInfo();
+}
+
+void GamePlanPage::FocusContent(PlanPanel &panel) {
+  panel.barFocused = false;
+  if (panel.cursorIndex < 0 && !panel.entryIndices.empty()) {
+    SelectCursor(panel, panel.entryIndices.front()); // also refreshes + info
+  } else {
+    if (!dualPanel && panel.cursorIndex >= 0) entries.at(panel.cursorIndex).button->SetFocus();
+    RefreshPanel(panel);
+    UpdateInfo();
+  }
+  RefreshSectionBar(panel);
+}
+
+void GamePlanPage::MoveSectionFocus(PlanPanel &panel, int delta) {
+  if (panel.sectionButtons.empty()) return;
+  int count = (int)panel.sectionButtons.size();
+  panel.barCursor = ((panel.barCursor + delta) % count + count) % count;
+  if (!dualPanel) panel.sectionButtons.at(panel.barCursor)->SetFocus();
+  RefreshSectionBar(panel);
+}
+
+void GamePlanPage::SectionClicked(int panelIndex, int section) {
+  if (panelIndex < 0 || panelIndex >= (int)panels.size()) return;
+  PlanPanel &panel = panels.at(panelIndex);
+  SetSection(panel, section);
+  // Stub sections have nothing to interact with: keep the bar focused.
+  if (PositionsActive(panel)) FocusContent(panel);
+  else FocusSectionBar(panel);
+}
+
+void GamePlanPage::RefreshSectionBar(PlanPanel &panel) {
+  for (unsigned int i = 0; i < panel.sectionButtons.size(); i++) {
+    bool active = ((int)i == panel.activeSection);
+    bool cursor = panel.barFocused && ((int)i == panel.barCursor);
+    panel.sectionButtons.at(i)->SetToggled(active);
+    panel.sectionButtons.at(i)->SetHighlighted(active || cursor);
+  }
+  if (panel.sectionCaption) {
+    int shown = panel.barFocused ? panel.barCursor : panel.activeSection;
+    if (shown < 0) shown = panel.barCursor;
+    CenterCaption(panel.sectionCaption, panel.barCenterX, sectionCaptionY, sectionCaptionH, SectionDescription(shown));
+  }
+}
+
+int GamePlanPage::PanelIndex(PlanPanel &panel) {
+  for (unsigned int i = 0; i < panels.size(); i++) {
+    if (&panels.at(i) == &panel) return (int)i;
+  }
+  return -1;
+}
+
+bool GamePlanPage::PositionsActive(const PlanPanel &panel) const {
+  return panel.activeSection == e_GamePlanSection_Positions;
+}
+
+void GamePlanPage::SetSection(PlanPanel &panel, int section) {
+  if (section < 0 || section >= e_GamePlanSection_Size) return;
+  panel.activeSection = section;
+  panel.barCursor = section;
+  panel.heldIndex = -1;
+  RefreshSectionBar(panel);
+  Refresh();
+}
+
+std::string GamePlanPage::SectionName(int section) {
+  switch (section) {
+    case e_GamePlanSection_Tactics: return "Tactics";
+    case e_GamePlanSection_Positions: return "Positions";
+    case e_GamePlanSection_Roles: return "Roles";
+    default: return "";
+  }
+}
+
+std::string GamePlanPage::SectionDescription(int section) {
+  switch (section) {
+    case e_GamePlanSection_Tactics: return "Tactical scheme (coming soon)";
+    case e_GamePlanSection_Positions: return "Change positions";
+    case e_GamePlanSection_Roles: return "Designated roles (coming soon)";
+    default: return "";
+  }
 }
 
 void GamePlanPage::BuildEntries() {
@@ -686,7 +849,7 @@ void GamePlanPage::SelectCursor(PlanPanel &panel, int entryPosition) {
     if (r >= panel.benchScroll + panel.benchMaxVisible) panel.benchScroll = r - panel.benchMaxVisible + 1;
     LayoutBench(panel);
   }
-  if (!dualPanel) entries.at(entryPosition).button->SetFocus();
+  if (!dualPanel && !panel.barFocused) entries.at(entryPosition).button->SetFocus();
   RefreshPanel(panel);
   UpdateInfo();
 }
@@ -783,6 +946,7 @@ bool GamePlanPage::CancelQueued(PlanPanel &panel, int outIndex, int inIndex) {
 }
 
 void GamePlanPage::PerformAction(PlanPanel &panel, int a, int b) {
+  if (!PositionsActive(panel)) return;
   if (a < 0 || b < 0 || a == b) return;
   if (!entries.at(a).selectable || !entries.at(b).selectable) return;
 
@@ -821,6 +985,7 @@ void GamePlanPage::EntryClicked(int entryPosition) {
     if (panel) break;
   }
   if (!panel) return;
+  if (!PositionsActive(*panel)) return;
 
   if (panel->heldIndex == -1) panel->heldIndex = entryPosition;
   else if (panel->heldIndex == entryPosition) panel->heldIndex = -1;
@@ -847,9 +1012,15 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     std::string suffix = pending ? (pendingOut ? " -" : " +") : "";
     if (!entry.selectable) suffix += " (out)";
 
-    if (!entry.selectable) entry.button->SetColor(Vector3(110, 110, 110));
+    if (!PositionsActive(panel)) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2));
+    else if (!entry.selectable) entry.button->SetColor(Vector3(110, 110, 110));
     else if (pos == panel.cursorIndex) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright2));
     else entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
+
+    // Local two-player has no GUI focus on the pitch, so the cursor entry would
+    // otherwise render in the dim "unfocused" state. Highlight it so the focus
+    // colour matches the single/network layout.
+    entry.button->SetHighlighted(PositionsActive(panel) && pos == panel.cursorIndex);
 
     int fatigue = FatiguePercent(EntryFatigue(panel, entry));
 
@@ -947,6 +1118,43 @@ void GamePlanPage::UpdateInfoDetail(Gui2Image *photo, Gui2Caption *badge, Gui2Ca
 }
 
 void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, bool accept, bool back, unsigned long now_ms) {
+  // This side's section bar is focused: Left/Right picks a section, Enter opens
+  // it, Back votes to leave (a second Back retracts the vote).
+  if (panel.barFocused) {
+    if (panel.voteReady && (accept || back || direction.GetLength() > 0.5f)) {
+      panel.voteReady = false;
+      RefreshExitStatus();
+      RefreshPanel(panel);
+      return;
+    }
+    if (back) {
+      panel.voteReady = true;
+      RefreshExitStatus();
+      RefreshPanel(panel);
+      TryLeave();
+      return;
+    }
+    if (accept) {
+      int pi = PanelIndex(panel);
+      if (pi >= 0) SectionClicked(pi, panel.barCursor);
+      return;
+    }
+    if (direction.GetLength() > 0.5f) {
+      if (now_ms - panel.lastMove_ms < 180) return;
+      if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[1] > 0.5f && PositionsActive(panel)) { FocusContent(panel); panel.lastMove_ms = now_ms; }
+      return;
+    }
+    return;
+  }
+
+  // Non-position section: nothing to edit; Back returns to the bar.
+  if (!PositionsActive(panel)) {
+    if (back) FocusSectionBar(panel);
+    return;
+  }
+
   // Any fresh input (a button, or a new stick push - not the stick going back to
   // centre) cancels a pending "ready" and returns the player to squad selection.
   if (panel.voteReady && (accept || back || direction.GetLength() > 0.5f)) {
@@ -958,14 +1166,8 @@ void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, 
 
   if (back) {
     if (panel.heldIndex != -1) { panel.heldIndex = -1; RefreshPanel(panel); return; }
-    if (dualPanel) {
-      panel.voteReady = true;
-      RefreshExitStatus();
-      RefreshPanel(panel);
-      TryLeave();
-    } else {
-      GoBack();
-    }
+    // Back returns to this side's section bar; a further Back votes to leave.
+    FocusSectionBar(panel);
     return;
   }
 
@@ -981,7 +1183,9 @@ void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, 
   if (direction.GetLength() > 0.5f) {
     if (now_ms - panel.lastMove_ms < 180) return;
     int next = FindNextEntry(panel, panel.cursorIndex, direction);
-    if (next != -1) { SelectCursor(panel, next); panel.lastMove_ms = now_ms; }
+    if (next != -1) { SelectCursor(panel, next); panel.lastMove_ms = now_ms; return; }
+    // Down at the bottom of the pitch drops to this side's section bar.
+    if (direction.coords[1] > 0.5f) FocusSectionBar(panel);
   }
 }
 
@@ -994,12 +1198,11 @@ int GamePlanPage::PanelForDevice(int controllerIndex, bool keyboard) {
 }
 
 void GamePlanPage::RefreshExitStatus() {
-  if (!exitStatus) return;
-  if (!dualPanel) { exitStatus->SetCaption(""); return; }
+  if (!header) return;
   int ready = 0, total = (int)panels.size();
   for (unsigned int p = 0; p < panels.size(); p++) if (panels.at(p).voteReady) ready++;
-  if (ready == 0) exitStatus->SetCaption("");
-  else exitStatus->SetCaption(int_to_str(ready) + "/" + int_to_str(total) + " ready to leave");
+  if (ready == 0) CenterCaption(header, 50.0f, 5.0f, 4.0f, "");
+  else CenterCaption(header, 50.0f, 5.0f, 4.0f, "READY TO LEAVE " + int_to_str(ready) + "/" + int_to_str(total));
 }
 
 void GamePlanPage::TryLeave() {
@@ -1022,7 +1225,7 @@ void GamePlanPage::ProcessKeyboardEvent(KeyboardEvent *event) {
 
   bool accept = event->GetKeyOnce(SDLK_RETURN) || event->GetKeyOnce(SDLK_KP_ENTER) ||
                 (keyboard && event->GetKeyOnce(keyboard->GetFunctionMapping(e_ButtonFunction_Shot)));
-  bool back = event->GetKeyOnce(SDLK_ESCAPE) || event->GetKeyOnce(SDLK_BACKSPACE);
+  bool back = event->GetKeyOnce(SDLK_ESCAPE);
   Vector3 direction(0, 0, 0);
   if (event->GetKeyRepeated(SDLK_LEFT) || (keyboard && event->GetKeyRepeated(keyboard->GetFunctionMapping(e_ButtonFunction_Left)))) direction.coords[0] -= 1;
   if (event->GetKeyRepeated(SDLK_RIGHT) || (keyboard && event->GetKeyRepeated(keyboard->GetFunctionMapping(e_ButtonFunction_Right)))) direction.coords[0] += 1;
@@ -1033,9 +1236,10 @@ void GamePlanPage::ProcessKeyboardEvent(KeyboardEvent *event) {
 }
 
 void GamePlanPage::ProcessJoystickEvent(JoystickEvent *event) {
+  const std::vector<IHIDevice*> &controllers = GetControllers();
+
   if (!dualPanel) { Gui2Page::ProcessJoystickEvent(event); return; }
 
-  const std::vector<IHIDevice*> &controllers = GetControllers();
   unsigned long now_ms = EnvironmentManager::GetInstance().GetTime_ms();
 
   for (unsigned int c = 1; c < controllers.size(); c++) {
@@ -1084,15 +1288,36 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
   PlanPanel &panel = panels.at(0);
   if (event->IsEscape()) {
     if (panel.heldIndex != -1) { panel.heldIndex = -1; Refresh(); event->Accept(); return; }
+    // Back from the pitch returns to the section bar; from the bar it leaves.
+    if (!panel.barFocused) { FocusSectionBar(panel); event->Accept(); return; }
     Gui2Page::ProcessWindowingEvent(event);
     return;
   }
 
-  Vector3 direction = event->GetDirection();
-  if (direction.GetLength() > 0.5f) {
-    if (moveCooldown_ms < 180) { event->Accept(); return; }
-    int next = FindNextEntry(panel, panel.cursorIndex, direction);
-    if (next != -1) { SelectCursor(panel, next); moveCooldown_ms = 0; event->Accept(); return; }
+  if (panel.barFocused) {
+    Vector3 direction = event->GetDirection();
+    if (direction.GetLength() > 0.5f) {
+      if (moveCooldown_ms < 180) { event->Accept(); return; }
+      if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[1] > 0.5f && PositionsActive(panel)) { FocusContent(panel); moveCooldown_ms = 0; event->Accept(); return; }
+      event->Accept();
+      return;
+    }
+    // Enter/A is consumed by the focused bar button's own activate handler.
+    Gui2Page::ProcessWindowingEvent(event);
+    return;
+  }
+
+  if (PositionsActive(panel)) {
+    Vector3 direction = event->GetDirection();
+    if (direction.GetLength() > 0.5f) {
+      if (moveCooldown_ms < 180) { event->Accept(); return; }
+      int next = FindNextEntry(panel, panel.cursorIndex, direction);
+      if (next != -1) { SelectCursor(panel, next); moveCooldown_ms = 0; event->Accept(); return; }
+      // Down at the bottom of the pitch drops to the section bar.
+      if (direction.coords[1] > 0.5f) { FocusSectionBar(panel); event->Accept(); return; }
+    }
   }
 
   Gui2Page::ProcessWindowingEvent(event);
