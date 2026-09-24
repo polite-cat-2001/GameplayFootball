@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 
 #include <SDL3/SDL.h>
 
@@ -109,6 +110,19 @@ float PitchCardFrameH(float cardW) {
 std::string ShortName(const std::string &name) {
   if (name.length() <= 10) return name;
   return name.substr(0, 10);
+}
+
+// Player portrait keyed by TM id; falls back to the generic placeholder when the
+// player has no TM id or the file is not shipped.
+std::string PlayerFacePath(PlayerData *player) {
+  static const std::string placeholder = "media/menu/player_placeholder.png";
+  if (!player) return placeholder;
+  int tmId = player->GetRaw().tmId;
+  if (tmId <= 0) return placeholder;
+  std::string path = "databases/default/faces/" + int_to_str(tmId) + ".jpg";
+  std::ifstream file(path.c_str());
+  if (!file.good()) return placeholder;
+  return path;
 }
 
 int PlayerRating(PlayerData *player) {
@@ -623,6 +637,7 @@ void GamePlanPage::RefreshRoles(PlanPanel &panel) {
       float centerX = panel.px + panel.pw * 0.5f;
       float hintY = panel.py + panel.ph + roleBandGap;
       float photoY = hintY + 3.0f;
+      panel.rolePickerPhoto->LoadImage(PlayerFacePath(player));
       CenterCaption(panel.rolePickerHint, centerX, hintY, 2.6f, "Pick for " + GetTeamRoleName(role));
       CenterCaption(panel.rolePickerBadge, centerX, photoY + rolePickerPhotoSize + 0.2f, 2.2f, RoleRatingText(entry.role, player));
       CenterCaption(panel.rolePickerName, centerX, photoY + rolePickerPhotoSize + 2.6f, 2.4f, ShortName(player->GetLastName()));
@@ -987,7 +1002,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
       float centerX = cx + cardW * 0.5f;
 
       Gui2Image *photo = new Gui2Image(windowManager, "gameplan_photo_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, cardW);
-      photo->LoadImage("media/menu/player_placeholder.png");
+      photo->LoadImage(PlayerFacePath(player));
       this->AddView(photo);
       if (visible) photo->Show();
       planEntry.photo = photo;
@@ -1213,7 +1228,7 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     float centerX = cx + oppCardW * 0.5f;
 
     Gui2Image *photo = new Gui2Image(windowManager, "gameplan_opp_photo_" + int_to_str((int)i), cx, cy, oppCardW, oppCardW);
-    photo->LoadImage("media/menu/player_placeholder.png");
+    photo->LoadImage(PlayerFacePath(entry.player));
     this->AddView(photo);
     photo->Show();
     opponentViews.push_back(photo);
@@ -1693,6 +1708,7 @@ void GamePlanPage::UpdateInfoDetail(Gui2Image *photo, Gui2Caption *badge, Gui2Ca
   TeamData *td = GetTeamDataFor(entry.teamID);
   PlayerData *player = td ? td->GetPlayerData(entry.index) : 0;
   if (!player) return;
+  photo->LoadImage(PlayerFacePath(player));
   float photoX, photoY;
   photo->GetPosition(photoX, photoY);
   float centerX = photoX + 7.5f * 0.5f;

@@ -36,6 +36,10 @@ namespace blunted {
       boost::intrusive_ptr<Image2D> image;
       boost::intrusive_ptr<Image2D> imageSource;
 
+      // last successfully loaded file; a repeated LoadImage of the same path is
+      // a no-op (the game plan reloads portraits on every cursor move)
+      std::string sourceFilename;
+
       bool drawOutline = false;
 
   };

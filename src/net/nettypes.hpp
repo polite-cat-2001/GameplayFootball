@@ -21,7 +21,8 @@
 // v10: tactical scheme relay (PlanScheme), pre-match and in-match.
 // v11: designated-role relay (PlanRole), pre-match and in-match.
 // v12: designated roles in the snapshot (late/reconnecting client reconciliation).
-const int net_protocolVersion = 12;
+// v13: PlayerDataRaw.tmId (player photo key) in the team setup stream.
+const int net_protocolVersion = 13;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

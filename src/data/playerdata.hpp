@@ -16,6 +16,7 @@
 // to stream a match setup from the host to clients (no database needed client-side).
 struct PlayerDataRaw {
   int databaseID = 0;
+  int tmId = 0; // Transfermarkt id; keys the player photo (databases/default/faces)
   std::string firstName;
   std::string lastName;
   std::string roleString;

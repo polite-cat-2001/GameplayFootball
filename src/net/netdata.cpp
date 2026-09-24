@@ -2,6 +2,7 @@
 
 void SerializePlayerDataRaw(NetBuffer &buffer, const PlayerDataRaw &player) {
   buffer.PutU32((uint32_t)player.databaseID);
+  buffer.PutU32((uint32_t)player.tmId);
   buffer.PutString(player.firstName);
   buffer.PutString(player.lastName);
   buffer.PutString(player.roleString);
@@ -17,6 +18,7 @@ void SerializePlayerDataRaw(NetBuffer &buffer, const PlayerDataRaw &player) {
 PlayerDataRaw DeserializePlayerDataRaw(NetBuffer &buffer) {
   PlayerDataRaw player;
   player.databaseID = (int)buffer.GetU32();
+  player.tmId = (int)buffer.GetU32();
   player.firstName = buffer.GetString();
   player.lastName = buffer.GetString();
   player.roleString = buffer.GetString();

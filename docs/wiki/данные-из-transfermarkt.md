@@ -249,8 +249,12 @@ data/
    «International» (id 1) оставалась бы тупиком — пустой выбор лиги и SQL-краш
    `near "and"` в `AddTeams` (`where league_id =  and ...`). В `AddLeagues`/`AddTeams`
    добавлен гард на пустой id.
-5. **Фото игроков не копируются в сборку**: `faces/` (67 тыс. файлов) в игре не используется,
-   `copy_data_post_build` исключает его (`tools/copy_data.cmake`, `PATTERN faces EXCLUDE`).
+5. **Фото игроков**: игра читает портрет по `players.tm_id` из
+   `databases/default/faces/<tm_id>.jpg` (плейсхолдер `media/menu/player_placeholder.png`, если
+   файла нет; `tm_id` едет и в сетевом setup, протокол v13). Исходные TM-фото — 300×390 с фоном,
+   67 тыс. файлов (~4.15 ГБ), поэтому `copy_data_post_build` пока исключает `faces/`
+   (`tools/copy_data.cmake`, `PATTERN faces EXCLUDE`); в сборку их кладёт отдельный шаг
+   (обрезка фона/ресайз) — в работе.
 6. **Защита от битых картинок**: `Gui2Image::LoadImage` проверяет `IMG_Load` на NULL — раньше
    0-байтовый PNG (как `nationalteams.png` после импорта) ронял игру сегфолтом на
    `imageSurfTmp->w`. В `Gui2IconSelector::AddEntry` убран per-entry `Redraw()` (O(n²) при
