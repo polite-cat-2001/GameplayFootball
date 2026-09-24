@@ -59,10 +59,13 @@ class Team {
     bool HasLeftPitch(int playerID) const;
     void MarkPlayerLeftPitch(int playerID);
 
-    // Runtime designated roles; GetRolePlayer returns 0 when unset or when the
-    // designated player left the pitch, so callers fall back to the automatic
-    // (closest/best) choice.
-    void SetRolePlayer(e_TeamRole role, int playerID);
+    // Designated roles (captain / set-piece takers), stored by squad slot in the
+    // shared MatchData. GetRoleSlot returns the designated slot when that player
+    // is on the pitch, otherwise the best-suited active player (auto-pick), so
+    // set pieces stay sensible even when the game plan left a role unset.
+    void SetRolePlayer(e_TeamRole role, int slot);
+    int GetRoleSlot(e_TeamRole role);
+    int SuggestRoleSlot(e_TeamRole role);
     Player *GetRolePlayer(e_TeamRole role);
 
     unsigned int GetHumanGamerCount() const { return humanGamers.size(); }

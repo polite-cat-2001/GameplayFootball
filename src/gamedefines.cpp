@@ -195,6 +195,25 @@ e_PlayerRole GetRoleFromString(const std::string &roleString) {
   return e_PlayerRole_CM; // default
 }
 
+std::string GetTeamRoleName(e_TeamRole teamRole) {
+  switch (teamRole) {
+    case e_TeamRole_Captain:
+      return "Captain";
+    case e_TeamRole_PenaltyTaker:
+      return "Penalty taker";
+    case e_TeamRole_FreeKickTakerNear:
+      return "Free kick near";
+    case e_TeamRole_FreeKickTakerFar:
+      return "Free kick far";
+    case e_TeamRole_CornerTakerLeft:
+      return "Left corner";
+    case e_TeamRole_CornerTakerRight:
+      return "Right corner";
+    default:
+      return "undefined";
+  }
+}
+
 bool PlayerImageDepthSortFunc(const PlayerImage &a, const PlayerImage &b) {
   return a.position.coords[0] * a.side < b.position.coords[0] * b.side;
 }

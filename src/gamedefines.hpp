@@ -281,6 +281,7 @@ enum e_TeamRole {
 
 std::string GetRoleName(e_PlayerRole playerRole);
 e_PlayerRole GetRoleFromString(const std::string &roleString);
+std::string GetTeamRoleName(e_TeamRole teamRole);
 
 struct FormationEntry {
   e_PlayerRole role;

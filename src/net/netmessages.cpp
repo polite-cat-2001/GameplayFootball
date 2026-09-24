@@ -180,6 +180,20 @@ NetPlanScheme ReadPlanScheme(NetBuffer &buffer) {
   return scheme;
 }
 
+void WritePlanRole(NetBuffer &buffer, const NetPlanRole &role) {
+  buffer.PutU32((uint32_t)role.side);
+  buffer.PutU32((uint32_t)role.role);
+  buffer.PutU32((uint32_t)role.slot);
+}
+
+NetPlanRole ReadPlanRole(NetBuffer &buffer) {
+  NetPlanRole role;
+  role.side = (int)buffer.GetU32();
+  role.role = (int)buffer.GetU32();
+  role.slot = (int)buffer.GetU32();
+  return role;
+}
+
 void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names) {
   buffer.PutU32((uint32_t)names.size());
   for (unsigned int i = 0; i < names.size(); i++) {

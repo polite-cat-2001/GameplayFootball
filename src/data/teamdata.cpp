@@ -65,6 +65,31 @@ Vector3 GetDefaultRolePosition(e_PlayerRole role) {
   }
 }
 
+float TeamRoleSuitability(e_TeamRole role, PlayerData *player) {
+  // Weighted stat blends; kept simple and deterministic (same on every peer).
+  switch (role) {
+    case e_TeamRole_Captain:
+      return player->GetStat("mental_resilience") * 0.5f +
+             player->GetStat("mental_calmness") * 0.3f +
+             player->GetStat("mental_workrate") * 0.2f;
+    case e_TeamRole_PenaltyTaker:
+      return player->GetStat("technical_shot") * 0.6f +
+             player->GetStat("mental_calmness") * 0.4f;
+    case e_TeamRole_FreeKickTakerNear:
+      return player->GetStat("technical_shot") * 0.5f +
+             player->GetStat("physical_shotpower") * 0.3f +
+             player->GetStat("mental_calmness") * 0.2f;
+    case e_TeamRole_FreeKickTakerFar:
+    case e_TeamRole_CornerTakerLeft:
+    case e_TeamRole_CornerTakerRight:
+      return player->GetStat("technical_highpass") * 0.5f +
+             player->GetStat("mental_vision") * 0.4f +
+             player->GetStat("technical_shortpass") * 0.1f;
+    default:
+      return 0.0f;
+  }
+}
+
 TeamData::TeamData(int teamDatabaseID) : databaseID(teamDatabaseID) {
 
   DatabaseResult *result = GetDB()->Query("select teams.name, teams.logo_url, teams.kit_url, teams.formation_xml, teams.formation_factory_xml, teams.tactics_xml, teams.tactics_factory_xml, teams.shortname, teams.color1, teams.color2, leagues.name as league_name from teams, leagues where teams.id = " + int_to_str(databaseID) + " and leagues.id = teams.league_id limit 1");
@@ -311,6 +336,20 @@ FormationEntry TeamData::GetFormationEntry(int num) {
 
 void TeamData::SetFormationEntry(int num, FormationEntry entry) {
   formation[num] = entry;
+}
+
+int TeamData::SuggestRoleSlot(e_TeamRole role) {
+  int best = -1;
+  float bestScore = -1e9f;
+  int count = playerNum;
+  if (count > (int)playerData.size()) count = (int)playerData.size();
+  for (int i = 0; i < count; i++) {
+    // Goalkeepers don't take set pieces / captain the side here.
+    if (formation[i].role == e_PlayerRole_GK) continue;
+    float score = TeamRoleSuitability(role, playerData.at(i));
+    if (score > bestScore) { bestScore = score; best = i; }
+  }
+  return best;
 }
 
 void TeamData::SwitchPlayers(int databaseID1, int databaseID2) {

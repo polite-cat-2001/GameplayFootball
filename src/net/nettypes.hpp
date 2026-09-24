@@ -19,7 +19,9 @@
 // v8: game plan opens locally per peer (no shared open flag / close vote).
 // v9: per-player fatigue in snapshots (game plan shows match condition).
 // v10: tactical scheme relay (PlanScheme), pre-match and in-match.
-const int net_protocolVersion = 10;
+// v11: designated-role relay (PlanRole), pre-match and in-match.
+// v12: designated roles in the snapshot (late/reconnecting client reconciliation).
+const int net_protocolVersion = 12;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
@@ -60,7 +62,8 @@ enum e_NetMessageType {
   e_NetMessage_PauseState,
   e_NetMessage_ReplayStop,
   e_NetMessage_Keepalive,
-  e_NetMessage_PlanScheme
+  e_NetMessage_PlanScheme,
+  e_NetMessage_PlanRole
 };
 
 enum e_NetConnectionState {

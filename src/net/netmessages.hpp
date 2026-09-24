@@ -84,7 +84,11 @@ enum e_NetLobbyActionType {
   // Tactical scheme pick from the game plan's Tactics section: side = teamID,
   // value = scheme index. The host validates side ownership, applies the
   // deterministic assignment (pre-match TeamData or live Team) and relays it.
-  e_NetLobbyAction_PlanScheme
+  e_NetLobbyAction_PlanScheme,
+  // Designated-role pick from the game plan's Roles section: side = teamID,
+  // value = e_TeamRole, value2 = squad slot. Host validates ownership, applies
+  // it to the shared MatchData and relays it.
+  e_NetLobbyAction_PlanRole
 };
 
 // Shared pre-match hub action requiring confirmation from every peer.
@@ -212,6 +216,20 @@ struct NetPlanScheme {
 
 void WritePlanScheme(NetBuffer &buffer, const NetPlanScheme &scheme);
 NetPlanScheme ReadPlanScheme(NetBuffer &buffer);
+
+// Authoritative designated-role pick, broadcast by the host after validating a
+// client's PlanRole request (or applying its own edit). Slots are used so both
+// peers resolve the same player without sharing process-global player ids.
+struct NetPlanRole {
+  NetPlanRole() : side(0), role(-1), slot(-1) {}
+
+  int side;
+  int role; // e_TeamRole
+  int slot;
+};
+
+void WritePlanRole(NetBuffer &buffer, const NetPlanRole &role);
+NetPlanRole ReadPlanRole(NetBuffer &buffer);
 
 // Host animation collection listing, in host index order. The client resolves
 // each name to its own Animation* so snapshots can carry a compact animID.

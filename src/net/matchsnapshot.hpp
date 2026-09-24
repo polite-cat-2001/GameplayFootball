@@ -8,6 +8,8 @@
 
 #include "netbuffer.hpp"
 
+#include "../gamedefines.hpp"
+
 class Match;
 
 namespace blunted { class Animation; }
@@ -72,6 +74,9 @@ struct Snapshot {
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
+    for (int t = 0; t < 2; t++) {
+      for (int r = 0; r < e_TeamRole_SIZE; r++) roles[t][r] = -1;
+    }
   }
 
   unsigned long matchTime_ms;
@@ -96,6 +101,11 @@ struct Snapshot {
   // client can reconcile without a delta protocol.
   unsigned long substitutionCounter;
   std::vector<SnapshotSubstitution> substitutions;
+
+  // Designated roles (captain / set-piece takers) per squad slot, so a client
+  // joining or reconnecting mid-match reconciles the host's assignments instead
+  // of showing the auto-suggested fallback. -1 = unassigned.
+  int roles[2][e_TeamRole_SIZE];
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

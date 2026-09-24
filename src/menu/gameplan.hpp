@@ -64,7 +64,9 @@ struct PlanPanel {
                 cursorIndex(-1), heldIndex(-1), benchCount(0), benchScroll(0),
                 benchMaxVisible(1), benchStep(4.0f), benchRowHeight(2.5f), voteReady(false),
                 activeSection(-1), barCursor(0), barFocused(false), sectionCaption(0), barCenterX(50.0f),
-                benchHeader(0), schemeCursor(0), committedScheme(-1) {}
+                benchHeader(0), schemeCursor(0), committedScheme(-1),
+                roleCursor(0), rolePicking(false), rolePickingIndex(0),
+                rolePickerPhoto(0), rolePickerBadge(0), rolePickerName(0), rolePickerHint(0) {}
 
   int teamID;
   TeamData *teamData;
@@ -104,6 +106,20 @@ struct PlanPanel {
   int committedScheme;                  // scheme the formation currently matches, or -1
   std::map<int, FormationEntry> pitchBase; // slot -> actual (non-preview) formation
   float pitchBottomLimit;               // pitch card bottom clamp, from the real GK
+
+  // Roles section: the band between the pitch and the section bar becomes a list
+  // of designated-role rows (captain / set-piece takers). Enter opens player
+  // picking; while picking the list is hidden and the hovered player's card is
+  // shown in its place.
+  std::vector<Gui2Button*> roleButtons;
+  std::vector<Gui2Caption*> rolePlayerCaptions;
+  int roleCursor;                       // highlighted role
+  bool rolePicking;                     // list hidden, hovering the pitch
+  int rolePickingIndex;                 // role being assigned while picking
+  Gui2Image *rolePickerPhoto;
+  Gui2Caption *rolePickerBadge;
+  Gui2Caption *rolePickerName;
+  Gui2Caption *rolePickerHint;
 };
 
 // Game plan screen. Normally one editable team (+ read-only opponent). In a
@@ -134,7 +150,7 @@ class GamePlanPage : public Gui2Page {
     void LayoutBench(PlanPanel &panel);
     void Rebuild(int focusTeam, int focusSlot);
 
-    int FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction);
+    int FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction, bool onlyPitch = false);
     void SelectCursor(PlanPanel &panel, int entryPosition);
     void PerformAction(PlanPanel &panel, int a, int b);
     void QueueSubstitution(PlanPanel &panel, int outIndex, int inIndex);
@@ -159,6 +175,7 @@ class GamePlanPage : public Gui2Page {
     int PanelIndex(PlanPanel &panel);
     bool PositionsActive(const PlanPanel &panel) const;
     bool TacticsActive(const PlanPanel &panel) const;
+    bool RolesActive(const PlanPanel &panel) const;
     void SetSection(PlanPanel &panel, int section);
     std::string SectionName(int section);
     std::string SectionDescription(int section);
@@ -174,6 +191,23 @@ class GamePlanPage : public Gui2Page {
     void PositionPitchCard(PlanEntry &entry, PlanPanel &panel, float anchorX, float anchorY, float maxBottom);
     void SchemeClicked(int panelIndex, int scheme);
     void SendPlanScheme(int side, int scheme);
+
+    // Roles section: role list in the band under the pitch. Enter opens picking
+    // for the highlighted role; while picking the list is hidden and the hovered
+    // pitch player is shown there. Enter assigns, Back cancels back to the list.
+    void BuildRoleList(PlanPanel &panel);
+    void BuildRolePicker(PlanPanel &panel);
+    void LayoutRoles(PlanPanel &panel);
+    void RefreshRoles(PlanPanel &panel);
+    void MoveRoleCursor(PlanPanel &panel, int delta);
+    void RoleClicked(int panelIndex, int role);
+    void StartRolePicking(PlanPanel &panel);
+    void StopRolePicking(PlanPanel &panel);
+    void SelectPickCursor(PlanPanel &panel, int entryPosition);
+    void ConfirmRolePick(PlanPanel &panel);
+    int RolePlayerSlot(PlanPanel &panel, e_TeamRole role);
+    void SetRole(PlanPanel &panel, e_TeamRole role, int slot);
+    void SendPlanRole(int side, int role, int slot);
 
     void Refresh();
     void RefreshPanel(PlanPanel &panel);

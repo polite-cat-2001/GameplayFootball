@@ -50,6 +50,17 @@ struct NetPlanSchemeRequest {
   int scheme;
 };
 
+// A client designated-role pick, attributed to the requesting peer. The host
+// menu layer validates side ownership, applies it and relays it.
+struct NetPlanRoleRequest {
+  NetPlanRoleRequest() : playerId(0), side(0), role(-1), slot(-1) {}
+
+  uint32_t playerId;
+  int side;
+  int role;
+  int slot;
+};
+
 class NetServer {
 
   public:
@@ -136,6 +147,11 @@ class NetServer {
     bool ConsumePlanSchemeRequest(NetPlanSchemeRequest &request);
     void BroadcastPlanScheme(const NetPlanScheme &scheme);
 
+    // Client designated-role picks, consumed by the host menu layer, which
+    // validates ownership, applies them and calls BroadcastPlanRole.
+    bool ConsumePlanRoleRequest(NetPlanRoleRequest &request);
+    void BroadcastPlanRole(const NetPlanRole &role);
+
     // All peers agreed on a hub action (e_NetHubVote); consumed once by the host.
     bool ConsumeHubVoteResult(int &vote);
 
@@ -209,6 +225,9 @@ class NetServer {
 
     boost::mutex planSchemeMutex;
     std::vector<NetPlanSchemeRequest> planSchemeRequests;
+
+    boost::mutex planRoleMutex;
+    std::vector<NetPlanRoleRequest> planRoleRequests;
 
     boost::mutex hubVoteMutex;
     bool hubVoteResultPending;

@@ -893,15 +893,23 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
 
   if (isTakerTeam) {
     // Designated taker (set in the game plan) if still on the pitch; otherwise
-    // fall back to the closest player. Corner side is from the taker's view of
-    // the goal: left corner == negative y on the pitch.
+    // GetRolePlayer falls back to the best-suited active player. Corner side is
+    // from the taker's view of the goal: left corner == negative y on the pitch.
     taker = 0;
     if (setPiece == e_SetPiece_Penalty) {
       taker = team->GetRolePlayer(e_TeamRole_PenaltyTaker);
     } else if (setPiece == e_SetPiece_FreeKick) {
-      Vector3 goalPos(-team->GetSide() * pitchHalfW, 0, 0);
-      bool nearGoal = (match->GetBall()->Predict(0).Get2D() - goalPos).GetLength() < freeKickNearDistance;
-      taker = team->GetRolePlayer(nearGoal ? e_TeamRole_FreeKickTakerNear : e_TeamRole_FreeKickTakerFar);
+      // Own half: a free kick is a clearance, so the closest player takes it.
+      // Opponent half: the designated near/far taker (near == within shooting
+      // range of the goal, far == a crossing range free kick).
+      Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
+      if (ballPos.coords[0] * team->GetSide() > 0) {
+        taker = AI_GetClosestPlayer(team, ballPos, false);
+      } else {
+        Vector3 goalPos(-team->GetSide() * pitchHalfW, 0, 0);
+        bool nearGoal = (ballPos - goalPos).GetLength() < freeKickNearDistance;
+        taker = team->GetRolePlayer(nearGoal ? e_TeamRole_FreeKickTakerNear : e_TeamRole_FreeKickTakerFar);
+      }
     } else if (setPiece == e_SetPiece_Corner) {
       bool left = match->GetBall()->Predict(0).coords[1] < 0;
       taker = team->GetRolePlayer(left ? e_TeamRole_CornerTakerLeft : e_TeamRole_CornerTakerRight);

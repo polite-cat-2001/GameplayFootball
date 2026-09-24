@@ -270,6 +270,24 @@ void MenuTask::ApplyPlanScheme(int side, int scheme) {
   planRevision++;
 }
 
+void MenuTask::ApplyPlanRole(int side, int role, int slot) {
+  if (side < 0 || side > 1) return;
+  if (role < 0 || role >= e_TeamRole_SIZE) return;
+  Match *match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
+  if (match) {
+    // In-match: write through the live team (shared MatchData).
+    Team *team = match->GetTeam(side);
+    if (!team) return;
+    team->SetRolePlayer((e_TeamRole)role, slot);
+  } else {
+    // Pre-match: edit the shared MatchData directly.
+    MatchData *matchData = GetMatchData();
+    if (!matchData) return;
+    matchData->SetRolePlayer(side, (e_TeamRole)role, slot);
+  }
+  planRevision++;
+}
+
 void MenuTask::ProcessNetworkPlanEdits() {
   if (netServer) {
     // Host: apply client edits under ownership check, then relay to everyone.
@@ -292,11 +310,23 @@ void MenuTask::ProcessNetworkPlanEdits() {
       scheme.scheme = schemeRequest.scheme;
       netServer->BroadcastPlanScheme(scheme);
     }
+    NetPlanRoleRequest roleRequest;
+    while (netServer->ConsumePlanRoleRequest(roleRequest)) {
+      if (!PlayerOwnsSide(roleRequest.playerId, roleRequest.side)) continue;
+      ApplyPlanRole(roleRequest.side, roleRequest.role, roleRequest.slot);
+      NetPlanRole role;
+      role.side = roleRequest.side;
+      role.role = roleRequest.role;
+      role.slot = roleRequest.slot;
+      netServer->BroadcastPlanRole(role);
+    }
   } else if (netClient) {
     NetPlanSwap swap;
     while (netClient->ConsumePlanSwap(swap)) ApplyPlanSwap(swap.side, swap.dbA, swap.dbB);
     NetPlanScheme scheme;
     while (netClient->ConsumePlanScheme(scheme)) ApplyPlanScheme(scheme.side, scheme.scheme);
+    NetPlanRole role;
+    while (netClient->ConsumePlanRole(role)) ApplyPlanRole(role.side, role.role, role.slot);
   }
 }
 

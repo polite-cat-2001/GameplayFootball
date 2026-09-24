@@ -542,6 +542,20 @@ void NetServer::BroadcastPlanScheme(const NetPlanScheme &scheme) {
   BroadcastMessage(e_NetMessage_PlanScheme, buffer);
 }
 
+bool NetServer::ConsumePlanRoleRequest(NetPlanRoleRequest &request) {
+  boost::mutex::scoped_lock lock(planRoleMutex);
+  if (planRoleRequests.empty()) return false;
+  request = planRoleRequests.front();
+  planRoleRequests.erase(planRoleRequests.begin());
+  return true;
+}
+
+void NetServer::BroadcastPlanRole(const NetPlanRole &role) {
+  NetBuffer buffer;
+  WritePlanRole(buffer, role);
+  BroadcastMessage(e_NetMessage_PlanRole, buffer);
+}
+
 bool NetServer::ConsumeHubVoteResult(int &vote) {
   boost::mutex::scoped_lock lock(hubVoteMutex);
   if (!hubVoteResultPending) return false;
@@ -875,6 +889,19 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         {
           boost::mutex::scoped_lock lock(planSchemeMutex);
           planSchemeRequests.push_back(request);
+        }
+        return;
+      } else if (action.type == e_NetLobbyAction_PlanRole) {
+        // Client designated-role pick: queue it for the host menu layer, which
+        // validates side ownership, applies it and relays the role.
+        NetPlanRoleRequest request;
+        request.playerId = action.playerId;
+        request.side = action.side;
+        request.role = action.value;
+        request.slot = action.value2;
+        {
+          boost::mutex::scoped_lock lock(planRoleMutex);
+          planRoleRequests.push_back(request);
         }
         return;
       } else if (action.type == e_NetLobbyAction_HubVote) {

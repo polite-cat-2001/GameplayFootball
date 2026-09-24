@@ -211,18 +211,34 @@ void Team::MarkPlayerLeftPitch(int playerID) {
   leftPitch.insert(playerID);
 }
 
-void Team::SetRolePlayer(e_TeamRole role, int playerID) {
+void Team::SetRolePlayer(e_TeamRole role, int slot) {
   if (role < 0 || role >= e_TeamRole_SIZE) return;
-  match->GetMatchData()->SetRolePlayer(GetID(), role, playerID);
+  match->GetMatchData()->SetRolePlayer(GetID(), role, slot);
+}
+
+int Team::SuggestRoleSlot(e_TeamRole role) {
+  int best = -1;
+  float bestScore = -1e9f;
+  for (unsigned int i = 0; i < players.size(); i++) {
+    if (!players.at(i)->IsActive()) continue;
+    if (GetFormationEntry(players.at(i)->GetID()).role == e_PlayerRole_GK) continue;
+    float score = TeamRoleSuitability(role, teamData->GetPlayerData(i));
+    if (score > bestScore) { bestScore = score; best = (int)i; }
+  }
+  return best;
+}
+
+int Team::GetRoleSlot(e_TeamRole role) {
+  if (role < 0 || role >= e_TeamRole_SIZE) return -1;
+  int slot = match->GetMatchData()->GetRolePlayer(GetID(), role);
+  if (slot >= 0 && slot < (signed int)players.size() && players.at(slot)->IsActive()) return slot;
+  return SuggestRoleSlot(role);
 }
 
 Player *Team::GetRolePlayer(e_TeamRole role) {
-  if (role < 0 || role >= e_TeamRole_SIZE) return 0;
-  int playerID = match->GetMatchData()->GetRolePlayer(GetID(), role);
-  if (playerID < 0) return 0;
-  Player *player = GetPlayer(playerID);
-  if (player && player->IsActive()) return player;
-  return 0;
+  int slot = GetRoleSlot(role);
+  if (slot < 0 || slot >= (signed int)players.size()) return 0;
+  return players.at(slot);
 }
 
 void Team::SetFormationEntry(int playerID, FormationEntry entry) {

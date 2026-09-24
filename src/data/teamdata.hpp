@@ -15,6 +15,11 @@
 // database positions (see TeamData::InitFromRaw).
 Vector3 GetDefaultRolePosition(e_PlayerRole role);
 
+// Deterministic score of how well a player suits a designated team role
+// (captain / set-piece takers). Shared by the runtime auto-pick (Team) and the
+// game plan's pre-match suggestion so both agree.
+float TeamRoleSuitability(e_TeamRole role, PlayerData *player);
+
 struct TeamTactics {
 
   TeamTactics() {
@@ -74,6 +79,10 @@ class TeamData {
     int GetPlayerNum() { return playerData.size(); }
     PlayerData *GetPlayerData(int num) { return playerData.at(num); }
     PlayerData *GetPlayerDataByDatabaseID(int id);
+
+    // Best-suited starting-XI slot for a designated role (outfield only), or -1.
+    // Pre-match counterpart of Team::SuggestRoleSlot.
+    int SuggestRoleSlot(e_TeamRole role);
 
     const TeamDataRaw &GetRaw() const { return raw; }
 

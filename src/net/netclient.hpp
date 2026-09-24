@@ -56,6 +56,8 @@ class NetClient {
     bool ConsumePlanSwap(NetPlanSwap &swap);
     // Authoritative tactical scheme picks relayed by the host. One-shot reads.
     bool ConsumePlanScheme(NetPlanScheme &scheme);
+    // Authoritative designated-role picks relayed by the host. One-shot reads.
+    bool ConsumePlanRole(NetPlanRole &role);
 
   private:
     void Run();
@@ -132,6 +134,7 @@ class NetClient {
     bool replayStopPending;
     std::deque<NetPlanSwap> planSwaps; // guarded by pendingMutex
     std::deque<NetPlanScheme> planSchemes; // guarded by pendingMutex
+    std::deque<NetPlanRole> planRoles; // guarded by pendingMutex
 };
 
 #endif

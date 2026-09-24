@@ -19,10 +19,12 @@ class MatchData {
 
     TeamData *GetTeamData(int id) { return teamData[id]; }
 
-    // Runtime designated roles (captain / set-piece takers). Lives with the
-    // match data so it can be set in the pre-match game plan and survives into
-    // the Match; -1 means unset (fall back to the automatic choice).
-    void SetRolePlayer(int teamID, e_TeamRole role, int playerID) { rolePlayers[teamID][role] = playerID; }
+    // Designated roles (captain / set-piece takers), stored by squad slot so the
+    // same value is valid pre-match (TeamData slot) and in-match (Team slot) and
+    // can be relayed over the network without depending on process-global player
+    // ids. Lives with the match data so pre-match plan edits survive into the
+    // Match; -1 means unset (fall back to the automatic / best-suited choice).
+    void SetRolePlayer(int teamID, e_TeamRole role, int slot) { rolePlayers[teamID][role] = slot; }
     int GetRolePlayer(int teamID, e_TeamRole role) const { return rolePlayers[teamID][role]; }
 
     int GetGoalCount(int id) { return goalCount[id]; }

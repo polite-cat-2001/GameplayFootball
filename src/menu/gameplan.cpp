@@ -65,6 +65,21 @@ const float sectionHalfCenterR = 75.0f;
 // tactics section: scheme rows fill the bench column
 const float schemeRowMaxH = 4.6f;
 
+// roles section: role rows fill the band between the pitch and the section bar.
+// Display order (captain, then set-piece takers) is the user-facing one, not the
+// enum's internal order.
+const e_TeamRole planRoleOrder[e_TeamRole_SIZE] = {
+  e_TeamRole_Captain,
+  e_TeamRole_FreeKickTakerFar,
+  e_TeamRole_FreeKickTakerNear,
+  e_TeamRole_PenaltyTaker,
+  e_TeamRole_CornerTakerLeft,
+  e_TeamRole_CornerTakerRight
+};
+const float roleRowMaxH = 2.6f;
+const float roleBandGap = 0.8f;
+const float rolePickerPhotoSize = 7.5f;
+
 Vector3 PitchToScreen(const Vector3 &pos, float x, float y, float w, float h) {
   float depth = pos.coords[0] * 0.5f + 0.5f; // 0 == own goal (bottom), 1 == opponent goal (top)
   float side = pos.coords[1] * 0.5f + 0.5f;  // 0 == left, 1 == right
@@ -346,6 +361,8 @@ void GamePlanPage::BuildPlan() {
 
     BuildSectionBar(panel);
     BuildSchemeList(panel);
+    BuildRoleList(panel);
+    BuildRolePicker(panel);
   }
 
   if (!dualPanel) {
@@ -495,6 +512,214 @@ void GamePlanPage::SchemeClicked(int panelIndex, int scheme) {
   CommitScheme(panel);
 }
 
+void GamePlanPage::BuildRoleList(PlanPanel &panel) {
+  float top = panel.py + panel.ph + roleBandGap;
+  float bottom = sectionBarY - roleBandGap;
+  float step = (bottom - top) / e_TeamRole_SIZE;
+  float rowH = std::min(roleRowMaxH, step - 0.25f);
+  if (rowH < 1.4f) rowH = 1.4f;
+
+  int pi = PanelIndex(panel);
+  std::string suffix = int_to_str(panel.teamID);
+  panel.roleButtons.clear();
+  panel.rolePlayerCaptions.clear();
+  for (int i = 0; i < e_TeamRole_SIZE; i++) {
+    float y = top + i * step + (step - rowH) * 0.5f;
+    Gui2Button *button = new Gui2Button(windowManager, "gameplan_rolerow_" + suffix + "_" + int_to_str(i),
+                                        panel.px, y, panel.pw * 0.60f, rowH, GetTeamRoleName(planRoleOrder[i]));
+    button->sig_OnClick.connect(boost::bind(&GamePlanPage::RoleClicked, this, pi, i));
+    this->AddView(button);
+    button->Hide();
+    panel.roleButtons.push_back(button);
+
+    Gui2Caption *playerCaption = new Gui2Caption(windowManager, "gameplan_roleplayer_" + suffix + "_" + int_to_str(i),
+                                                 panel.px + panel.pw * 0.61f, y, panel.pw * 0.39f, rowH, "");
+    this->AddView(playerCaption);
+    playerCaption->Hide();
+    panel.rolePlayerCaptions.push_back(playerCaption);
+  }
+}
+
+void GamePlanPage::BuildRolePicker(PlanPanel &panel) {
+  float centerX = panel.px + panel.pw * 0.5f;
+  float hintY = panel.py + panel.ph + roleBandGap;
+  float photoY = hintY + 3.0f;
+
+  panel.rolePickerHint = new Gui2Caption(windowManager, "gameplan_rolepick_hint_" + int_to_str(panel.teamID), 0, hintY, 0, 2.6f, "");
+  this->AddView(panel.rolePickerHint);
+  panel.rolePickerHint->Hide();
+
+  panel.rolePickerPhoto = new Gui2Image(windowManager, "gameplan_rolepick_photo_" + int_to_str(panel.teamID),
+                                        centerX - rolePickerPhotoSize * 0.5f, photoY, rolePickerPhotoSize, rolePickerPhotoSize);
+  panel.rolePickerPhoto->LoadImage("media/menu/player_placeholder.png");
+  this->AddView(panel.rolePickerPhoto);
+  panel.rolePickerPhoto->Hide();
+
+  panel.rolePickerBadge = new Gui2Caption(windowManager, "gameplan_rolepick_badge_" + int_to_str(panel.teamID), 0, photoY + rolePickerPhotoSize + 0.2f, 0, 2.2f, "");
+  this->AddView(panel.rolePickerBadge);
+  panel.rolePickerBadge->Hide();
+
+  panel.rolePickerName = new Gui2Caption(windowManager, "gameplan_rolepick_name_" + int_to_str(panel.teamID), 0, photoY + rolePickerPhotoSize + 2.6f, 0, 2.4f, "");
+  this->AddView(panel.rolePickerName);
+  panel.rolePickerName->Hide();
+}
+
+void GamePlanPage::LayoutRoles(PlanPanel &panel) {
+  bool roles = RolesActive(panel);
+  bool picking = roles && panel.rolePicking;
+
+  for (unsigned int i = 0; i < panel.roleButtons.size(); i++) {
+    if (roles && !picking) panel.roleButtons.at(i)->Show();
+    else panel.roleButtons.at(i)->Hide();
+    if (roles && !picking) panel.rolePlayerCaptions.at(i)->Show();
+    else panel.rolePlayerCaptions.at(i)->Hide();
+  }
+
+  bool showPicker = picking && panel.cursorIndex >= 0 && panel.cursorIndex < (int)entries.size();
+  if (panel.rolePickerHint) { if (showPicker) panel.rolePickerHint->Show(); else panel.rolePickerHint->Hide(); }
+  if (panel.rolePickerPhoto) { if (showPicker) panel.rolePickerPhoto->Show(); else panel.rolePickerPhoto->Hide(); }
+  if (panel.rolePickerBadge) { if (showPicker) panel.rolePickerBadge->Show(); else panel.rolePickerBadge->Hide(); }
+  if (panel.rolePickerName) { if (showPicker) panel.rolePickerName->Show(); else panel.rolePickerName->Hide(); }
+}
+
+void GamePlanPage::RefreshRoles(PlanPanel &panel) {
+  if (!RolesActive(panel)) return;
+  const std::vector<PlayerData*> &playerData = panel.teamData->GetPlayerData();
+  for (int i = 0; i < e_TeamRole_SIZE && i < (int)panel.roleButtons.size(); i++) {
+    e_TeamRole role = planRoleOrder[i];
+    int slot = RolePlayerSlot(panel, role);
+    std::string playerName = (slot >= 0 && slot < (int)playerData.size()) ? ShortName(playerData.at(slot)->GetLastName()) : "-";
+    panel.rolePlayerCaptions.at(i)->SetCaption(playerName);
+
+    bool cursor = !panel.barFocused && ((int)i == panel.roleCursor);
+    panel.roleButtons.at(i)->SetHighlighted(cursor);
+    panel.roleButtons.at(i)->SetColor(cursor ? windowManager->GetStyle()->GetColor(e_DecorationType_Bright2)
+                                             : windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
+  }
+
+  if (panel.rolePicking && panel.cursorIndex >= 0 && panel.cursorIndex < (int)entries.size()) {
+    const PlanEntry &entry = entries.at(panel.cursorIndex);
+    if (entry.index >= 0 && entry.index < (int)playerData.size()) {
+      PlayerData *player = playerData.at(entry.index);
+      e_TeamRole role = planRoleOrder[panel.rolePickingIndex];
+      float centerX = panel.px + panel.pw * 0.5f;
+      float hintY = panel.py + panel.ph + roleBandGap;
+      float photoY = hintY + 3.0f;
+      CenterCaption(panel.rolePickerHint, centerX, hintY, 2.6f, "Pick for " + GetTeamRoleName(role));
+      CenterCaption(panel.rolePickerBadge, centerX, photoY + rolePickerPhotoSize + 0.2f, 2.2f, RoleRatingText(entry.role, player));
+      CenterCaption(panel.rolePickerName, centerX, photoY + rolePickerPhotoSize + 2.6f, 2.4f, ShortName(player->GetLastName()));
+    }
+  }
+
+  // Single layout: while browsing the role list, this section owns the GUI focus,
+  // so no pitch card may keep it (a focused card would render its bright frame
+  // under the list). The list itself is navigated through the focused role row.
+  if (!dualPanel && !panel.rolePicking && !panel.roleButtons.empty())
+    panel.roleButtons.at(panel.roleCursor)->SetFocus();
+}
+
+void GamePlanPage::MoveRoleCursor(PlanPanel &panel, int delta) {
+  int next = panel.roleCursor + delta;
+  if (next < 0) next = 0;
+  if (next > e_TeamRole_SIZE - 1) next = e_TeamRole_SIZE - 1;
+  if (next == panel.roleCursor) return;
+  panel.roleCursor = next;
+  if (!dualPanel && !panel.roleButtons.empty()) panel.roleButtons.at(panel.roleCursor)->SetFocus();
+  RefreshPanel(panel);
+}
+
+void GamePlanPage::RoleClicked(int panelIndex, int role) {
+  if (panelIndex < 0 || panelIndex >= (int)panels.size()) return;
+  PlanPanel &panel = panels.at(panelIndex);
+  if (role < 0 || role >= e_TeamRole_SIZE) return;
+  panel.roleCursor = role;
+  StartRolePicking(panel);
+}
+
+void GamePlanPage::StartRolePicking(PlanPanel &panel) {
+  if (!RolesActive(panel)) return;
+  panel.rolePicking = true;
+  panel.rolePickingIndex = panel.roleCursor;
+
+  // Start on the currently resolved taker when they are on the pitch.
+  int slot = RolePlayerSlot(panel, planRoleOrder[panel.rolePickingIndex]);
+  int focus = -1;
+  for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
+    int i = panel.entryIndices.at(k);
+    if (!entries.at(i).onPitch) continue;
+    if (focus < 0) focus = i;
+    if (entries.at(i).index == slot) { focus = i; break; }
+  }
+  panel.cursorIndex = focus;
+  if (!dualPanel) this->SetFocus();
+  RefreshPanel(panel);
+  RefreshSectionBar(panel);
+  UpdateInfo();
+}
+
+void GamePlanPage::StopRolePicking(PlanPanel &panel) {
+  if (!panel.rolePicking) return;
+  panel.rolePicking = false;
+  if (!dualPanel && !panel.roleButtons.empty()) panel.roleButtons.at(panel.roleCursor)->SetFocus();
+  RefreshPanel(panel);
+  RefreshSectionBar(panel);
+  UpdateInfo();
+}
+
+void GamePlanPage::SelectPickCursor(PlanPanel &panel, int entryPosition) {
+  if (entryPosition < 0 || entryPosition >= (int)entries.size()) return;
+  panel.cursorIndex = entryPosition;
+  if (!dualPanel) this->SetFocus();
+  RefreshPanel(panel);
+  UpdateInfo();
+}
+
+void GamePlanPage::ConfirmRolePick(PlanPanel &panel) {
+  if (!panel.rolePicking) return;
+  int entryPos = panel.cursorIndex;
+  if (entryPos < 0 || entryPos >= (int)entries.size()) return;
+  const PlanEntry &entry = entries.at(entryPos);
+  if (!entry.onPitch) return;
+  SetRole(panel, planRoleOrder[panel.rolePickingIndex], entry.index);
+  panel.rolePicking = false;
+  if (!dualPanel && !panel.roleButtons.empty()) panel.roleButtons.at(panel.roleCursor)->SetFocus();
+  Refresh();
+}
+
+int GamePlanPage::RolePlayerSlot(PlanPanel &panel, e_TeamRole role) {
+  if (panel.team) return panel.team->GetRoleSlot(role);
+  if (!panel.teamData) return -1;
+  MatchData *matchData = GetMenuTask()->GetMatchData();
+  int stored = matchData ? matchData->GetRolePlayer(panel.teamID, role) : -1;
+  if (stored >= 0 && stored < (int)panel.teamData->GetPlayerData().size()) return stored;
+  return panel.teamData->SuggestRoleSlot(role);
+}
+
+void GamePlanPage::SetRole(PlanPanel &panel, e_TeamRole role, int slot) {
+  if (GetMenuTask()->GetNetServer() || GetMenuTask()->GetNetClient()) {
+    // Host-authoritative: send the intent; the applied role comes back through
+    // the plan revision and the rebuild.
+    SendPlanRole(panel.teamID, (int)role, slot);
+  } else if (panel.team) {
+    panel.team->SetRolePlayer(role, slot);
+  } else {
+    MatchData *matchData = GetMenuTask()->GetMatchData();
+    if (matchData) matchData->SetRolePlayer(panel.teamID, role, slot);
+  }
+}
+
+void GamePlanPage::SendPlanRole(int side, int role, int slot) {
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_PlanRole;
+  action.side = side;
+  action.value = role;
+  action.value2 = slot;
+  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
+  if (server) { action.playerId = 0; server->ApplyLobbyAction(action); return; }
+  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
+  if (client) client->SendLobbyAction(action);
+}
+
 Vector3 GamePlanPage::PitchAnchor(PlanPanel &panel, const FormationEntry &entry) {
   Vector3 pos = entry.databasePosition;
   if (entry.role != e_PlayerRole_GK) pos.coords[0] = pos.coords[0] * 0.8f + 0.1f;
@@ -564,6 +789,7 @@ void GamePlanPage::FocusSectionBar(PlanPanel &panel) {
   // from a clean slate instead of the last highlighted/held player.
   panel.heldIndex = -1;
   panel.cursorIndex = -1;
+  panel.rolePicking = false;
   if (!dualPanel) panel.sectionButtons.at(panel.barCursor)->SetFocus();
   // Leaving the scheme list discards an uncommitted preview, in place.
   if (TacticsActive(panel)) PreviewSchemes(panel);
@@ -577,6 +803,13 @@ void GamePlanPage::FocusContent(PlanPanel &panel) {
   if (TacticsActive(panel)) {
     if (!dualPanel && !panel.schemeButtons.empty()) panel.schemeButtons.at(panel.schemeCursor)->SetFocus();
     PreviewSchemes(panel);
+    RefreshPanel(panel);
+    RefreshSectionBar(panel);
+    UpdateInfo();
+    return;
+  }
+  if (RolesActive(panel)) {
+    if (!dualPanel && !panel.roleButtons.empty()) panel.roleButtons.at(panel.roleCursor)->SetFocus();
     RefreshPanel(panel);
     RefreshSectionBar(panel);
     UpdateInfo();
@@ -604,8 +837,9 @@ void GamePlanPage::SectionClicked(int panelIndex, int section) {
   if (panelIndex < 0 || panelIndex >= (int)panels.size()) return;
   PlanPanel &panel = panels.at(panelIndex);
   SetSection(panel, section);
-  // Stub sections have nothing to interact with: keep the bar focused.
-  if (PositionsActive(panel) || TacticsActive(panel)) FocusContent(panel);
+  // Sections with editable content take the focus off the bar. (Roles is always
+  // editable now, so nothing is stubbed out here.)
+  if (PositionsActive(panel) || TacticsActive(panel) || RolesActive(panel)) FocusContent(panel);
   else FocusSectionBar(panel);
 }
 
@@ -638,11 +872,16 @@ bool GamePlanPage::TacticsActive(const PlanPanel &panel) const {
   return panel.activeSection == e_GamePlanSection_Tactics;
 }
 
+bool GamePlanPage::RolesActive(const PlanPanel &panel) const {
+  return panel.activeSection == e_GamePlanSection_Roles;
+}
+
 void GamePlanPage::SetSection(PlanPanel &panel, int section) {
   if (section < 0 || section >= e_GamePlanSection_Size) return;
   panel.activeSection = section;
   panel.barCursor = section;
   panel.heldIndex = -1;
+  panel.rolePicking = false;
   // Restore/preview the pitch and re-lay the column in place (no widget churn),
   // so switching between the substitute list and the scheme list is not a frame
   // late and nothing flickers.
@@ -665,7 +904,7 @@ std::string GamePlanPage::SectionDescription(int section) {
   switch (section) {
     case e_GamePlanSection_Tactics: return "Choose a tactical scheme";
     case e_GamePlanSection_Positions: return "Change positions";
-    case e_GamePlanSection_Roles: return "Designated roles (coming soon)";
+    case e_GamePlanSection_Roles: return "Captain and set-piece takers";
     default: return "";
   }
 }
@@ -1013,6 +1252,7 @@ void GamePlanPage::LayoutBench(PlanPanel &panel) {
   }
 
   LayoutSchemes(panel);
+  LayoutRoles(panel);
 }
 
 void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
@@ -1031,6 +1271,27 @@ void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
         panel.schemeButtons.at(panel.schemeCursor)->SetFocus();
       continue;
     }
+    if (RolesActive(panel)) {
+      if (panel.rolePicking) {
+        // Keep hovering the pitch: re-seat the pick cursor (entry positions are
+        // gone after the rebuild), preferring the previously hovered slot.
+        int focus = -1;
+        for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
+          int i = panel.entryIndices.at(k);
+          if (!entries.at(i).onPitch) continue;
+          if (focus < 0) focus = i;
+          if (panel.teamID == focusTeam && entries.at(i).index == focusSlot) { focus = i; break; }
+        }
+        panel.cursorIndex = focus;
+        if (!dualPanel) this->SetFocus();
+      } else {
+        panel.cursorIndex = -1;
+        panel.heldIndex = -1;
+        if (!dualPanel && !panel.barFocused && !panel.roleButtons.empty())
+          panel.roleButtons.at(panel.roleCursor)->SetFocus();
+      }
+      continue;
+    }
     int focus = -1;
     if (panel.teamID == focusTeam) {
       for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
@@ -1043,7 +1304,7 @@ void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
   Refresh();
 }
 
-int GamePlanPage::FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction) {
+int GamePlanPage::FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction, bool onlyPitch) {
   if (from < 0 || from >= (int)entries.size()) return -1;
   Vector3 cur = entries.at(from).pos;
   bool fromPitch = entries.at(from).onPitch;
@@ -1059,6 +1320,7 @@ int GamePlanPage::FindNextEntry(PlanPanel &panel, int from, const Vector3 &direc
     int i = panel.entryIndices.at(k);
     if (i == from) continue;
     if (!entries.at(i).selectable) continue;
+    if (onlyPitch && !entries.at(i).onPitch) continue; // role picking is pitch-only
     Vector3 delta = entries.at(i).pos - cur;
     float along = delta.coords[0] * dir.coords[0] + delta.coords[1] * dir.coords[1];
     if (along <= 0.001f) continue;
@@ -1248,7 +1510,11 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     std::string suffix = pending ? (pendingOut ? " -" : " +") : "";
     if (!entry.selectable) suffix += " (out)";
 
-    if (!PositionsActive(panel) && !TacticsActive(panel)) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2));
+    // The pitch is interactive in Positions and while picking a role; in the
+    // Roles list (and other sections) the pitch is just a dim backdrop.
+    bool pitchEditing = PositionsActive(panel) || (RolesActive(panel) && panel.rolePicking);
+
+    if (!pitchEditing && !TacticsActive(panel)) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Dark2));
     else if (!entry.selectable) entry.button->SetColor(Vector3(110, 110, 110));
     else if (pos == panel.cursorIndex) entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright2));
     else entry.button->SetColor(windowManager->GetStyle()->GetColor(e_DecorationType_Bright1));
@@ -1256,7 +1522,7 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     // Local two-player has no GUI focus on the pitch, so the cursor entry would
     // otherwise render in the dim "unfocused" state. Highlight it so the focus
     // colour matches the single/network layout.
-    entry.button->SetHighlighted(PositionsActive(panel) && pos == panel.cursorIndex);
+    entry.button->SetHighlighted(pitchEditing && pos == panel.cursorIndex);
 
     int fatigue = FatiguePercent(EntryFatigue(panel, entry));
 
@@ -1275,11 +1541,13 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     }
   }
 
-  // Apply the bench/scheme visibility here too: SetSection refreshes without a
-  // full rebuild, so otherwise the substitute list would flash for one frame
-  // when the Tactics tab opens.
+  // Apply the bench/scheme/role visibility here too: SetSection refreshes without
+  // a full rebuild, so otherwise the substitute list would flash for one frame
+  // when the Tactics/Roles tab opens.
   LayoutSchemes(panel);
   RefreshSchemes(panel);
+  LayoutRoles(panel);
+  RefreshRoles(panel);
 }
 
 void GamePlanPage::CenterCaption(Gui2Caption *caption, float centerX, float y, float height, const std::string &text) {
@@ -1325,13 +1593,17 @@ void GamePlanPage::UpdateInfo() {
 
   if (dualPanel) {
     PlanPanel &p0 = panels.at(0), &p1 = panels.at(1);
-    UpdateInfoDetail(infoPhotoA, infoBadgeA, infoNameA, p0.heldIndex != -1 ? p0.heldIndex : p0.cursorIndex, true);
-    UpdateInfoDetail(infoPhotoB, infoBadgeB, infoNameB, p1.heldIndex != -1 ? p1.heldIndex : p1.cursorIndex, true);
+    // The Roles section owns the info band: it draws its own row list (and, while
+    // picking, the hovered player's card) there instead of the shared info view.
+    bool showA = !RolesActive(p0);
+    bool showB = !RolesActive(p1);
+    UpdateInfoDetail(infoPhotoA, infoBadgeA, infoNameA, showA ? (p0.heldIndex != -1 ? p0.heldIndex : p0.cursorIndex) : -1, showA);
+    UpdateInfoDetail(infoPhotoB, infoBadgeB, infoNameB, showB ? (p1.heldIndex != -1 ? p1.heldIndex : p1.cursorIndex) : -1, showB);
     return;
   }
 
   PlanPanel &p = panels.at(0);
-  if (p.cursorIndex < 0) {
+  if (p.cursorIndex < 0 || RolesActive(p)) {
     UpdateInfoDetail(infoPhotoA, infoBadgeA, infoNameA, -1, false);
     UpdateInfoDetail(infoPhotoB, infoBadgeB, infoNameB, -1, false);
     return;
@@ -1385,7 +1657,7 @@ void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, 
       if (now_ms - panel.lastMove_ms < 180) return;
       if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); panel.lastMove_ms = now_ms; }
       else if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); panel.lastMove_ms = now_ms; }
-      else if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel))) { FocusContent(panel); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel) || RolesActive(panel))) { FocusContent(panel); panel.lastMove_ms = now_ms; }
       return;
     }
     return;
@@ -1400,6 +1672,32 @@ void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, 
       if (now_ms - panel.lastMove_ms < 180) return;
       if (direction.coords[1] < -0.5f) { MoveSchemeCursor(panel, -1); panel.lastMove_ms = now_ms; }
       else if (direction.coords[1] > 0.5f) { MoveSchemeCursor(panel, 1); panel.lastMove_ms = now_ms; }
+      return;
+    }
+    return;
+  }
+
+  // Roles: Up/Down scrolls the role list; Enter opens player picking; Back
+  // returns to the bar. While picking, arrows hover the pitch (pitch players
+  // only), Enter assigns the hovered player and Back cancels back to the list.
+  if (RolesActive(panel)) {
+    if (panel.rolePicking) {
+      if (back) { StopRolePicking(panel); return; }
+      if (accept) { ConfirmRolePick(panel); return; }
+      if (direction.GetLength() > 0.5f) {
+        if (now_ms - panel.lastMove_ms < 180) return;
+        int next = FindNextEntry(panel, panel.cursorIndex, direction, true);
+        if (next != -1) { SelectPickCursor(panel, next); panel.lastMove_ms = now_ms; }
+        return;
+      }
+      return;
+    }
+    if (back) { FocusSectionBar(panel); return; }
+    if (accept) { StartRolePicking(panel); return; }
+    if (direction.GetLength() > 0.5f) {
+      if (now_ms - panel.lastMove_ms < 180) return;
+      if (direction.coords[1] < -0.5f) { MoveRoleCursor(panel, -1); panel.lastMove_ms = now_ms; }
+      else if (direction.coords[1] > 0.5f) { MoveRoleCursor(panel, 1); panel.lastMove_ms = now_ms; }
       return;
     }
     return;
@@ -1553,6 +1851,13 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
   if (dualPanel) { event->Ignore(); return; }
 
   PlanPanel &panel = panels.at(0);
+  // Role picking is a level below the role list: Back cancels back to the list
+  // (not all the way out to the section bar).
+  if (RolesActive(panel) && panel.rolePicking && event->IsEscape()) {
+    StopRolePicking(panel);
+    event->Accept();
+    return;
+  }
   if (event->IsEscape()) {
     if (panel.heldIndex != -1) { panel.heldIndex = -1; Refresh(); event->Accept(); return; }
     // Back from the pitch returns to the section bar; from the bar it leaves.
@@ -1567,7 +1872,7 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
       if (moveCooldown_ms < 180) { event->Accept(); return; }
       if (direction.coords[0] < -0.5f) { MoveSectionFocus(panel, -1); moveCooldown_ms = 0; event->Accept(); return; }
       if (direction.coords[0] > 0.5f) { MoveSectionFocus(panel, 1); moveCooldown_ms = 0; event->Accept(); return; }
-      if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel))) { FocusContent(panel); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[1] > 0.5f && (PositionsActive(panel) || TacticsActive(panel) || RolesActive(panel))) { FocusContent(panel); moveCooldown_ms = 0; event->Accept(); return; }
       event->Accept();
       return;
     }
@@ -1586,6 +1891,36 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
       return;
     }
     // Enter/A is consumed by the focused scheme button's own activate handler.
+    Gui2Page::ProcessWindowingEvent(event);
+    return;
+  }
+
+  if (RolesActive(panel)) {
+    if (panel.rolePicking) {
+      // Picking: the list is hidden and the page owns the focus, so Enter/A and
+      // Esc/B are handled here (not by a button).
+      if (event->IsEscape()) { StopRolePicking(panel); event->Accept(); return; }
+      if (event->IsActivate()) { ConfirmRolePick(panel); event->Accept(); return; }
+      Vector3 direction = event->GetDirection();
+      if (direction.GetLength() > 0.5f) {
+        if (moveCooldown_ms < 180) { event->Accept(); return; }
+        int next = FindNextEntry(panel, panel.cursorIndex, direction, true);
+        if (next != -1) { SelectPickCursor(panel, next); moveCooldown_ms = 0; event->Accept(); return; }
+        event->Accept();
+        return;
+      }
+      event->Accept();
+      return;
+    }
+    Vector3 direction = event->GetDirection();
+    if (direction.GetLength() > 0.5f) {
+      if (moveCooldown_ms < 180) { event->Accept(); return; }
+      if (direction.coords[1] < -0.5f) { MoveRoleCursor(panel, -1); moveCooldown_ms = 0; event->Accept(); return; }
+      if (direction.coords[1] > 0.5f) { MoveRoleCursor(panel, 1); moveCooldown_ms = 0; event->Accept(); return; }
+      event->Accept();
+      return;
+    }
+    // Enter/A is consumed by the focused role button's own activate handler.
     Gui2Page::ProcessWindowingEvent(event);
     return;
   }
@@ -1617,5 +1952,6 @@ void GamePlanPage::Process() {
     Rebuild(rebuildFocusTeam, rebuildFocusSlot);
   }
   if (moveCooldown_ms < 180) moveCooldown_ms += windowManager->GetTimeStep_ms();
+
   Gui2Page::Process();
 }

@@ -55,6 +55,12 @@ Snapshot CaptureSnapshot(Match *match) {
     snapshot.substitutions.push_back(sub);
   }
 
+  for (int t = 0; t < 2; t++) {
+    for (int r = 0; r < e_TeamRole_SIZE; r++) {
+      snapshot.roles[t][r] = match->GetMatchData()->GetRolePlayer(t, (e_TeamRole)r);
+    }
+  }
+
   const std::vector<Animation*> &animations = match->GetAnims()->GetAnimations();
   std::map<Animation*, int> animIDs;
   for (unsigned int i = 0; i < animations.size(); i++) {
@@ -145,6 +151,10 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
     buffer.PutU32((uint32_t)snapshot.substitutions.at(i).inSlot);
   }
 
+  for (int t = 0; t < 2; t++) {
+    for (int r = 0; r < e_TeamRole_SIZE; r++) buffer.PutU32((uint32_t)snapshot.roles[t][r]);
+  }
+
   buffer.PutU32((uint32_t)snapshot.players.size());
   for (unsigned int i = 0; i < snapshot.players.size(); i++) {
     WriteSnapshotPlayer(buffer, snapshot.players.at(i));
@@ -193,6 +203,10 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
     snapshot.substitutions.at(i).inSlot = (int)buffer.GetU32();
   }
 
+  for (int t = 0; t < 2; t++) {
+    for (int r = 0; r < e_TeamRole_SIZE; r++) snapshot.roles[t][r] = (int)buffer.GetU32();
+  }
+
   uint32_t playerCount = buffer.GetU32();
   snapshot.players.resize(playerCount);
   for (unsigned int i = 0; i < playerCount; i++) {
@@ -227,6 +241,15 @@ void ApplySnapshotPose(PlayerBase *player, const SnapshotPlayer &pose, const std
 }
 
 int ApplySnapshot(Match *match, const Snapshot &snapshot, const std::vector<Animation*> &animTable) {
+  // Reconcile designated roles: a client joining/reconnecting mid-match gets the
+  // host's assignments here, not just the live PlanRole relay.
+  MatchData *matchData = match->GetMatchData();
+  if (matchData) {
+    for (int t = 0; t < 2; t++) {
+      for (int r = 0; r < e_TeamRole_SIZE; r++) matchData->SetRolePlayer(t, (e_TeamRole)r, snapshot.roles[t][r]);
+    }
+  }
+
   std::vector<Player*> teamPlayers[2];
   match->GetAllTeamPlayers(0, teamPlayers[0]);
   match->GetAllTeamPlayers(1, teamPlayers[1]);

@@ -115,6 +115,7 @@ class MenuTask : public Gui2Task {
     void ProcessNetworkPlanEdits();
     void ApplyPlanSwap(int side, int dbA, int dbB);
     void ApplyPlanScheme(int side, int scheme);
+    void ApplyPlanRole(int side, int role, int slot);
     bool PlayerOwnsSide(uint32_t playerId, int side);
 
     // Pre-match: host consumes the agreed hub action (leave hub / start).
