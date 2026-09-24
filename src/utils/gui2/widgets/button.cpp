@@ -67,7 +67,7 @@ namespace blunted {
     if (frameOnly) {
       // Coloured border only; the interior stays transparent so the card's
       // photo/name behind the button remain visible.
-      bool show = IsFocussed() || highlighted || (toggleable && toggled);
+      bool show = drawFrame && (IsFocussed() || highlighted || (toggleable && toggled));
       if (!show) {
         image->DrawRectangle(0, 0, w, h, Vector3(0, 0, 0), 0);
         image->OnChange();

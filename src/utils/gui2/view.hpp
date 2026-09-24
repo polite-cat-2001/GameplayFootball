@@ -63,6 +63,9 @@ namespace blunted {
       virtual bool IsSelectable() { return isSelectable; }
       virtual void SetSelectable(bool onOff) { isSelectable = onOff; }
       virtual bool IsOverlay() { return isOverlay; }
+      // Overlay views render one z-priority level above regular views (see
+      // SetRecursiveZPriority), so they stay on top of same-priority siblings.
+      virtual void SetOverlay(bool onOff) { isOverlay = onOff; }
 
       virtual void Show();
       virtual void ShowAllChildren();

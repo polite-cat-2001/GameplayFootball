@@ -31,6 +31,18 @@ namespace blunted {
 
   void Surface::SetData(SDL_Surface *surface) {
     if (this->surface) SDL_DestroySurface(this->surface);
+    // Palette (indexed) images - e.g. PNGs with a PLTE chunk, which SDL_image
+    // loads as SDL_PIXELFORMAT_INDEX8 - have no GL representation: the upload
+    // path (GetGLPixelFormatFromSurface) falls back to GL_RGB for 1 byte per
+    // pixel and reads raw palette indices as colour, garbling the texture.
+    // Normalise to RGBA32 so any loaded image can be uploaded.
+    if (surface && SDL_ISPIXELFORMAT_INDEXED(surface->format)) {
+      SDL_Surface *converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+      if (converted) {
+        SDL_DestroySurface(surface);
+        surface = converted;
+      }
+    }
     this->surface = surface;
   }
 

@@ -24,8 +24,10 @@ namespace blunted {
 
       // when set, LoadImage adds a white outline around the non-transparent
       // pixels of the source image, following the shape (for dark logos on
-      // dark backgrounds in the team select carousel)
-      void SetDrawOutline(bool drawOutline) { this->drawOutline = drawOutline; }
+      // dark backgrounds in the team select carousel). radius 0 = auto (scaled
+      // to the image size); a smaller radius keeps small portraits from
+      // shrinking much when the padded outline canvas is scaled.
+      void SetDrawOutline(bool drawOutline, int radius = 0) { this->drawOutline = drawOutline; this->outlineRadius = radius; }
 
       virtual void SetSize(float new_width_percent, float new_height_percent);
       virtual void SetZoom(float zoomx, float zoomy);
@@ -41,6 +43,7 @@ namespace blunted {
       std::string sourceFilename;
 
       bool drawOutline = false;
+      int outlineRadius = 0; // 0 = auto
 
   };
 

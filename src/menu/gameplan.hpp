@@ -43,6 +43,7 @@ struct PlanEntry {
   Gui2Caption *fatigueCaption; // condition %, right of the rating (bench only)
   Gui2Caption *nameCaption;    // pitch only: centered name under the photo
   Gui2Image *photo;            // pitch only: placeholder portrait
+  Gui2Image *photoOutline;     // pitch only: white-outlined copy, shown on selection
   Gui2Image *fatigueBar;       // pitch only: thin condition bar under the name
   e_PlayerRole role;          // display role (pending subs included)
   int teamID;

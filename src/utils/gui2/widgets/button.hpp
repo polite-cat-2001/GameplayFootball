@@ -49,6 +49,11 @@ namespace blunted {
       // button spans the whole card but must not hide the photo/name behind it.
       virtual void SetFrameOnly(bool onOff) { this->frameOnly = onOff; Redraw(); }
 
+      // Frame-only mode draws nothing at all when this is off: the button still
+      // takes clicks/focus, but the card signals selection with the photo
+      // outline instead of a coloured rectangle.
+      virtual void SetDrawFrame(bool onOff) { this->drawFrame = onOff; Redraw(); }
+
       virtual void ProcessWindowingEvent(WindowingEvent *event);
 
       virtual void OnGainFocus();
@@ -72,6 +77,7 @@ namespace blunted {
       bool uncolorWhenToggled = false;
       bool highlighted = false;
       bool frameOnly = false;
+      bool drawFrame = true;
 
       Vector3 color;
 

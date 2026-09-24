@@ -335,14 +335,23 @@ option(GAMEPLAYFOOTBALL_WINDOWS_SUBSYSTEM "Build gameplayfootball as a Windows G
 
 # The game resolves all asset/database paths relative to the working directory,
 # so copy data/ next to the binary automatically (no manual xcopy/cp needed).
-# Player photos (databases/default/faces) are not used yet and are excluded.
+# Player photos (databases/default/faces) are ~680 MB of small PNGs and only the
+# game itself uses them, so pass WITH_FACES only for the game target; they are
+# then copied in Release builds only.
 function(copy_data_post_build target)
+  cmake_parse_arguments(ARG "WITH_FACES" "" "" ${ARGN})
+  if(ARG_WITH_FACES)
+    set(copy_faces "$<CONFIG:Release>")
+  else()
+    set(copy_faces "0")
+  endif()
   add_custom_command(TARGET ${target} POST_BUILD
           COMMAND ${CMAKE_COMMAND}
                   "-DSRC=${PROJECT_SOURCE_DIR}/data"
                   "-DDST=$<TARGET_FILE_DIR:${target}>"
+                  "-DCOPY_FACES=${copy_faces}"
                   -P "${PROJECT_SOURCE_DIR}/tools/copy_data.cmake"
-          COMMENT "Copying game data (excluding unused player photos)")
+          COMMENT "Copying game data")
 endfunction()
 
 add_executable(gameplayfootball
@@ -357,7 +366,7 @@ apply_common_includes(gameplayfootball)
 if(WIN32 AND GAMEPLAYFOOTBALL_WINDOWS_SUBSYSTEM)
   set_target_properties(gameplayfootball PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
-copy_data_post_build(gameplayfootball)
+copy_data_post_build(gameplayfootball WITH_FACES)
 # GNU ld resolves static library references left-to-right; the game libraries
 # have circular references (e.g. hidlib <-> gamecontextlib), so group them on
 # Linux. MSVC/ld64 tolerate the flat order.
