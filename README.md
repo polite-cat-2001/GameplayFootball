@@ -49,6 +49,10 @@ updated the libraries, but threw away everything (menus, audio, HUD) that was no
 
 ## Building from source
 
+The repository ships only the code and `media/`; the database, images and player faces are large
+generated assets kept out of git. Download the data bundles (see
+[Game data](#game-data-required-for-a-full-catalog) below) before running the game.
+
 ### Linux
 
 Install required dependencies (SDL3 apt packages exist since Ubuntu 26.04 LTS):
@@ -130,6 +134,34 @@ The `data/` directory is copied next to the binary automatically (POST_BUILD), s
 inside `build\Release` can be run directly (the game uses relative data paths). By default the game is
 built as a GUI application (WIN32 subsystem); pass `-DGAMEPLAYFOOTBALL_WINDOWS_SUBSYSTEM=OFF` to keep a
 console for debugging.
+
+### Game data (required for a full catalog)
+
+The `data/` directory copied next to the binary contains only `media/` and `football.config`; its
+`databases/` is empty, so the game exits with `Could not open database` until the data bundles are
+unpacked.
+
+Download both bundles from the [Releases](https://github.com/Churikov0112/GameplayFootball/releases)
+page and unpack them **into** `<build-dir>/databases/default/` (`build` on Linux/macOS,
+`build\Release` on Windows):
+
+```bash
+# catalog — database.sqlite + league/club/nation images and kits (~527 MB, required)
+curl -L -o data.zip \
+  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.0/GameplayFootball-data-2026-09-09.zip
+unzip -o data.zip -d build/databases/default
+
+# player faces — portrait cut-outs (~668 MB, optional; a placeholder is used otherwise)
+curl -L -o faces.zip \
+  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.0/GameplayFootball-faces-2026-09-09.zip
+unzip -o faces.zip -d build/databases/default
+```
+
+The file names carry the data version (`2026-09-09` here); the matching `sha256` / `faces_sha256`
+checksums are listed in `data-versions.json`. Unpack **into** `databases/default/`, not into the
+build root: the game reads the database from `databases/default/database.sqlite`, images from
+`databases/default/images_*` and each face from `databases/default/faces/<tm_id>.png`. On Windows
+use `Expand-Archive` instead of `unzip`.
 
 ## Verified dependency versions
 

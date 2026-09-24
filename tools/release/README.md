@@ -12,6 +12,8 @@ tarballs automatically when a release is created.
 | Windows x64 | `GameplayFootball-v<ver>-win32-x64.zip` | this machine (MSVC + vcpkg `x64-windows`) |
 | Linux | `GameplayFootball-v<ver>-linux-x86_64.tar.gz` | WSL2 Ubuntu (gcc) |
 | macOS | `GameplayFootball-v<ver>-macos-<arch>.zip` | Mac (brew) |
+| Data (catalog) | `GameplayFootball-data-<data_version>.zip` | `python tools/release/package_data.py` |
+| Data (faces) | `GameplayFootball-faces-<data_version>.zip` | `python tools/release/package_data.py --faces-only` |
 
 ## Workflow
 
@@ -29,6 +31,13 @@ tarballs automatically when a release is created.
    git tag v<ver> && git push origin v<ver>
    gh release create v<ver> dist/GameplayFootball-v<ver>-* --title "Gameplay Football v<ver>" --generate-notes
    ```
+5. Data assets (needed so a source build gets the database, images and faces):
+   `python tools/release/package_data.py` writes both bundles to `dist/` and records their
+   checksums in `data-versions.json`. The catalog zip is **not** byte-reproducible, so to
+   attach faces to an already-published catalog use
+   `python tools/release/package_data.py --faces-only` — it builds only the faces bundle and
+   never rebuilds the catalog. Both bundles unpack **into** `databases/default/`
+   (`unzip ... -d <build-dir>/databases/default`); the game's README documents this for users.
 
 ## Notes
 
