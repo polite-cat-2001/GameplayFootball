@@ -64,6 +64,24 @@ namespace blunted {
     int x_margin = int(round(x_ratio * 0.5));
     int y_margin = int(round(y_ratio * 0.5));
 
+    if (frameOnly) {
+      // Coloured border only; the interior stays transparent so the card's
+      // photo/name behind the button remain visible.
+      bool show = IsFocussed() || highlighted || (toggleable && toggled);
+      if (!show) {
+        image->DrawRectangle(0, 0, w, h, Vector3(0, 0, 0), 0);
+        image->OnChange();
+        return;
+      }
+      Vector3 border = (toggleable && toggled) ? windowManager->GetStyle()->GetColor(e_DecorationType_Toggled)
+                                               : windowManager->GetStyle()->GetColor(e_DecorationType_Bright2);
+      int thickness = x_margin > 1 ? x_margin : 1;
+      image->DrawRectangle(0, 0, w, h, border, 255);
+      image->DrawRectangle(thickness, thickness, w - thickness * 2, h - thickness * 2, Vector3(0, 0, 0), 0);
+      image->OnChange();
+      return;
+    }
+
     int alpha = 0;
     Vector3 color1;
     if (toggleable && toggled && uncolorWhenToggled) {

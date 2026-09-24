@@ -40,9 +40,10 @@ struct PlanEntry {
   Gui2Button *button;
   Gui2Caption *roleCaption;
   Gui2Caption *ratingCaption;  // bench only: rating sits to the right of the name
-  Gui2Caption *fatigueCaption; // condition %, right of the rating (all entries)
-  Gui2Caption *nameCaption;    // pitch only: centered name drawn over the button
-  Gui2Image *photo;           // pitch only: placeholder portrait
+  Gui2Caption *fatigueCaption; // condition %, right of the rating (bench only)
+  Gui2Caption *nameCaption;    // pitch only: centered name under the photo
+  Gui2Image *photo;            // pitch only: placeholder portrait
+  Gui2Image *fatigueBar;       // pitch only: thin condition bar under the name
   e_PlayerRole role;          // display role (pending subs included)
   int teamID;
   int index;                  // slot
@@ -50,6 +51,8 @@ struct PlanEntry {
   bool onPitch;
   bool selectable;            // false: left the pitch, cannot be picked
   Vector3 pos;                // screen position (percent) of the entry center
+  float cardX;                // pitch card top-left, after collision separation
+  float cardY;
   float cardCenterX;
   float roleY;
   float nameY;
@@ -189,6 +192,7 @@ class GamePlanPage : public Gui2Page {
     void PreviewSchemes(PlanPanel &panel);
     Vector3 PitchAnchor(PlanPanel &panel, const FormationEntry &entry);
     void PositionPitchCard(PlanEntry &entry, PlanPanel &panel, float anchorX, float anchorY, float maxBottom);
+    void ApplyPitchCardGeometry(PlanEntry &entry);
     void SchemeClicked(int panelIndex, int scheme);
     void SendPlanScheme(int side, int scheme);
 
@@ -212,8 +216,9 @@ class GamePlanPage : public Gui2Page {
     void Refresh();
     void RefreshPanel(PlanPanel &panel);
     void CenterCaption(Gui2Caption *caption, float centerX, float y, float height, const std::string &text);
+    void FitNameCaption(Gui2Caption *caption, float centerX, float y, const std::string &name, const std::string &suffix, float maxWidth);
     float EntryFatigue(PlanPanel &panel, const PlanEntry &entry);
-    void PositionPitchCaption(PlanEntry &entry, const std::string &roleText, const std::string &fatigueText);
+    void DrawFatigueBar(PlanEntry &entry, int percent);
 
     void EntryClicked(int entryPosition);
 

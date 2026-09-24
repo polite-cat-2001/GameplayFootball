@@ -76,9 +76,9 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-0.8f,  0.2f, 0)},
     {e_PlayerRole_CB, Vector3(-0.8f, -0.2f, 0)},
     {e_PlayerRole_RB, Vector3(-0.7f, -0.6f, 0)},
-    {e_PlayerRole_LM, Vector3( 0.0f,  0.9f, 0)},
-    {e_PlayerRole_DM, Vector3(-0.3f,  0.0f, 0)},
-    {e_PlayerRole_RM, Vector3( 0.0f, -0.9f, 0)},
+    {e_PlayerRole_LM, Vector3( 0.0f,  0.75f, 0)},
+    {e_PlayerRole_DM, Vector3(-0.15f, 0.0f, 0)},
+    {e_PlayerRole_RM, Vector3( 0.0f, -0.75f, 0)},
     {e_PlayerRole_AM, Vector3( 0.3f,  0.0f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f,  0.3f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f, -0.3f, 0)}
@@ -90,9 +90,9 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-1.0f,  0.25f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f, -0.25f, 0)},
     {e_PlayerRole_RB, Vector3(-0.7f, -0.75f, 0)},
-    {e_PlayerRole_CM, Vector3( 0.0f,  0.5f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f,  0.0f, 0)},
-    {e_PlayerRole_CM, Vector3( 0.0f, -0.5f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.15f, 0.5f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, 0.0f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.15f, -0.5f, 0)},
     {e_PlayerRole_LM, Vector3( 0.6f,  0.75f, 0)},
     {e_PlayerRole_CF, Vector3( 1.0f,  0.0f, 0)},
     {e_PlayerRole_RM, Vector3( 0.6f, -0.75f, 0)}
@@ -104,11 +104,11 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-1.0f,  0.25f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f, -0.25f, 0)},
     {e_PlayerRole_RB, Vector3(-0.7f, -0.75f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f,  0.3f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f, -0.3f, 0)},
-    {e_PlayerRole_LM, Vector3( 0.7f,  0.9f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, 0.3f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, -0.3f, 0)},
+    {e_PlayerRole_LM, Vector3( 0.7f,  0.75f, 0)},
     {e_PlayerRole_AM, Vector3( 0.2f,  0.0f, 0)},
-    {e_PlayerRole_RM, Vector3( 0.7f, -0.9f, 0)},
+    {e_PlayerRole_RM, Vector3( 0.7f, -0.75f, 0)},
     {e_PlayerRole_CF, Vector3( 1.0f,  0.0f, 0)}
   }));
 
@@ -117,11 +117,11 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-1.0f,  0.35f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f,  0.0f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f, -0.35f, 0)},
-    {e_PlayerRole_LM, Vector3( 0.0f,  0.9f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.1f,  0.3f, 0)},
-    {e_PlayerRole_DM, Vector3(-0.3f,  0.0f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.1f, -0.3f, 0)},
-    {e_PlayerRole_RM, Vector3( 0.0f, -0.9f, 0)},
+    {e_PlayerRole_LM, Vector3( 0.0f,  0.75f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.05f, 0.3f, 0)},
+    {e_PlayerRole_DM, Vector3(-0.15f, 0.0f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.05f, -0.3f, 0)},
+    {e_PlayerRole_RM, Vector3( 0.0f, -0.75f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f,  0.3f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f, -0.3f, 0)}
   }));
@@ -133,9 +133,9 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-1.0f,  0.0f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f, -0.35f, 0)},
     {e_PlayerRole_RB, Vector3(-0.6f, -0.75f, 0)},
-    {e_PlayerRole_CM, Vector3( 0.0f,  0.5f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f,  0.0f, 0)},
-    {e_PlayerRole_CM, Vector3( 0.0f, -0.5f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.15f, 0.5f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, 0.0f, 0)},
+    {e_PlayerRole_CM, Vector3( 0.15f, -0.5f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f,  0.3f, 0)},
     {e_PlayerRole_CF, Vector3( 0.8f, -0.3f, 0)}
   }));
@@ -146,11 +146,11 @@ void BuildSchemes(std::vector<TacticalScheme> &schemes) {
     {e_PlayerRole_CB, Vector3(-1.0f,  0.25f, 0)},
     {e_PlayerRole_CB, Vector3(-1.0f, -0.25f, 0)},
     {e_PlayerRole_RB, Vector3(-0.7f, -0.75f, 0)},
-    {e_PlayerRole_LM, Vector3( 0.1f,  0.9f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f,  0.3f, 0)},
-    {e_PlayerRole_DM, Vector3(-0.4f,  0.0f, 0)},
-    {e_PlayerRole_CM, Vector3(-0.2f, -0.3f, 0)},
-    {e_PlayerRole_RM, Vector3( 0.1f, -0.9f, 0)},
+    {e_PlayerRole_LM, Vector3( 0.1f,  0.75f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, 0.3f, 0)},
+    {e_PlayerRole_DM, Vector3(-0.25f, 0.0f, 0)},
+    {e_PlayerRole_CM, Vector3(-0.05f, -0.3f, 0)},
+    {e_PlayerRole_RM, Vector3( 0.1f, -0.75f, 0)},
     {e_PlayerRole_CF, Vector3( 0.9f,  0.0f, 0)}
   }));
 }

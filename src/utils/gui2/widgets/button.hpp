@@ -44,6 +44,11 @@ namespace blunted {
       // Highlight without holding window-manager focus (parallel team select).
       virtual void SetHighlighted(bool onOff);
 
+      // Frame-only mode: draw just a coloured border when focused/highlighted/
+      // toggled, and nothing otherwise. Used for the pitch cards, where the
+      // button spans the whole card but must not hide the photo/name behind it.
+      virtual void SetFrameOnly(bool onOff) { this->frameOnly = onOff; Redraw(); }
+
       virtual void ProcessWindowingEvent(WindowingEvent *event);
 
       virtual void OnGainFocus();
@@ -66,6 +71,7 @@ namespace blunted {
       bool active;
       bool uncolorWhenToggled = false;
       bool highlighted = false;
+      bool frameOnly = false;
 
       Vector3 color;
 

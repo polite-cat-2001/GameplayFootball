@@ -38,18 +38,26 @@ const float s_oppx = 62.0f, s_oppw = 37.0f;
 const float d0_px = 1.0f, d0_pw = 29.0f, d0_bx = 30.5f, d0_bw = 18.0f;
 const float d1_px = 52.0f, d1_pw = 29.0f, d1_bx = 81.5f, d1_bw = 18.0f;
 
+// Pitch card: the photo keeps its size and defines the card width; role+rating
+// and the name are strips of exactly that width (PES-style), and a thin fatigue
+// bar caps the bottom. The name can never spill onto a neighbouring card.
 const float photoSize = 5.5f;
-const float badgeW = 7.5f;
 const float badgeH = 1.9f;
 const float cardNameH = 2.1f;
 const float cardGap = 0.15f;
-const float pitchCardH = photoSize + cardGap + badgeH + cardGap + cardNameH;
+const float fatigueBarH = 0.55f;
+// gap between the card content and the selection frame: the frame is bigger
+// than the content on every side, so its border never clips the name or the
+// fatigue bar
+const float framePad = 0.9f;
+// content height (photo + role + name + bar) and worst-case content height
+const float pitchCardContentH = photoSize + cardGap * 3.0f + badgeH + cardNameH + fatigueBarH;
+const float pitchCardH = pitchCardContentH;
 
 const float benchPosW = 3.0f;
 const float benchRatingW = 3.0f;
 const float benchFatigueW = 3.4f;
 const float benchRowH = 2.5f;
-const float captionGap = 0.4f;
 
 // bottom section bar (Tactics / Positions / Roles), one per side
 const float sectionBtnW = 15.0f;
@@ -87,6 +95,16 @@ Vector3 PitchToScreen(const Vector3 &pos, float x, float y, float w, float h) {
 }
 
 float Clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+// Card content height for a given photo size (photo + role + name + bar).
+float PitchCardHeight(float cardW) {
+  return cardW + cardGap * 3.0f + badgeH + cardNameH + fatigueBarH;
+}
+
+// Frame height: content plus the gap on both sides.
+float PitchCardFrameH(float cardW) {
+  return PitchCardHeight(cardW) + framePad * 2.0f;
+}
 
 std::string ShortName(const std::string &name) {
   if (name.length() <= 10) return name;
@@ -728,21 +746,25 @@ Vector3 GamePlanPage::PitchAnchor(PlanPanel &panel, const FormationEntry &entry)
 
 void GamePlanPage::PositionPitchCard(PlanEntry &entry, PlanPanel &panel, float anchorX, float anchorY, float maxBottom) {
   if (entry.cardPhotoH <= 0.0f) return;
-  float cardH = entry.cardPhotoH + cardGap + badgeH + cardGap + cardNameH;
-  float cx = Clampf(anchorX - entry.cardW * 0.5f, panel.px, panel.px + panel.pw - entry.cardW);
-  float cy = anchorY - entry.cardPhotoH * 0.5f;
-  if (cy + cardH > maxBottom) cy = maxBottom - cardH;
-  cy = Clampf(cy, panel.py, panel.py + panel.ph - cardH);
-
-  entry.cardCenterX = cx + entry.cardW * 0.5f;
-  if (entry.photo) entry.photo->SetPosition(cx + (entry.cardW - entry.cardPhotoH) * 0.5f, cy);
-  entry.roleY = cy + entry.cardPhotoH + cardGap;
-  if (entry.roleCaption) entry.roleCaption->SetPosition(cx, entry.roleY);
-  if (entry.fatigueCaption) entry.fatigueCaption->SetPosition(cx, entry.roleY);
-  entry.nameY = entry.roleY + badgeH + cardGap;
-  if (entry.button) entry.button->SetPosition(cx, entry.nameY);
-  if (entry.nameCaption) entry.nameCaption->SetPosition(cx, entry.nameY);
+  float cardH = PitchCardHeight(entry.cardW);
+  entry.cardX = Clampf(anchorX - entry.cardW * 0.5f, panel.px, panel.px + panel.pw - entry.cardW);
+  entry.cardY = anchorY - entry.cardW * 0.5f; // photo center sits on the anchor
+  if (entry.cardY + cardH > maxBottom) entry.cardY = maxBottom - cardH;
+  entry.cardY = Clampf(entry.cardY, panel.py, panel.py + panel.ph - cardH);
   entry.pos = Vector3(anchorX, anchorY, 0);
+  ApplyPitchCardGeometry(entry);
+}
+
+void GamePlanPage::ApplyPitchCardGeometry(PlanEntry &entry) {
+  float cx = entry.cardX, cy = entry.cardY;
+  entry.cardCenterX = cx + entry.cardW * 0.5f;
+  if (entry.photo) entry.photo->SetPosition(cx, cy);
+  entry.roleY = cy + entry.cardW + cardGap;
+  if (entry.roleCaption) entry.roleCaption->SetPosition(cx, entry.roleY);
+  entry.nameY = entry.roleY + badgeH + cardGap;
+  if (entry.button) entry.button->SetPosition(cx - framePad, cy - framePad); // frame is bigger than the content
+  if (entry.nameCaption) entry.nameCaption->SetPosition(cx, entry.nameY);
+  if (entry.fatigueBar) entry.fatigueBar->SetPosition(cx, entry.nameY + cardNameH + cardGap);
 }
 
 void GamePlanPage::PreviewSchemes(PlanPanel &panel) {
@@ -923,7 +945,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
   int total = (int)playerData.size();
 
   auto placeCard = [&](int slot, int playerID, PlayerData *player, e_PlayerRole role, float anchorX, float anchorY,
-                       bool onPitch, bool selectable, float ph, const std::string &roleText, float maxBottom) {
+                       bool onPitch, bool selectable, const std::string &roleText, float maxBottom) {
     float bx = panel.px, by = panel.py, bw = panel.pw, bh = panel.ph;
     if (!onPitch) { bx = panel.bx; by = panel.by; bw = panel.bw; bh = panel.ph; }
 
@@ -943,45 +965,54 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     planEntry.fatigueCaption = 0;
     planEntry.nameCaption = 0;
     planEntry.photo = 0;
+    planEntry.fatigueBar = 0;
+    planEntry.cardX = 0.0f;
+    planEntry.cardY = 0.0f;
     planEntry.cardW = 0.0f;
     planEntry.cardPhotoH = 0.0f;
 
-    if (ph > 0.0f) {
-      float cardW = std::max(std::max(ph, badgeW), 8.5f);
+    if (onPitch) {
+      float cardW = photoSize;
       planEntry.cardW = cardW;
-      planEntry.cardPhotoH = ph;
-      float cardH = ph + cardGap + badgeH + cardGap + cardNameH;
+      planEntry.cardPhotoH = cardW;
+      float frameW = cardW + framePad * 2.0f;
+      float frameH = PitchCardFrameH(cardW);
+      float cardH = PitchCardHeight(cardW);
+      // Content sits on the formation anchor; the frame is drawn around it.
       float cx = Clampf(anchorX - cardW * 0.5f, bx, bx + bw - cardW);
-      float cy = anchorY - ph * 0.5f;
+      float cy = anchorY - cardW * 0.5f; // photo center sits on the anchor
       if (cy + cardH > maxBottom) cy = maxBottom - cardH;
       cy = Clampf(cy, by, by + bh - cardH);
       float y = cy;
       float centerX = cx + cardW * 0.5f;
 
-      Gui2Image *photo = new Gui2Image(windowManager, "gameplan_photo_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx + (cardW - ph) * 0.5f, y, ph, ph);
+      Gui2Image *photo = new Gui2Image(windowManager, "gameplan_photo_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, cardW);
       photo->LoadImage("media/menu/player_placeholder.png");
       this->AddView(photo);
       if (visible) photo->Show();
       planEntry.photo = photo;
-      y += ph + cardGap;
+      y += cardW + cardGap;
 
       planEntry.cardCenterX = centerX;
       planEntry.roleY = y;
       planEntry.roleCaption = new Gui2Caption(windowManager, "gameplan_role_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, badgeH, roleText);
       this->AddView(planEntry.roleCaption);
       if (visible) planEntry.roleCaption->Show();
-      CenterCaption(planEntry.roleCaption, centerX, y, badgeH, roleText);
-
-      planEntry.fatigueCaption = new Gui2Caption(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, badgeH, "");
-      this->AddView(planEntry.fatigueCaption);
-      if (visible) planEntry.fatigueCaption->Show();
+      FitNameCaption(planEntry.roleCaption, centerX, y, roleText, "", cardW);
 
       y += badgeH + cardGap;
 
       planEntry.nameY = y;
-      planEntry.button = new Gui2Button(windowManager, "gameplan_player_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, cardNameH, "");
       planEntry.nameCaption = new Gui2Caption(windowManager, "gameplan_name_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, cardNameH,
-                                              ShortName(player->GetLastName()));
+                                              player->GetLastName());
+      y += cardNameH + cardGap;
+
+      planEntry.fatigueBar = new Gui2Image(windowManager, "gameplan_fatigue_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx, y, cardW, fatigueBarH);
+      this->AddView(planEntry.fatigueBar);
+      if (visible) planEntry.fatigueBar->Show();
+
+      planEntry.button = new Gui2Button(windowManager, "gameplan_player_" + int_to_str(panel.teamID) + "_" + int_to_str(slot), cx - framePad, cy - framePad, frameW, frameH, "");
+      planEntry.button->SetFrameOnly(true);
     } else {
       float rowH = benchRowH;
       float posW = benchPosW, ratingW = benchRatingW, fatigueW = benchFatigueW;
@@ -1014,8 +1045,8 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     if (planEntry.nameCaption) {
       this->AddView(planEntry.nameCaption);
       if (visible) planEntry.nameCaption->Show();
-      CenterCaption(planEntry.nameCaption, planEntry.cardCenterX, planEntry.nameY, cardNameH,
-                    ShortName(player->GetLastName()));
+      FitNameCaption(planEntry.nameCaption, planEntry.cardCenterX, planEntry.nameY,
+                     player->GetLastName(), "", planEntry.cardW);
     }
 
     entries.push_back(planEntry);
@@ -1099,7 +1130,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     Vector3 s = PitchToScreen(pos, panel.px, panel.py, panel.pw, panel.ph);
     float maxBottom = (pp.role == e_PlayerRole_GK) ? (panel.py + panel.ph) : bottomLimit;
     placeCard(pp.slot, pp.playerID, playerData.at(pp.slot), pp.role, s.coords[0], s.coords[1], true, true,
-              photoSize, RoleRatingText(pp.role, playerData.at(pp.slot)), maxBottom);
+              RoleRatingText(pp.role, playerData.at(pp.slot)), maxBottom);
   }
 
   panel.benchCount = (int)benchList.size();
@@ -1116,7 +1147,7 @@ void GamePlanPage::BuildPanel(PlanPanel &panel) {
     bool selectable = !team || !team->HasLeftPitch(pp.playerID);
     float rowY = panel.by + r * panel.benchStep;
     placeCard(pp.slot, pp.playerID, playerData.at(pp.slot), pp.role, panel.bx + panel.bw * 0.5f, rowY + panel.benchStep * 0.5f,
-              false, selectable, 0.0f, GetRoleName(pp.role), rowY + panel.benchStep);
+              false, selectable, GetRoleName(pp.role), rowY + panel.benchStep);
   }
 
   // Cards are created at the real formation; if the Tactics preview is open,
@@ -1158,48 +1189,49 @@ void GamePlanPage::BuildOpponent(int teamID, float x, float y, float w, float h)
     }
   }
 
+  float oppCardW = photoSize;
+  float cardH = oppCardW + cardGap * 2.0f + badgeH + cardNameH; // no fatigue bar on the opponent
+
   float gkAnchorY = y + h;
   for (unsigned int i = 0; i < list.size(); i++) {
     if (list.at(i).role != e_PlayerRole_GK) continue;
     gkAnchorY = std::min(PitchToScreen(list.at(i).pos, x, y, w, h).coords[1], y + h);
     break;
   }
-  float bottomLimit = (gkAnchorY - pitchCardH) - 0.3f;
+  float bottomLimit = (gkAnchorY - cardH) - 0.3f;
 
   for (unsigned int i = 0; i < list.size(); i++) {
     const OppPlayer &entry = list.at(i);
     Vector3 pos = entry.pos;
     if (entry.role != e_PlayerRole_GK) { pos.coords[0] = pos.coords[0] * 0.8f + 0.1f; }
     Vector3 s = PitchToScreen(pos, x, y, w, h);
-    float cardW = std::max(std::max(photoSize, badgeW), 8.5f);
-    float cardH = photoSize + cardGap + badgeH + cardGap + cardNameH;
-    float cx = Clampf(s.coords[0] - cardW * 0.5f, x, x + w - cardW);
     float maxBottom = (entry.role == e_PlayerRole_GK) ? (y + h) : bottomLimit;
-    float cy = s.coords[1] - photoSize * 0.5f;
+    float cx = Clampf(s.coords[0] - oppCardW * 0.5f, x, x + w - oppCardW);
+    float cy = s.coords[1] - oppCardW * 0.5f;
     if (cy + cardH > maxBottom) cy = maxBottom - cardH;
     cy = Clampf(cy, y, y + h - cardH);
-    float centerX = cx + cardW * 0.5f;
+    float centerX = cx + oppCardW * 0.5f;
 
-    Gui2Image *photo = new Gui2Image(windowManager, "gameplan_opp_photo_" + int_to_str((int)i), cx + (cardW - photoSize) * 0.5f, cy, photoSize, photoSize);
+    Gui2Image *photo = new Gui2Image(windowManager, "gameplan_opp_photo_" + int_to_str((int)i), cx, cy, oppCardW, oppCardW);
     photo->LoadImage("media/menu/player_placeholder.png");
     this->AddView(photo);
     photo->Show();
     opponentViews.push_back(photo);
 
-    float roleY = cy + photoSize + cardGap;
-    Gui2Caption *role = new Gui2Caption(windowManager, "gameplan_opp_role_" + int_to_str((int)i), cx, roleY, cardW, badgeH,
+    float roleY = cy + oppCardW + cardGap;
+    Gui2Caption *role = new Gui2Caption(windowManager, "gameplan_opp_role_" + int_to_str((int)i), cx, roleY, oppCardW, badgeH,
                                         RoleRatingText(entry.role, entry.player));
     this->AddView(role);
     role->Show();
-    CenterCaption(role, centerX, roleY, badgeH, RoleRatingText(entry.role, entry.player));
+    FitNameCaption(role, centerX, roleY, RoleRatingText(entry.role, entry.player), "", oppCardW);
     opponentViews.push_back(role);
 
     float nameY = roleY + badgeH + cardGap;
-    Gui2Caption *name = new Gui2Caption(windowManager, "gameplan_opp_name_" + int_to_str((int)i), cx, nameY, cardW, cardNameH,
-                                        ShortName(entry.player->GetLastName()));
+    Gui2Caption *name = new Gui2Caption(windowManager, "gameplan_opp_name_" + int_to_str((int)i), cx, nameY, oppCardW, cardNameH,
+                                        entry.player->GetLastName());
     this->AddView(name);
     name->Show();
-    CenterCaption(name, centerX, nameY, cardNameH, ShortName(entry.player->GetLastName()));
+    FitNameCaption(name, centerX, nameY, entry.player->GetLastName(), "", oppCardW);
     opponentViews.push_back(name);
   }
 }
@@ -1208,6 +1240,7 @@ void GamePlanPage::ClearEntries() {
   for (unsigned int i = 0; i < entries.size(); i++) {
     PlanEntry &e = entries.at(i);
     if (e.photo) { e.photo->Exit(); delete e.photo; e.photo = 0; }
+    if (e.fatigueBar) { e.fatigueBar->Exit(); delete e.fatigueBar; e.fatigueBar = 0; }
     if (e.nameCaption) { e.nameCaption->Exit(); delete e.nameCaption; e.nameCaption = 0; }
     if (e.ratingCaption) { e.ratingCaption->Exit(); delete e.ratingCaption; e.ratingCaption = 0; }
     if (e.fatigueCaption) { e.fatigueCaption->Exit(); delete e.fatigueCaption; e.fatigueCaption = 0; }
@@ -1527,9 +1560,9 @@ void GamePlanPage::RefreshPanel(PlanPanel &panel) {
     int fatigue = FatiguePercent(EntryFatigue(panel, entry));
 
     if (entry.onPitch) {
-      PositionPitchCaption(entry, RoleRatingText(role, player), FatigueText(fatigue));
-      if (entry.fatigueCaption) entry.fatigueCaption->SetColor(FatigueColor(fatigue));
-      CenterCaption(entry.nameCaption, entry.cardCenterX, entry.nameY, cardNameH, ShortName(player->GetLastName()) + suffix);
+      FitNameCaption(entry.roleCaption, entry.cardCenterX, entry.roleY, RoleRatingText(role, player), "", entry.cardW);
+      DrawFatigueBar(entry, fatigue);
+      FitNameCaption(entry.nameCaption, entry.cardCenterX, entry.nameY, player->GetLastName(), suffix, entry.cardW);
     } else {
       entry.button->SetCaption(ShortName(player->GetLastName()) + suffix);
       if (entry.roleCaption) entry.roleCaption->SetCaption(GetRoleName(role));
@@ -1557,6 +1590,41 @@ void GamePlanPage::CenterCaption(Gui2Caption *caption, float centerX, float y, f
   caption->SetPosition(centerX - width * 0.5f, y);
 }
 
+// PES-like: the card name is cut to the card width (ellipsis) instead of
+// spilling over the neighbouring card. The full name stays available in the
+// bottom info band. `suffix` (" -", " +", " (out)") is kept intact.
+void GamePlanPage::FitNameCaption(Gui2Caption *caption, float centerX, float y, const std::string &name, const std::string &suffix, float maxWidth) {
+  if (!caption) return;
+  float suffixW = 0.0f;
+  if (!suffix.empty()) {
+    caption->SetCaption(suffix);
+    suffixW = caption->GetTextWidthPercent((int)suffix.length());
+  }
+  float avail = maxWidth - suffixW;
+  caption->SetCaption(name);
+  std::string shown = name;
+  if (avail > 0.0f && name.length() > 1 && caption->GetTextWidthPercent((int)name.length()) > avail) {
+    // Walk UTF-8 character boundaries so a truncated name never splits a
+    // multi-byte sequence (SDL_ttf then renders nothing).
+    std::vector<int> bounds;
+    for (unsigned int i = 0; i < name.length();) {
+      bounds.push_back((int)i);
+      unsigned char c = (unsigned char)name.at(i);
+      unsigned int step = ((c & 0x80) == 0x00) ? 1 : ((c & 0xE0) == 0xC0) ? 2 : ((c & 0xF0) == 0xE0) ? 3 : ((c & 0xF8) == 0xF0) ? 4 : 1;
+      i += step;
+    }
+    int cut = 0;
+    for (unsigned int k = 0; k < bounds.size(); k++) {
+      if (caption->GetTextWidthPercent(bounds.at(k)) <= avail) cut = bounds.at(k);
+      else break;
+    }
+    shown = name.substr(0, cut);
+    if (!shown.empty()) shown += ".";
+  }
+  caption->SetCaption(shown + suffix);
+  caption->SetPosition(centerX - caption->GetTextWidthPercent() * 0.5f, y);
+}
+
 float GamePlanPage::EntryFatigue(PlanPanel &panel, const PlanEntry &entry) {
   // Bench players and the pre-match squad never simulate, so they stay at 1.0.
   if (panel.team && entry.playerID >= 0) {
@@ -1566,18 +1634,19 @@ float GamePlanPage::EntryFatigue(PlanPanel &panel, const PlanEntry &entry) {
   return 1.0f;
 }
 
-void GamePlanPage::PositionPitchCaption(PlanEntry &entry, const std::string &roleText, const std::string &fatigueText) {
-  entry.roleCaption->SetCaption(roleText);
-  if (!entry.fatigueCaption) {
-    CenterCaption(entry.roleCaption, entry.cardCenterX, entry.roleY, badgeH, roleText);
-    return;
-  }
-  entry.fatigueCaption->SetCaption(fatigueText);
-  float roleW = entry.roleCaption->GetTextWidthPercent();
-  float fatigueW = entry.fatigueCaption->GetTextWidthPercent();
-  float startX = entry.cardCenterX - (roleW + captionGap + fatigueW) * 0.5f;
-  entry.roleCaption->SetPosition(startX, entry.roleY);
-  entry.fatigueCaption->SetPosition(startX + roleW + captionGap, entry.roleY);
+void GamePlanPage::DrawFatigueBar(PlanEntry &entry, int percent) {
+  if (!entry.fatigueBar) return;
+  boost::intrusive_ptr<Image2D> img = entry.fatigueBar->GetImage2D();
+  if (!img) return;
+  Vector3 size = img->GetSize();
+  int w = int(size.coords[0]);
+  int h = int(size.coords[1]);
+  if (w < 1 || h < 1) return;
+  float pct = Clampf(percent / 100.0f, 0.0f, 1.0f);
+  img->DrawRectangle(0, 0, w, h, Vector3(0, 0, 0), 0);             // clear
+  img->DrawRectangle(0, 0, w, h, Vector3(25, 25, 25), 255);        // opaque track
+  img->DrawRectangle(0, 0, int(w * pct), h, FatigueColor(percent), 255); // fill
+  img->OnChange();
 }
 
 e_PlayerRole GamePlanPage::GetEntryRole(int entryPosition) {
@@ -1628,7 +1697,9 @@ void GamePlanPage::UpdateInfoDetail(Gui2Image *photo, Gui2Caption *badge, Gui2Ca
   photo->GetPosition(photoX, photoY);
   float centerX = photoX + 7.5f * 0.5f;
   CenterCaption(badge, centerX, 86.7f, 2.2f, RoleRatingText(entry.role, player));
-  CenterCaption(name, centerX, 89.1f, 2.4f, ShortName(player->GetLastName()));
+  // Full name (PES-style): the card name is ellipsized, the info band shows the
+  // whole name of the focused player.
+  CenterCaption(name, centerX, 89.1f, 2.4f, player->GetLastName());
 }
 
 void GamePlanPage::HandlePanelInput(PlanPanel &panel, const Vector3 &direction, bool accept, bool back, unsigned long now_ms) {
