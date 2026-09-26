@@ -22,7 +22,9 @@
 // v11: designated-role relay (PlanRole), pre-match and in-match.
 // v12: designated roles in the snapshot (late/reconnecting client reconciliation).
 // v13: PlayerDataRaw.tmId (player photo key) in the team setup stream.
-const int net_protocolVersion = 13;
+// v14: kits are a local-only preference per peer; removed the kit fields from
+//      NetLobbyState, NetMatchSetup and NetMatchEnvironment.
+const int net_protocolVersion = 14;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

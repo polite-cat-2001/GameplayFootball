@@ -12,6 +12,8 @@
 
 #include "managers/environmentmanager.hpp"
 
+#include <vector>
+
 using namespace blunted;
 
 struct MenuSceneLocation {
@@ -39,6 +41,17 @@ class MenuScene {
     void SetTargetLocation(const Vector3 &position, radian angle);
     void SetTargetLocation(const Vector3 &position, const Quaternion &orientation);
 
+    // Screen-anchored nodes (e.g. the pre-match hub captain previews): their
+    // transform is recomputed together with the camera so they stay locked to
+    // the viewport instead of lagging a tick behind the panning camera.
+    struct ScreenAnchor {
+      boost::intrusive_ptr<Node> node;
+      Vector3 offset;      // camera space
+      Quaternion rotation; // camera space
+    };
+    void AddScreenAnchor(boost::intrusive_ptr<Node> node, const Vector3 &offset, const Quaternion &rotation);
+    void RemoveScreenAnchor(boost::intrusive_ptr<Node> node);
+
   protected:
     boost::intrusive_ptr<Node> containerNode;
     boost::intrusive_ptr<Camera> camera;
@@ -47,6 +60,8 @@ class MenuScene {
 
     boost::intrusive_ptr<Light> hoverLights[3];
     Vector3 hoverLightPosition;
+
+    std::vector<ScreenAnchor> screenAnchors;
 
     boost::shared_ptr<Scene3D> scene3D;
 

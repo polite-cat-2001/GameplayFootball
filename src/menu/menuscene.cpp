@@ -77,7 +77,25 @@ MenuScene::MenuScene() {
 }
 
 MenuScene::~MenuScene() {
+  screenAnchors.clear();
   scene3D->DeleteNode(containerNode);
+}
+
+void MenuScene::AddScreenAnchor(boost::intrusive_ptr<Node> node, const Vector3 &offset, const Quaternion &rotation) {
+  ScreenAnchor anchor;
+  anchor.node = node;
+  anchor.offset = offset;
+  anchor.rotation = rotation;
+  screenAnchors.push_back(anchor);
+}
+
+void MenuScene::RemoveScreenAnchor(boost::intrusive_ptr<Node> node) {
+  for (unsigned int i = 0; i < screenAnchors.size(); i++) {
+    if (screenAnchors.at(i).node == node) {
+      screenAnchors.erase(screenAnchors.begin() + i);
+      return;
+    }
+  }
 }
 
 void MenuScene::Get() {
@@ -121,8 +139,19 @@ void MenuScene::Process() {
   randomPositionNoise.coords[0] = sin(time_ms / 7420.0f) * 0.5f + cos(time_ms / 3150.0f) * 0.3f;
   randomPositionNoise.coords[1] = cos(time_ms / 8250.0f) * 0.5f + sin(time_ms / 2420.0f) * 0.3f;
 
+  // Update the camera and the screen-anchored nodes as one unit, under the
+  // same lock the graphics task uses to traverse the scene: otherwise a render
+  // can capture the moved camera with the previous tick's preview transform,
+  // which makes the previews jitter while the camera pans.
+  GetGraphicsSystem()->getPhaseMutex.lock();
   camera->SetPosition(currentPosition + randomPositionNoise * randomPositionIntensity);
   camera->SetRotation(currentOrientation);
+
+  for (unsigned int i = 0; i < screenAnchors.size(); i++) {
+    screenAnchors.at(i).node->SetRotation((currentOrientation * screenAnchors.at(i).rotation).GetNormalized());
+    screenAnchors.at(i).node->SetPosition(camera->GetPosition() + currentOrientation * screenAnchors.at(i).offset);
+  }
+  GetGraphicsSystem()->getPhaseMutex.unlock();
 
 
   hoverLightPosition = currentPosition.Get2D() + Vector3(0.0f, 0.0f, 0.5f);

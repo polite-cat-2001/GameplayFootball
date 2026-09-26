@@ -614,8 +614,6 @@ void Match::SetSunParams(const Vector3 &position, const Vector3 &color) {
 
 void Match::GetMatchEnvironment(NetMatchEnvironment &environment) {
   GetSunParams(environment.sunPosition, environment.sunColor);
-  environment.homeKit = teams[0]->GetKitNumber();
-  environment.awayKit = teams[1]->GetKitNumber();
 }
 
 void Match::BroadcastMatchOptions() {

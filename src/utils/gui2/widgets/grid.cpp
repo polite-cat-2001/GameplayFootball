@@ -135,6 +135,14 @@ namespace blunted {
 
   void Gui2Grid::UpdateLayout(float margin_left_percent, float margin_right_percent, float margin_top_percent, float margin_bottom_percent) {
 
+    // A view may have changed its selectability after being added; AddView only
+    // latches hasSelectables, so recompute here. A stale true would make the
+    // direction-key search below spin forever (row/col wrap is on by default).
+    hasSelectables = false;
+    for (unsigned int i = 0; i < container.size(); i++) {
+      if (container.at(i).view->IsSelectable()) { hasSelectables = true; break; }
+    }
+
     if (maxVisibleRows != 10000) UpdateScrolling();
 
     this->margin_left_percent = margin_left_percent;
@@ -323,7 +331,6 @@ namespace blunted {
       event->Ignore();
       switchDelay_ms = 0;
     }
-
   }
 
   void Gui2Grid::OnGainFocus() {

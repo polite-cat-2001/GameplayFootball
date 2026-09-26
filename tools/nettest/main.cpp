@@ -218,13 +218,11 @@ static void TestSerializationRoundTrips() {
     CHECK(restored.matchDuration == state.matchDuration, "lobby matchDuration mismatch");
   }
 
-  // Match environment, including kit numbers.
+  // Match environment (sun visuals; kits are local per peer).
   {
     NetMatchEnvironment environment;
     environment.sunPosition.Set(1.0f, 2.0f, 3.0f);
     environment.sunColor.Set(0.5f, 0.25f, 0.125f);
-    environment.homeKit = 2;
-    environment.awayKit = 3;
     NetBuffer buffer;
     WriteMatchEnvironment(buffer, environment);
     buffer.ResetRead();
@@ -232,7 +230,6 @@ static void TestSerializationRoundTrips() {
     CHECK(!buffer.Failed(), "environment buffer failed");
     CHECK(restored.sunPosition.GetDistance(environment.sunPosition) == 0.0f, "environment sun pos mismatch");
     CHECK(restored.sunColor.GetDistance(environment.sunColor) == 0.0f, "environment sun color mismatch");
-    CHECK(restored.homeKit == 2 && restored.awayKit == 3, "environment kit mismatch");
   }
 
   // Keepalive / ping.

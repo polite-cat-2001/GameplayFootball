@@ -242,11 +242,8 @@ NetInputFrame ReadInputFrame(NetBuffer &buffer);
 
 // Visual match environment (sun light) so lighting matches on the thin client.
 struct NetMatchEnvironment {
-  NetMatchEnvironment() : homeKit(-1), awayKit(-1) {}
   blunted::Vector3 sunPosition;
   blunted::Vector3 sunColor;
-  int homeKit; // current kit number per side; -1 = leave as-is
-  int awayKit;
 };
 
 void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment);

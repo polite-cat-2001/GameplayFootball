@@ -282,6 +282,7 @@ add_library(menulib STATIC
         src/menu/startmatch/loadingmatch.cpp
         src/menu/startmatch/matchoptions.cpp
         src/menu/startmatch/prematch.cpp
+        src/menu/startmatch/prematchcaptain.cpp
         src/menu/visualoptions.cpp
         src/menu/pagefactory.cpp
         src/menu/menutask.cpp

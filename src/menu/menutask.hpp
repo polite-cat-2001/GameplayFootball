@@ -69,6 +69,7 @@ class MenuTask : public Gui2Task {
     void SetTeamIDs(const std::string &id1, const std::string &id2) { queuedFixture.Lock(); queuedFixture->teamID1 = id1; queuedFixture->teamID2 = id2; queuedFixture.Unlock(); }
     int GetTeamID(int whichOne) { if (whichOne == 0) return atoi(queuedFixture.GetData().teamID1.c_str()); else return atoi(queuedFixture.GetData().teamID2.c_str()); }
     int GetTeamKitNum(int teamID) { if (teamID == 0) return queuedFixture.GetData().team1KitNum; else return queuedFixture.GetData().team2KitNum; }
+    void SetTeamKitNum(int teamID, int num) { queuedFixture.Lock(); if (teamID == 0) queuedFixture->team1KitNum = num; else queuedFixture->team2KitNum = num; queuedFixture.Unlock(); }
 
     // Local devices (controller indices) assigned to home/away, -1 when that side
     // has no local human. Two distinct devices mean a local two-player match, in

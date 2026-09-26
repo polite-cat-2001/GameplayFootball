@@ -4,6 +4,8 @@
 
 #include "graphics_task.hpp"
 
+#include <set>
+
 #include "base/log.hpp"
 #include "base/utils.hpp"
 
@@ -271,6 +273,24 @@ namespace blunted {
       std::deque < boost::intrusive_ptr<Object> > visibleObjects;
       //std::list < boost::intrusive_ptr<Object> > visibleObjects;
       boost::static_pointer_cast<Scene3D>(scene)->GetObjects(visibleObjects, bounding);
+
+      // Objects flagged 'no_cull' (e.g. pre-match hub captain previews, which
+      // sit outside the conservative camera culling planes) bypass the bounds
+      // test and are always included.
+      {
+        std::list < boost::intrusive_ptr<Object> > allObjects;
+        boost::static_pointer_cast<Scene3D>(scene)->GetObjects(allObjects);
+        std::set<Object*> alreadyVisible;
+        for (unsigned int i = 0; i < visibleObjects.size(); i++) alreadyVisible.insert(visibleObjects.at(i).get());
+        std::list < boost::intrusive_ptr<Object> >::iterator allIter = allObjects.begin();
+        while (allIter != allObjects.end()) {
+          if ((*allIter)->PropertyExists("no_cull") && (*allIter)->GetProperty("no_cull") == "true" &&
+              alreadyVisible.find((*allIter).get()) == alreadyVisible.end()) {
+            visibleObjects.push_back(*allIter);
+          }
+          allIter++;
+        }
+      }
 
       std::deque < boost::intrusive_ptr<Geometry> > visibleGeometry;
       std::deque < boost::intrusive_ptr<Light> > visibleLights;

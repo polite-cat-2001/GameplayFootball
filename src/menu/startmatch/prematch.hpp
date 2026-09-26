@@ -14,6 +14,7 @@
 #include "utils/gui2/widgets/slider.hpp"
 #include "utils/gui2/widgets/image.hpp"
 #include "utils/gui2/widgets/caption.hpp"
+#include "utils/gui2/widgets/pulldown.hpp"
 
 #include "../pagefactory.hpp"
 
@@ -21,6 +22,9 @@
 #include "../../net/netmessages.hpp"
 
 #include <set>
+#include <vector>
+
+class PreMatchCaptainPreview;
 
 using namespace blunted;
 
@@ -46,9 +50,21 @@ class PreMatchPage : public Gui2Page {
   protected:
     void BuildTabs();
     void BuildContents();
+    void BuildKitTab(Gui2Grid *kit);
     void ShowContent(int tab);
     void FocusFirstContent();
     bool IsInContent(Gui2View *view);
+    bool IsInOverlay(Gui2View *view);
+    bool AnyKitPulldownOpen();
+
+    // Kit tab: per-side pulldown of the kits that actually exist for the club.
+    // This is a local-only preference (each peer can pick both sides); it is
+    // written to the MenuTask stock that Team::InitPlayers reads on this peer.
+    void OnKitChanged(int team);
+    void ApplyKit(int team, int kit);
+    Gui2Pulldown *kitPulldown[2];
+    std::vector<int> availableKits[2];
+    bool suppressKitSignal;
 
     // Network hub: host-authoritative options, host-only game plan, and
     // confirmations from both peers before leaving the hub or starting.
@@ -87,6 +103,8 @@ class PreMatchPage : public Gui2Page {
 
     Gui2Slider *difficultySlider;
     Gui2Slider *matchDurationSlider;
+
+    PreMatchCaptainPreview *captainPreview[2];
 
     int activeTab;
 

@@ -226,16 +226,12 @@ NetInputFrame ReadInputFrame(NetBuffer &buffer) {
 void WriteMatchEnvironment(NetBuffer &buffer, const NetMatchEnvironment &environment) {
   buffer.PutVector3(environment.sunPosition);
   buffer.PutVector3(environment.sunColor);
-  buffer.PutU32((uint32_t)environment.homeKit);
-  buffer.PutU32((uint32_t)environment.awayKit);
 }
 
 NetMatchEnvironment ReadMatchEnvironment(NetBuffer &buffer) {
   NetMatchEnvironment environment;
   environment.sunPosition = buffer.GetVector3();
   environment.sunColor = buffer.GetVector3();
-  environment.homeKit = (int)buffer.GetU32();
-  environment.awayKit = (int)buffer.GetU32();
   return environment;
 }
 

@@ -671,11 +671,15 @@ void Team::SetKitNumber(int num) {
   // new kits on the block!
   boost::intrusive_ptr < Resource<Surface> > newKit = ResourceManagerPool::GetInstance().GetManager<Surface>(e_ResourceType_Surface)->Fetch(kitFilename);
 
+  // HumanoidBase::SetKit edits the shared fullbody geometry, so it must not run
+  // while the graphics task traverses the scene (same lock as substitutions).
+  GetGraphicsSystem()->getPhaseMutex.lock();
   for (unsigned int i = 0; i < players.size(); i++) {
     if (players.at(i)->IsActive()) {
       if (players.at(i)->GetFormationEntry().role != e_PlayerRole_GK) players.at(i)->SetKit(newKit);
     }
   }
+  GetGraphicsSystem()->getPhaseMutex.unlock();
 
   kit = newKit;
 }

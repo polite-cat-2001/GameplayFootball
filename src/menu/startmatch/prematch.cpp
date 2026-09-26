@@ -4,7 +4,11 @@
 
 #include "prematch.hpp"
 
+#include "prematchcaptain.hpp"
+
 #include <SDL3/SDL.h>
+
+#include <boost/filesystem.hpp>
 
 #include "main.hpp"
 
@@ -18,14 +22,13 @@ using namespace blunted;
 namespace {
 const int tabCount = 7;
 const char *tabNames[tabCount] = { "Kit", "Stadium", "Kick-off", "Game plan", "Options", "Camera", "System" };
+const int kitNumberCount = 6; // kits 01..06 are probed for existence per club
 }
 
 PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
-  Gui2Image *bg = new Gui2Image(windowManager, "prematch_bg", 0, 0, 100, 100);
-  bg->LoadImage("media/menu/backgrounds/black.png");
-  this->AddView(bg);
-  bg->Show();
+  // No fullscreen backdrop: the hub is laid over the live menu scene so the
+  // 3D captain previews are not dimmed by a semi-transparent black overlay.
 
   activeTab = pageData.properties->GetInt("tab", 2); // kick-off, like PES
 
@@ -35,6 +38,9 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
   networkMatch = GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0;
   localTwoPlayers = false;
   suppressLocalEscape = false;
+  suppressKitSignal = false;
+  kitPulldown[0] = kitPulldown[1] = 0;
+  captainPreview[0] = captainPreview[1] = 0;
 
   // In a network match the lobby is canonical for the chosen teams; seed the
   // menu's team ids from it before building the shared MatchData.
@@ -65,6 +71,16 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
 
   BuildTabs();
   BuildContents();
+
+  // Two 3D captain models, one per team, rendered by the menu scene's own
+  // camera on either side of the hub content.
+  for (int t = 0; t < 2; t++) {
+    int captainSlot = matchData->GetRolePlayer(t, e_TeamRole_Captain);
+    if (captainSlot < 0) captainSlot = teamData[t]->SuggestRoleSlot(e_TeamRole_Captain);
+    if (captainSlot < 0 || captainSlot >= teamData[t]->GetPlayerNum()) captainSlot = 0;
+    captainPreview[t] = new PreMatchCaptainPreview(teamData[t], teamData[t]->GetPlayerData(captainSlot),
+                                                   GetMenuTask()->GetTeamKitNum(t), t == 0);
+  }
 
   SelectTab(activeTab);
   tabButtons.at(activeTab)->SetFocus();
@@ -102,6 +118,10 @@ PreMatchPage::PreMatchPage(Gui2WindowManager *windowManager, const Gui2PageData 
 }
 
 PreMatchPage::~PreMatchPage() {
+  for (int t = 0; t < 2; t++) {
+    delete captainPreview[t];
+    captainPreview[t] = 0;
+  }
 }
 
 bool PreMatchPage::IsNetworkHost() const {
@@ -319,7 +339,7 @@ void PreMatchPage::BuildContents() {
 
   // 0: Kit
   Gui2Grid *kit = new Gui2Grid(windowManager, "prematch_content_kit", 0, 0, 60, 40);
-  kit->AddView(new Gui2Caption(windowManager, "prematch_kit_info", 0, 0, 58, 3, "Home and away kits are selected automatically from the club."), 0, 0);
+  BuildKitTab(kit);
   kit->UpdateLayout(0.5);
   contentViews.push_back(kit);
 
@@ -393,6 +413,68 @@ void PreMatchPage::BuildContents() {
   contentGrid->Show();
 }
 
+void PreMatchPage::BuildKitTab(Gui2Grid *kit) {
+  Gui2Grid *kits = new Gui2Grid(windowManager, "prematch_kit_grid", 0, 0, 58, 18);
+  for (int t = 0; t < 2; t++) {
+    availableKits[t].clear();
+    for (int k = 1; k <= kitNumberCount; k++) {
+      std::string suffix = int_to_str(k);
+      if (suffix.size() < 2) suffix = "0" + suffix;
+      if (boost::filesystem::exists(teamData[t]->GetKitUrl() + "_kit_" + suffix + ".png")) availableKits[t].push_back(k);
+    }
+    if (availableKits[t].empty()) { // club without kit art: keep the old 01/02 fallback
+      availableKits[t].push_back(1);
+      availableKits[t].push_back(2);
+    }
+
+    // The widget name is the Surface resource key, so it must be unique: encode
+    // side and kit in it and read the kit back from the trailing number.
+    kitPulldown[t] = new Gui2Pulldown(windowManager, "prematch_kit_t" + int_to_str(t), 0, 0, 30, 3);
+    for (unsigned int i = 0; i < availableKits[t].size(); i++) {
+      std::string suffix = int_to_str(availableKits[t].at(i));
+      if (suffix.size() < 2) suffix = "0" + suffix;
+      kitPulldown[t]->AddEntry("Kit " + suffix, "prematch_kit_t" + int_to_str(t) + "_" + suffix);
+    }
+
+    const int current = GetMenuTask()->GetTeamKitNum(t);
+    int index = 0;
+    for (unsigned int i = 0; i < availableKits[t].size(); i++) {
+      if (availableKits[t].at(i) == current) { index = i; break; }
+    }
+    kitPulldown[t]->SetSelected(index);
+
+    // Kits are a local preference: every peer can pick both sides' strips for
+    // its own view. There is nothing to sync over the network.
+
+    kits->AddView(new Gui2Caption(windowManager, "prematch_kit_caption_" + int_to_str(t), 0, 0, 40, 3,
+                                  teamData[t]->GetName() + " kit"), t * 2, 0);
+    kits->AddView(kitPulldown[t], t * 2 + 1, 0);
+
+    kitPulldown[t]->sig_OnChange.connect(boost::bind(&PreMatchPage::OnKitChanged, this, t));
+  }
+  kits->UpdateLayout(0.5);
+  kit->AddView(kits, 0, 0);
+  Gui2Caption *info = new Gui2Caption(windowManager, "prematch_kit_info", 0, 0, 58, 3,
+                                      "Pick the strip for each side; the captains show the choice.");
+  kit->AddView(info, 1, 0);
+}
+
+void PreMatchPage::OnKitChanged(int team) {
+  std::string selected = kitPulldown[team]->GetSelected();
+  size_t underscore = selected.find_last_of('_');
+  if (underscore == std::string::npos) return;
+  int kit = atoi(selected.substr(underscore + 1).c_str());
+  if (kit <= 0) return;
+  ApplyKit(team, kit);
+}
+
+void PreMatchPage::ApplyKit(int team, int kit) {
+  if (kit < 1) kit = 1;
+  if (kit > kitNumberCount) kit = kitNumberCount;
+  GetMenuTask()->SetTeamKitNum(team, kit);
+  if (captainPreview[team]) captainPreview[team]->SetKit(kit);
+}
+
 void PreMatchPage::SelectTab(int tab) {
   if (tab < 0 || tab >= (int)contentViews.size()) return;
   activeTab = tab;
@@ -420,6 +502,21 @@ bool PreMatchPage::IsInContent(Gui2View *view) {
   while (view) {
     if (view == contentViews.at(activeTab)) return true;
     view = view->GetParent();
+  }
+  return false;
+}
+
+bool PreMatchPage::IsInOverlay(Gui2View *view) {
+  while (view) {
+    if (view->IsOverlay()) return true;
+    view = view->GetParent();
+  }
+  return false;
+}
+
+bool PreMatchPage::AnyKitPulldownOpen() {
+  for (int t = 0; t < 2; t++) {
+    if (kitPulldown[t] && kitPulldown[t]->IsPulledDown()) return true;
   }
   return false;
 }
@@ -456,7 +553,9 @@ void PreMatchPage::ProcessKeyboardEvent(KeyboardEvent *event) {
     for (unsigned int i = 0; i < tabButtons.size(); i++) {
       if (tabButtons.at(i) == focus) { onTab = true; break; }
     }
-    if (!onTab && IsInContent(focus)) {
+    // An open pulldown is an overlay: let it handle up/down itself, or the
+    // entry list would be unreachable.
+    if (!onTab && !IsInOverlay(focus) && !AnyKitPulldownOpen() && IsInContent(focus)) {
       tabButtons.at(activeTab)->SetFocus();
       event->Accept();
       return;
@@ -537,7 +636,7 @@ void PreMatchPage::ProcessWindowingEvent(WindowingEvent *event) {
     event->Accept();
     return;
   }
-  if (!onTab && direction.coords[1] < -0.75 && IsInContent(focus)) {
+  if (!onTab && direction.coords[1] < -0.75 && !IsInOverlay(focus) && !AnyKitPulldownOpen() && IsInContent(focus)) {
     tabButtons.at(activeTab)->SetFocus();
     event->Accept();
     return;

@@ -302,9 +302,9 @@ void NetMatchSession::ProcessClient(Match *match) {
 
   NetMatchEnvironment environment;
   if (client->ConsumeEnvironment(environment)) {
+    // Only the visuals that must agree across peers (sun) are applied. Kits are
+    // a local preference on each peer, so they are not overwritten here.
     match->SetSunParams(environment.sunPosition, environment.sunColor);
-    if (environment.homeKit > 0) match->GetTeam(0)->SetKitNumber(environment.homeKit);
-    if (environment.awayKit > 0) match->GetTeam(1)->SetKitNumber(environment.awayKit);
   }
 
   bool networkPaused = false;

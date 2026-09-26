@@ -48,6 +48,10 @@ namespace blunted {
       void SetDynamic(bool dynamic) { isDynamic = dynamic; }
       bool IsDynamic() { return isDynamic; }
 
+      // Force the (cached) bounds to be recomputed; needed after editing the
+      // vertex arrays in place.
+      void InvalidateAABB() { aabb.dirty = true; }
+
       AABB GetAABB() const;
 
     protected:
