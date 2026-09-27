@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ПРОТОТИП: колыхание сетки (NetSim)</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c2027;
+    --panel-2: #232833;
+    --line: #333a47;
+    --ink: #e7ebf2;
+    --dim: #97a1b2;
+    --accent: #ff6b35;
+    --accent-dim: #7a3a22;
+    --good: #3ddc97;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 22px 26px 16px; border-bottom: 1px solid var(--line);
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .2px; }
+  header p { margin: 0; max-width: 900px; color: var(--dim); }
+  .tag {
+    display: inline-block; margin-bottom: 10px; padding: 2px 8px; border-radius: 4px;
+    background: var(--accent-dim); color: #ffd9c9; font-size: 11px; font-weight: 700;
+    letter-spacing: .8px; text-transform: uppercase;
+  }
+  main { padding: 18px 26px 60px; max-width: 1180px; margin: 0 auto; }
+  .row { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 18px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
+  canvas { width: 100%; height: 520px; display: block; border-radius: 8px; background: #0e1013; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .hint { color: var(--dim); font-size: 12px; margin: 8px 2px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+  .stat { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px dashed #2a303b; }
+  .stat b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .status { margin: 4px 0 12px; padding: 8px 10px; border-radius: 6px; background: var(--panel-2); color: var(--accent); font-size: 13px; min-height: 36px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line);
+    padding: 7px 12px; border-radius: 7px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a0d07; font-weight: 700; }
+  button.ghost { background: transparent; }
+  button.done { opacity: .55; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .slider { margin: 7px 0; }
+  .slider label { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
+  .slider label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: #1a0d07; font-weight: 700; }
+  .scen-intro { color: var(--dim); margin: 0 0 12px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .steps .n { color: var(--accent); font-weight: 700; margin-right: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table th, table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  code { font-family: "Cascadia Code", Consolas, monospace; color: #ffb38a; }
+  .note { font-size: 12px; color: var(--dim); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Прототип · не продакшн-код</div>
+  <h1>Колыхание сетки: порт NetSim (Verlet + PBD)</h1>
+  <p>
+    <b>Вопрос прототипа:</b> даёт ли перенесённая с <code>open_football</code> модель <code>NetSim</code>
+    (процедурная решётка + Verlet-интеграция + soft PBD-нерастяжимость) убедительное колыхание сетки —
+    и какие значения <code>NET_*</code> нужны ей в <code>src/gamedefines.hpp</code>?
+    Чистый модуль <code>NetSim</code> внизу — прямой порт <code>net_sim.gd</code>, его и переносим в C++.
+  </p>
+</header>
+
+<main>
+  <div class="row">
+    <div>
+      <div class="card">
+        <canvas id="cv"></canvas>
+        <p class="hint">Тяни мышью — вращать · колесо — зум. Оранжевым подсвечены растянутые/сжатые рёбра.</p>
+      </div>
+
+      <div class="card">
+        <h2>Свободная игра</h2>
+        <div class="btns">
+          <button data-launch="leftLow" data-speed="20" class="primary">Удар в левый угол</button>
+          <button data-launch="rightLow" data-speed="20" class="primary">Удар в правый угол</button>
+          <button data-launch="center" data-speed="20" class="primary">Удар в центр</button>
+          <button data-launch="topLeft" data-speed="20">В верхний левый</button>
+          <button data-launch="top" data-speed="20">В перекладину</button>
+          <button data-launch="center" data-speed="1">Медленный (1 м/с)</button>
+          <button id="btn-reset-net" class="ghost">Сброс сетки</button>
+          <button id="btn-reset-all" class="ghost">Полный сброс</button>
+          <button id="btn-sim" class="ghost">Симуляция: ВКЛ</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Параметры (кандидаты в <code>gamedefines.hpp</code>)</h2>
+        <div id="sliders"></div>
+        <p class="note">Дефолты = текущий тюнинг <code>open_football</code> (24×12×5 → 631 узел, 1155 рёбер).
+        Смена <code>NET_*_DIV</code> или <code>NET_SLACK</code> пересобирает сетку.</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Состояние</h2>
+        <div id="status" class="status">—</div>
+        <div id="state"></div>
+      </div>
+
+      <div class="card">
+        <h2>Сетка</h2>
+        <div class="stat"><span>Узлов (частиц)</span><b id="s-nodes">—</b></div>
+        <div class="stat"><span>Рёбер (пружин)</span><b id="s-edges">—</b></div>
+        <div class="stat"><span>Закреплено (рамa)</span><b id="s-pins">—</b></div>
+        <div class="stat"><span>Макс. смещение узла</span><b id="s-disp">—</b></div>
+        <div class="stat"><span>Макс. растяжение ребра</span><b id="s-strain">—</b></div>
+        <div class="stat"><span>Шаг симуляции</span><b id="s-perf">—</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Сценарии (guided walkthrough)</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scen"></div>
+  </div>
+
+  <div class="card">
+    <h2>Список констант <code>NET_*</code> для <code>src/gamedefines.hpp</code></h2>
+    <table>
+      <thead><tr><th>Имя</th><th>Значение</th><th>Ед.</th><th>Смысл / роль</th></tr></thead>
+      <tbody id="consts"></tbody>
+    </table>
+    <p class="note">Габариты ворот взяты из этого репозитория: <code>goalHalfWidth=3.7</code> (ширина 7.4),
+    <code>goalHeight=2.5</code>, <code>goalDepth=2.55</code>. В <code>open_football</code> <code>NET_DEPTH=1.5</code> —
+    при порте свести к глубине коробки GF.</p>
+  </div>
+</main>
+
+<script>
+/* =====================================================================
+   ЧИСТЫЙ МОДУЛЬ — порт open_football/scripts/match/net_sim.gd (GDScript).
+   Только математика: не знает ни про DOM, ни про страницу. Его переносим
+   в C++ (src/onthepitch/net_sim.{h,cpp}). Params приходят целиком (p),
+   модуль НЕ читает константы — как и оригинал (headless-тестируется).
+   ===================================================================== */
+const NetSim = (function () {
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function smoothstep(e0, e1, x) {
+    let t = (x - e0) / (e1 - e0);
+    t = Math.max(0, Math.min(1, t));
+    return t * t * (3 - 2 * t);
+  }
+
+  // build_box_net(width, height, depth, w_div, h_div, d_div, slack)
+  // 4 независимые панели (задняя, верх, левая, правая; низ открыт). Внешнее
+  // кольцо каждой панели пиннится к каркасу. slack<1 укорачивает rest_len.
+  function buildBoxNet(width, height, depth, wDiv, hDiv, dDiv, slack) {
+    slack = (slack === undefined) ? 1.0 : slack;
+    const pos = [], rest = [], prev = [], normal = [], pinned = [];
+    const edges = [], restLen = [];
+
+    function addEdge(a, b) {
+      edges.push(a, b);
+      const dx = pos[a * 3] - pos[b * 3];
+      const dy = pos[a * 3 + 1] - pos[b * 3 + 1];
+      const dz = pos[a * 3 + 2] - pos[b * 3 + 2];
+      restLen.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+    function addPanel(uDiv, vDiv, nx, ny, nz, point) {
+      const base = pos.length / 3;
+      const cols = uDiv + 1, rows = vDiv + 1;
+      for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < cols; i++) {
+          const p = point(i / uDiv, j / vDiv);
+          pos.push(p[0], p[1], p[2]);
+          rest.push(p[0], p[1], p[2]);
+          prev.push(p[0], p[1], p[2]);
+          normal.push(nx, ny, nz);
+          pinned.push((i === 0 || i === uDiv || j === 0 || j === vDiv) ? 1 : 0);
+        }
+      }
+      for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < cols; i++) {
+          const idx = base + j * cols + i;
+          if (i < cols - 1) addEdge(idx, idx + 1);
+          if (j < rows - 1) addEdge(idx, idx + cols);
+        }
+      }
+    }
+
+    const hw = width * 0.5;
+    addPanel(wDiv, hDiv, 0, 0, 1, (su, sv) => [lerp(-hw, hw, su), lerp(0, height, sv), depth]); // back
+    addPanel(wDiv, dDiv, 0, 1, 0, (su, sv) => [lerp(-hw, hw, su), height, lerp(0, depth, sv)]);  // top
+    addPanel(dDiv, hDiv, -1, 0, 0, (su, sv) => [-hw, lerp(0, height, sv), lerp(0, depth, su)]);  // left
+    addPanel(dDiv, hDiv, 1, 0, 0, (su, sv) => [hw, lerp(0, height, sv), lerp(0, depth, su)]);    // right
+
+    if (slack !== 1.0) for (let i = 0; i < restLen.length; i++) restLen[i] *= slack;
+
+    return {
+      pos: Float32Array.from(pos),
+      rest: Float32Array.from(rest),
+      prev: Float32Array.from(prev),
+      normal: Float32Array.from(normal),
+      pinned: Uint8Array.from(pinned),
+      edges: Int32Array.from(edges),
+      restLen: Float32Array.from(restLen),
+      nodeCount: pos.length / 3,
+      edgeCount: restLen.length
+    };
+  }
+
+  // integrate(net, ball_pos, ball_speed, p, dt) — один шаг, мутирует pos/prev.
+  function integrate(net, ballPos, ballSpeed, p, dt) {
+    const pos = net.pos, prev = net.prev, rest = net.rest, normal = net.normal;
+    const pinned = net.pinned, edges = net.edges, restLen = net.restLen;
+    const n = net.nodeCount, e = net.edgeCount;
+
+    const gravity = p.gravity, damping = p.damping, stiffness = p.stiffness;
+    const shapeReturn = p.shape_return, radius = p.ball_radius;
+    const velScale = p.ball_vel_scale, ballForce = p.ball_force;
+    const ballMinSpeed = p.ball_min_speed;
+    const iterations = p.constraint_iterations, cStiff = p.constraint_stiffness;
+
+    const fx = new Float32Array(n), fy = new Float32Array(n), fz = new Float32Array(n);
+
+    for (let i = 0; i < n; i++) {
+      if (pinned[i]) continue;
+      let ax = (rest[i * 3] - pos[i * 3]) * shapeReturn;
+      let ay = -gravity + (rest[i * 3 + 1] - pos[i * 3 + 1]) * shapeReturn;
+      let az = (rest[i * 3 + 2] - pos[i * 3 + 2]) * shapeReturn;
+
+      const dx = pos[i * 3] - ballPos[0];
+      const dy = pos[i * 3 + 1] - ballPos[1];
+      const dz = pos[i * 3 + 2] - ballPos[2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const prox = 1.0 - smoothstep(radius, radius * 1.15, d);
+      const pushSpeed = Math.max(0, ballSpeed - ballMinSpeed);
+      if (prox > 0 && pushSpeed > 0) {
+        const s = prox * pushSpeed * velScale * ballForce;
+        ax += normal[i * 3] * s;
+        ay += normal[i * 3 + 1] * s;
+        az += normal[i * 3 + 2] * s;
+      }
+      fx[i] = ax; fy[i] = ay; fz[i] = az;
+    }
+
+    for (let k = 0; k < e; k++) {
+      const a = edges[k * 2], b = edges[k * 2 + 1];
+      const sx = pos[a * 3] - pos[b * 3];
+      const sy = pos[a * 3 + 1] - pos[b * 3 + 1];
+      const sz = pos[a * 3 + 2] - pos[b * 3 + 2];
+      const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
+      if (len > 1e-5) {
+        const sc = stiffness * (1.0 - restLen[k] / len);
+        const sfx = -sx * sc, sfy = -sy * sc, sfz = -sz * sc;
+        if (!pinned[a]) { fx[a] += sfx; fy[a] += sfy; fz[a] += sfz; }
+        if (!pinned[b]) { fx[b] -= sfx; fy[b] -= sfy; fz[b] -= sfz; }
+      }
+    }
+
+    const dt2 = dt * dt;
+    for (let i = 0; i < n; i++) {
+      if (pinned[i]) { prev[i * 3] = pos[i * 3]; prev[i * 3 + 1] = pos[i * 3 + 1]; prev[i * 3 + 2] = pos[i * 3 + 2]; continue; }
+      const tx = pos[i * 3], ty = pos[i * 3 + 1], tz = pos[i * 3 + 2];
+      pos[i * 3]     = pos[i * 3]     + (pos[i * 3]     - prev[i * 3])     * damping + fx[i] * dt2;
+      pos[i * 3 + 1] = pos[i * 3 + 1] + (pos[i * 3 + 1] - prev[i * 3 + 1]) * damping + fy[i] * dt2;
+      pos[i * 3 + 2] = pos[i * 3 + 2] + (pos[i * 3 + 2] - prev[i * 3 + 2]) * damping + fz[i] * dt2;
+      prev[i * 3] = tx; prev[i * 3 + 1] = ty; prev[i * 3 + 2] = tz;
+    }
+
+    for (let it = 0; it < iterations; it++) {
+      for (let k = 0; k < e; k++) {
+        const a = edges[k * 2], b = edges[k * 2 + 1];
+        const aPin = pinned[a] === 1, bPin = pinned[b] === 1;
+        if (aPin && bPin) continue;
+        const cx = pos[a * 3] - pos[b * 3];
+        const cy = pos[a * 3 + 1] - pos[b * 3 + 1];
+        const cz = pos[a * 3 + 2] - pos[b * 3 + 2];
+        const cd = Math.sqrt(cx * cx + cy * cy + cz * cz);
+        if (cd <= 1e-5) continue;
+        const f = ((cd - restLen[k]) / cd) * cStiff;
+        const corrX = cx * f, corrY = cy * f, corrZ = cz * f;
+        if (aPin) {
+          pos[b * 3] += corrX; pos[b * 3 + 1] += corrY; pos[b * 3 + 2] += corrZ;
+        } else if (bPin) {
+          pos[a * 3] -= corrX; pos[a * 3 + 1] -= corrY; pos[a * 3 + 2] -= corrZ;
+        } else {
+          pos[a * 3] -= corrX * 0.5; pos[a * 3 + 1] -= corrY * 0.5; pos[a * 3 + 2] -= corrZ * 0.5;
+          pos[b * 3] += corrX * 0.5; pos[b * 3 + 1] += corrY * 0.5; pos[b * 3 + 2] += corrZ * 0.5;
+        }
+      }
+    }
+  }
+
+  function maxStrain(net) {
+    let m = 0;
+    for (let k = 0; k < net.edgeCount; k++) {
+      const a = net.edges[k * 2], b = net.edges[k * 2 + 1];
+      const dx = net.pos[a * 3] - net.pos[b * 3];
+      const dy = net.pos[a * 3 + 1] - net.pos[b * 3 + 1];
+      const dz = net.pos[a * 3 + 2] - net.pos[b * 3 + 2];
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const s = Math.abs((len - net.restLen[k]) / net.restLen[k]);
+      if (s > m) m = s;
+    }
+    return m;
+  }
+  function maxDisplacement(net) {
+    let m = 0;
+    for (let i = 0; i < net.nodeCount; i++) {
+      const dx = net.pos[i * 3] - net.rest[i * 3];
+      const dy = net.pos[i * 3 + 1] - net.rest[i * 3 + 1];
+      const dz = net.pos[i * 3 + 2] - net.rest[i * 3 + 2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d > m) m = d;
+    }
+    return m;
+  }
+  function resetToRest(net) { net.pos.set(net.rest); net.prev.set(net.rest); }
+
+  return { buildBoxNet, integrate, maxStrain, maxDisplacement, resetToRest };
+})();
+
+/* =====================================================================
+   ХАРНЕСС СТРАНИЦЫ (одноразовый). Гоняет NetSim, рисует, крутит сцену.
+   ===================================================================== */
+(function () {
+  const GOAL = { width: 7.4, height: 2.5, depth: 2.55 };
+  const BALL_R = 0.11;      // радиус мяча (геометрия), не путать с NET_BALL_RADIUS
+  const HIT_DAMP = 0.6;     // потеря тангенциальной скорости при ударе в сетку
+
+  const DEFAULTS = {
+    NET_WIDTH_DIV: 24, NET_HEIGHT_DIV: 12, NET_DEPTH_DIV: 5,
+    NET_DEPTH: 2.55,
+    NET_STIFFNESS: 0.2,
+    NET_CONSTRAINT_ITERATIONS: 2,
+    NET_DAMPING: 0.98,
+    NET_SHAPE_RETURN: 3.0,
+    NET_SLACK: 0.9,
+    NET_GRAVITY: 9.8,
+    NET_SPRING_STIFFNESS: 400,
+    NET_SIM_STEP: 0.016,
+    NET_BALL_RADIUS: 0.6,
+    NET_BALL_VEL_SCALE: 0.4,
+    NET_BALL_MIN_SPEED: 1.5,
+    NET_BALL_FORCE: 120,
+    NET_BOUNCE: 0.1,
+    NET_FRICTION: 1.0,
+    NET_CELEBRATION_TIME: 5.0
+  };
+
+  const SLIDERS = [
+    { k: 'NET_STIFFNESS', min: 0.02, max: 1, step: 0.01 },
+    { k: 'NET_CONSTRAINT_ITERATIONS', min: 0, max: 6, step: 1 },
+    { k: 'NET_DAMPING', min: 0.9, max: 1, step: 0.005 },
+    { k: 'NET_SHAPE_RETURN', min: 0, max: 10, step: 0.1 },
+    { k: 'NET_SLACK', min: 0.6, max: 1, step: 0.01 },
+    { k: 'NET_GRAVITY', min: 0, max: 20, step: 0.1 },
+    { k: 'NET_BALL_RADIUS', min: 0.2, max: 1.5, step: 0.05 },
+    { k: 'NET_BALL_VEL_SCALE', min: 0, max: 1.5, step: 0.05 },
+    { k: 'NET_BALL_MIN_SPEED', min: 0, max: 10, step: 0.1 },
+    { k: 'NET_BALL_FORCE', min: 0, max: 400, step: 5 },
+    { k: 'NET_BOUNCE', min: 0, max: 0.6, step: 0.01 }
+  ];
+
+  const CONSTS = [
+    ['NET_DEPTH', 2.55, 'м', 'Глубина коробки за линией (GF goalDepth=2.55; в open_football 1.5).'],
+    ['NET_WIDTH_DIV', 24, '—', 'Ячеек решётки по ширине.'],
+    ['NET_HEIGHT_DIV', 12, '—', 'Ячеек по высоте.'],
+    ['NET_DEPTH_DIV', 5, '—', 'Ячеек по глубине. 24×12×5 → 631 узел, 1155 рёбер.'],
+    ['NET_STIFFNESS', 0.2, '0..1', 'ГЛАВНАЯ ручка (PBD constraint_stiffness): свободно↔жёстко, 1.0≈стена.'],
+    ['NET_CONSTRAINT_ITERATIONS', 2, '—', 'Релаксаций PBD за шаг (нерастяжимость).'],
+    ['NET_DAMPING', 0.98, '—', 'Затухание скорости узла за шаг Verlet.'],
+    ['NET_SHAPE_RETURN', 3.0, 'м/м', 'Тяга к rest-форме (сетка возвращается в покой).'],
+    ['NET_SLACK', 0.9, 'множитель', 'rest_len ÷ на шаг → запас материала на провис/колыхание.'],
+    ['NET_GRAVITY', 9.8, 'м/с²', 'Ускорение провисания сетки.'],
+    ['NET_SPRING_STIFFNESS', 400, '—', 'Легаси-пружина рёбер; при PBD почти инертна.'],
+    ['NET_SIM_STEP', 0.016, 'с', 'dt шага симуляции (совпадает с тиком физики).'],
+    ['NET_BALL_RADIUS', 0.6, 'м', 'Радиус ВЛИЯНИЯ мяча на узлы (не радиус мяча).'],
+    ['NET_BALL_VEL_SCALE', 0.4, '—', 'Масштаб толчка от скорости мяча.'],
+    ['NET_BALL_MIN_SPEED', 1.5, 'м/с', 'Порог velocity-gate: лежащий мяч не колышет.'],
+    ['NET_BALL_FORCE', 120, '—', 'Сила толчка мяча по нормали.'],
+    ['NET_BOUNCE', 0.1, '—', 'Упругость стопперов сетки (мяч гаснет).'],
+    ['NET_FRICTION', 1.0, '—', 'Трение стопперов.'],
+    ['NET_CELEBRATION_TIME', 5.0, 'с', 'Колыхание на праздновании до сброса мяча.']
+  ];
+
+  const AIMS = {
+    leftLow:  [-GOAL.width / 2 + 0.6, 0.5, GOAL.depth - 0.2],
+    rightLow: [ GOAL.width / 2 - 0.6, 0.5, GOAL.depth - 0.2],
+    center:   [0, GOAL.height * 0.45, GOAL.depth - 0.2],
+    topLeft:  [-GOAL.width / 2 + 0.6, GOAL.height - 0.3, GOAL.depth - 0.2],
+    top:      [0, GOAL.height - 0.3, GOAL.depth - 0.2]
+  };
+
+  let cfg = Object.assign({}, DEFAULTS);
+  let net = null;
+  let ball = { pos: [0, BALL_R, -3], vel: [0, 0, 0], inGoal: false };
+  let simOn = true;
+  let celebrating = false, celebrationLeft = 0;
+  let lastSimMs = 0;
+  let goalCount = 0;
+  let statusText = 'Готово. Запусти мяч в ворота.';
+
+  const view = { yaw: -0.55, pitch: 0.30, dist: 9.0 };
+  const target = [0, GOAL.height * 0.5, GOAL.depth * 0.5];
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  let W = 0, H = 0, focal = 600;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    focal = H * 1.15;
+  }
+  window.addEventListener('resize', resize);
+
+  function paramsFrom(c) {
+    return {
+      gravity: c.NET_GRAVITY,
+      damping: c.NET_DAMPING,
+      stiffness: c.NET_SPRING_STIFFNESS,
+      shape_return: c.NET_SHAPE_RETURN,
+      ball_radius: c.NET_BALL_RADIUS,
+      ball_vel_scale: c.NET_BALL_VEL_SCALE,
+      ball_force: c.NET_BALL_FORCE,
+      ball_min_speed: c.NET_BALL_MIN_SPEED,
+      constraint_iterations: c.NET_CONSTRAINT_ITERATIONS,
+      constraint_stiffness: c.NET_STIFFNESS
+    };
+  }
+
+  function rebuildNet() {
+    net = NetSim.buildBoxNet(GOAL.width, GOAL.height, GOAL.depth,
+      cfg.NET_WIDTH_DIV, cfg.NET_HEIGHT_DIV, cfg.NET_DEPTH_DIV, cfg.NET_SLACK);
+  }
+
+  function speedOf(v) { return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+
+  function launch(aimKey, speed) {
+    const t = AIMS[aimKey];
+    const start = [0, 1.0, -2.5];
+    let dx = t[0] - start[0], dy = t[1] - start[1], dz = t[2] - start[2];
+    const L = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    ball.pos = start.slice();
+    ball.vel = [dx / L * speed, dy / L * speed, dz / L * speed];
+    ball.inGoal = false;
+    celebrating = false;
+    setStatus('Мяч запущен: ' + aimKey + ', ' + speed + ' м/с.');
+  }
+
+  function ballStep(dt) {
+    ball.vel[1] -= cfg.NET_GRAVITY * dt;
+    ball.pos[0] += ball.vel[0] * dt;
+    ball.pos[1] += ball.vel[1] * dt;
+    ball.pos[2] += ball.vel[2] * dt;
+
+    const hw = GOAL.width / 2;
+    // ground
+    if (ball.pos[1] < BALL_R) {
+      ball.pos[1] = BALL_R;
+      if (ball.vel[1] < 0) ball.vel[1] = -ball.vel[1] * cfg.NET_BOUNCE;
+      ball.vel[0] *= 0.995; ball.vel[2] *= 0.995;
+    }
+    if (ball.pos[2] > 0) { // внутри объёма ворот
+      if (ball.pos[2] > GOAL.depth - BALL_R) {
+        ball.pos[2] = GOAL.depth - BALL_R;
+        if (ball.vel[2] > 0) ball.vel[2] = -ball.vel[2] * cfg.NET_BOUNCE;
+        ball.vel[0] *= HIT_DAMP; ball.vel[1] *= HIT_DAMP;
+      }
+      if (ball.pos[0] > hw - BALL_R) {
+        ball.pos[0] = hw - BALL_R;
+        if (ball.vel[0] > 0) ball.vel[0] = -ball.vel[0] * cfg.NET_BOUNCE;
+        ball.vel[2] *= HIT_DAMP; ball.vel[1] *= HIT_DAMP;
+      }
+      if (ball.pos[0] < -hw + BALL_R) {
+        ball.pos[0] = -hw + BALL_R;
+        if (ball.vel[0] < 0) ball.vel[0] = -ball.vel[0] * cfg.NET_BOUNCE;
+        ball.vel[2] *= HIT_DAMP; ball.vel[1] *= HIT_DAMP;
+      }
+      if (ball.pos[1] > GOAL.height - BALL_R) {
+        ball.pos[1] = GOAL.height - BALL_R;
+        if (ball.vel[1] > 0) ball.vel[1] = -ball.vel[1] * cfg.NET_BOUNCE;
+        ball.vel[0] *= HIT_DAMP; ball.vel[2] *= HIT_DAMP;
+      }
+    }
+
+    if (!ball.inGoal && ball.pos[2] > 0.11 && Math.abs(ball.pos[0]) < hw && ball.pos[1] < GOAL.height) {
+      ball.inGoal = true;
+      goalCount++;
+      celebrating = true;
+      celebrationLeft = cfg.NET_CELEBRATION_TIME;
+      setStatus('ГОЛ #' + goalCount + ' — сетка колышется, празднование ' + cfg.NET_CELEBRATION_TIME + ' с.');
+    }
+  }
+
+  function setStatus(t) { statusText = t; document.getElementById('status').textContent = t; }
+
+  function step(dt) {
+    ballStep(dt);
+    if (simOn) {
+      const t0 = performance.now();
+      NetSim.integrate(net, ball.pos, speedOf(ball.vel), paramsFrom(cfg), dt);
+      lastSimMs = performance.now() - t0;
+    }
+    if (celebrating) {
+      celebrationLeft -= dt;
+      if (celebrationLeft <= 0) {
+        celebrating = false;
+        NetSim.resetToRest(net);
+        setStatus('Празднование кончилось — сетка вернулась в rest.');
+      }
+    }
+  }
+
+  /* ---------- render ---------- */
+  function worldView(p) {
+    const x = p[0] - target[0], y = p[1] - target[1], z = p[2] - target[2];
+    const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw);
+    const x1 = cy * x + sy * z, z1 = -sy * x + cy * z;
+    const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+    const y1 = cp * y - sp * z1, z2 = sp * y + cp * z1;
+    return [x1, y1, z2 + view.dist];
+  }
+  function project(p) {
+    const v = worldView(p);
+    if (v[2] < 0.2) return null;
+    const f = focal / v[2];
+    return [W / 2 + v[0] * f, H / 2 - v[1] * f, v[2]];
+  }
+  function line(a, b, color, width) {
+    const pa = project(a), pb = project(b);
+    if (!pa || !pb) return;
+    ctx.strokeStyle = color; ctx.lineWidth = width || 1;
+    ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]); ctx.stroke();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const hw = GOAL.width / 2;
+
+    // ground grid
+    ctx.globalAlpha = 0.5;
+    for (let x = -6; x <= 6; x += 1) line([x, 0, -4], [x, 0, GOAL.depth + 1], '#20262f', 1);
+    for (let z = -4; z <= GOAL.depth + 1; z += 1) line([-6, 0, z], [6, 0, z], '#20262f', 1);
+    ctx.globalAlpha = 1;
+
+    // goal frame
+    const frame = '#7d8898';
+    line([-hw, 0, 0], [-hw, GOAL.height, 0], frame, 2);
+    line([hw, 0, 0], [hw, GOAL.height, 0], frame, 2);
+    line([-hw, GOAL.height, 0], [hw, GOAL.height, 0], frame, 2);
+    line([-hw, 0, GOAL.depth], [-hw, GOAL.height, GOAL.depth], frame, 1.5);
+    line([hw, 0, GOAL.depth], [hw, GOAL.height, GOAL.depth], frame, 1.5);
+    line([-hw, GOAL.height, GOAL.depth], [hw, GOAL.height, GOAL.depth], frame, 1.5);
+
+    // net edges, strain-coloured
+    const base = [214, 222, 233], hot = [255, 107, 53];
+    for (let k = 0; k < net.edgeCount; k++) {
+      const a = net.edges[k * 2], b = net.edges[k * 2 + 1];
+      const ax = net.pos[a * 3], ay = net.pos[a * 3 + 1], az = net.pos[a * 3 + 2];
+      const bx = net.pos[b * 3], by = net.pos[b * 3 + 1], bz = net.pos[b * 3 + 2];
+      const len = Math.hypot(bx - ax, by - ay, bz - az);
+      const strain = Math.min(1, Math.abs((len - net.restLen[k]) / net.restLen[k]) * 4);
+      const r = Math.round(base[0] + (hot[0] - base[0]) * strain);
+      const g = Math.round(base[1] + (hot[1] - base[1]) * strain);
+      const bl = Math.round(base[2] + (hot[2] - base[2]) * strain);
+      line([ax, ay, az], [bx, by, bz], 'rgba(' + r + ',' + g + ',' + bl + ',0.62)', 1);
+    }
+
+    // pinned nodes
+    ctx.fillStyle = '#5b6675';
+    for (let i = 0; i < net.nodeCount; i++) {
+      if (!net.pinned[i]) continue;
+      const p = project([net.pos[i * 3], net.pos[i * 3 + 1], net.pos[i * 3 + 2]]);
+      if (!p) continue;
+      ctx.fillRect(p[0] - 1, p[1] - 1, 2, 2);
+    }
+
+    // ball
+    const bp = project(ball.pos);
+    if (bp) {
+      const r = Math.max(2, BALL_R * focal / bp[2]);
+      const grd = ctx.createRadialGradient(bp[0] - r * 0.3, bp[1] - r * 0.3, r * 0.2, bp[0], bp[1], r);
+      grd.addColorStop(0, '#ffffff'); grd.addColorStop(1, '#c8ccd2');
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(bp[0], bp[1], r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  /* ---------- state panel ---------- */
+  function field(label, value) {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = '<span>' + label + '</span><b>' + value + '</b>';
+    return d;
+  }
+  function updateState() {
+    const el = document.getElementById('state');
+    el.innerHTML = '';
+    el.appendChild(field('Позиция мяча, м', ball.pos.map(function (v) { return v.toFixed(2); }).join(', ')));
+    el.appendChild(field('Скорость мяча, м/с', speedOf(ball.vel).toFixed(2)));
+    el.appendChild(field('Мяч в воротах', ball.inGoal ? 'да' : 'нет'));
+    el.appendChild(field('Празднование, с', celebrating ? celebrationLeft.toFixed(1) : '—'));
+    el.appendChild(field('Симуляция', simOn ? 'ВКЛ' : 'ВЫКЛ'));
+    document.getElementById('s-nodes').textContent = net.nodeCount;
+    document.getElementById('s-edges').textContent = net.edgeCount;
+    let pins = 0; for (let i = 0; i < net.nodeCount; i++) pins += net.pinned[i];
+    document.getElementById('s-pins').textContent = pins;
+    document.getElementById('s-disp').textContent = NetSim.maxDisplacement(net).toFixed(3) + ' м';
+    document.getElementById('s-strain').textContent = (NetSim.maxStrain(net) * 100).toFixed(1) + ' %';
+    document.getElementById('s-perf').textContent = lastSimMs.toFixed(2) + ' мс';
+  }
+
+  /* ---------- loop ---------- */
+  let lastT = performance.now();
+  let acc = 0;
+  function frame(now) {
+    const realDt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    acc += realDt;
+    const dt = cfg.NET_SIM_STEP;
+    let guard = 0;
+    while (acc >= dt && guard++ < 8) { step(dt); acc -= dt; }
+    draw();
+    updateState();
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- orbit controls ---------- */
+  let dragging = false, lx = 0, ly = 0;
+  cv.addEventListener('mousedown', function (e) { dragging = true; lx = e.clientX; ly = e.clientY; });
+  window.addEventListener('mouseup', function () { dragging = false; });
+  window.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    view.yaw += (e.clientX - lx) * 0.0075;
+    view.pitch = Math.max(-0.4, Math.min(1.3, view.pitch + (e.clientY - ly) * 0.006));
+    lx = e.clientX; ly = e.clientY;
+  });
+  cv.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    view.dist = Math.max(4, Math.min(22, view.dist + Math.sign(e.deltaY) * 0.7));
+  }, { passive: false });
+
+  /* ---------- sliders ---------- */
+  function buildSliders() {
+    const host = document.getElementById('sliders');
+    host.innerHTML = '';
+    SLIDERS.forEach(function (s) {
+      const wrap = document.createElement('div');
+      wrap.className = 'slider';
+      const lab = document.createElement('label');
+      const val = document.createElement('b');
+      val.textContent = cfg[s.k];
+      lab.innerHTML = '<span>' + s.k.replace('NET_', '') + '</span>';
+      lab.appendChild(val);
+      const inp = document.createElement('input');
+      inp.type = 'range'; inp.min = s.min; inp.max = s.max; inp.step = s.step; inp.value = cfg[s.k];
+      inp.addEventListener('input', function () {
+        cfg[s.k] = parseFloat(inp.value);
+        val.textContent = cfg[s.k];
+        if (s.k === 'NET_SLACK') rebuildNet();
+      });
+      wrap.appendChild(lab); wrap.appendChild(inp);
+      host.appendChild(wrap);
+    });
+  }
+  function syncSliders() {
+    const inputs = document.querySelectorAll('#sliders input');
+    inputs.forEach(function (inp, i) {
+      inp.value = cfg[SLIDERS[i].k];
+      const b = inp.previousElementSibling.querySelector('b');
+      if (b) b.textContent = cfg[SLIDERS[i].k];
+    });
+  }
+  function setCfg(k, v) { cfg[k] = v; if (k === 'NET_SLACK') rebuildNet(); syncSliders(); }
+
+  /* ---------- buttons ---------- */
+  document.querySelectorAll('[data-launch]').forEach(function (b) {
+    b.addEventListener('click', function () { launch(b.dataset.launch, parseFloat(b.dataset.speed)); });
+  });
+  document.getElementById('btn-reset-net').addEventListener('click', function () {
+    NetSim.resetToRest(net); celebrating = false;
+    setStatus('Сетка возвращена в rest.');
+  });
+  document.getElementById('btn-reset-all').addEventListener('click', resetAll);
+  const simBtn = document.getElementById('btn-sim');
+  simBtn.addEventListener('click', function () {
+    simOn = !simOn;
+    simBtn.textContent = 'Симуляция: ' + (simOn ? 'ВКЛ' : 'ВЫКЛ');
+  });
+
+  function resetAll() {
+    cfg = Object.assign({}, DEFAULTS);
+    buildSliders();
+    rebuildNet();
+    ball = { pos: [0, BALL_R, -3], vel: [0, 0, 0], inGoal: false };
+    celebrating = false; goalCount = 0;
+    simOn = true; simBtn.textContent = 'Симуляция: ВКЛ';
+    setStatus('Полный сброс. Дефолтный тюнинг загружен.');
+  }
+
+  /* ---------- guided scenarios ---------- */
+  const SCENARIOS = [
+    {
+      title: '1. Гол в угол',
+      intro: 'Мяч летит 20 м/с в левый нижний угол. Сетка должна прогнуться и погасить мяч. Смотри «макс. смещение» и «растяжение».',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'Запустить в левый нижний', run: function () { launch('leftLow', 20); } }
+      ]
+    },
+    {
+      title: '2. Медленный мяч',
+      intro: 'Мяч подкатывается медленнее NET_BALL_MIN_SPEED (1.5 м/с). За счёт velocity-gate сетка должна почти не шевелиться, хотя мяч её касается.',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'Скорость мяча 1.0 м/с в центр', run: function () { launch('center', 1.0); } }
+      ]
+    },
+    {
+      title: '3. Пушечный удар',
+      intro: '40 м/с в центр. Сетка сильно вытягивается; PBD должен не дать ячейкам разъехаться (растяжение держится в разумных пределах, сцена не взрывается).',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'Запустить 40 м/с в центр', run: function () { launch('center', 40); } }
+      ]
+    },
+    {
+      title: '4. Свободно ↔ жёстко',
+      intro: 'NET_STIFFNESS — главная ручка PBD. При 0.05 полотно мягкое и колышется; при 1.0 ведёт себя почти как стена.',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'STIFFNESS=0.05 + удар', run: function () { setCfg('NET_STIFFNESS', 0.05); launch('leftLow', 20); } },
+        { label: 'STIFFNESS=1.0 + удар', run: function () { setCfg('NET_STIFFNESS', 1.0); launch('leftLow', 20); } }
+      ]
+    },
+    {
+      title: '5. Слабина (slack)',
+      intro: 'NET_SLACK=1.0 даёт туго натянутое полотно (барабан). NET_SLACK=0.8 укоротит rest-длины — появится запас материала, провис и живое колыхание.',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'SLACK=1.0 + удар', run: function () { setCfg('NET_SLACK', 1.0); launch('leftLow', 20); } },
+        { label: 'SLACK=0.8 + удар', run: function () { setCfg('NET_SLACK', 0.8); launch('leftLow', 20); } }
+      ]
+    },
+    {
+      title: '6. Провис и празднование',
+      intro: 'Даже без мяча сетка провисает под NET_GRAVITY, а NET_SHAPE_RETURN тянет её обратно. После гола идут NET_CELEBRATION_TIME секунд колыхания, затем rest-сброс.',
+      steps: [
+        { label: 'Сброс', run: resetAll },
+        { label: 'Показать провис в покое', run: function () { setStatus('Покой: гравитация против NET_SHAPE_RETURN.'); } },
+        { label: 'Гол 25 м/с в левый угол и ждать', run: function () { launch('leftLow', 25); } }
+      ]
+    }
+  ];
+
+  let activeScen = 0, stepIndex = 0;
+  function renderScenario() {
+    const tabs = document.getElementById('tabs');
+    tabs.innerHTML = '';
+    SCENARIOS.forEach(function (s, i) {
+      const b = document.createElement('button');
+      b.textContent = s.title;
+      if (i === activeScen) b.className = 'active';
+      b.addEventListener('click', function () { activeScen = i; stepIndex = 0; SCENARIOS[i].steps[0].run(); renderScenario(); });
+      tabs.appendChild(b);
+    });
+    const s = SCENARIOS[activeScen];
+    const host = document.getElementById('scen');
+    host.innerHTML = '';
+    const intro = document.createElement('p');
+    intro.className = 'scen-intro';
+    intro.textContent = s.intro;
+    host.appendChild(intro);
+    const steps = document.createElement('div');
+    steps.className = 'steps';
+    s.steps.forEach(function (st, i) {
+      const b = document.createElement('button');
+      b.innerHTML = '<span class="n">' + (i + 1) + '.</span>' + st.label;
+      if (i < stepIndex) b.className = 'done';
+      if (i === stepIndex) b.classList.add('primary');
+      b.addEventListener('click', function () {
+        st.run();
+        stepIndex = Math.max(stepIndex, i + 1);
+        renderScenario();
+      });
+      steps.appendChild(b);
+    });
+    host.appendChild(steps);
+  }
+
+  /* ---------- constants table ---------- */
+  function buildConsts() {
+    const tb = document.getElementById('consts');
+    CONSTS.forEach(function (c) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td><code>' + c[0] + '</code></td><td>' + c[1] + '</td><td>' + c[2] + '</td><td>' + c[3] + '</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  /* ---------- init ---------- */
+  resize();
+  buildSliders();
+  rebuildNet();
+  buildConsts();
+  renderScenario();
+  setStatus(statusText);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
