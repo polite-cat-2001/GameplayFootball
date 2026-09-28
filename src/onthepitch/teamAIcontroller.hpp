@@ -49,7 +49,9 @@ class TeamAIController {
     void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1);
     Player *GetPieceTaker() { return taker; }
     e_SetPiece GetSetPieceType() { return setPieceType; }
-    void DebugSetPieceTaker(Player *p) { taker = p; } // prototype #9: force a human set-piece taker
+    // Players deliberately placed in the free-kick shot lane (the wall); the referee keeps them
+    // there while clearing everyone else out of the lane.
+    const std::vector<Player*> &GetFreeKickWallPlayers() { return freeKickWallPlayers; }
     void ApplyAttackingRun(Player *manualPlayer = 0);
     void ApplyTeamPressure();
     void ApplyKeeperRush();
@@ -77,6 +79,7 @@ class TeamAIController {
     Team *team;
     Player *taker;
     e_SetPiece setPieceType;
+    std::vector<Player*> freeKickWallPlayers;
 
     Properties baseTeamTactics;
     Properties teamTacticsModMultipliers;

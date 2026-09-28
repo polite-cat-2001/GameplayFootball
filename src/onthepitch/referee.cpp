@@ -12,6 +12,35 @@
 
 #include "../main.hpp"
 
+namespace {
+  // Push a player out of the free-kick lane. `apex` is the ball, `axis` points from the ball to the
+  // goal and `perp` is its left normal. The lane is a corridor of half width `runupHalfWidth`
+  // behind the ball (the taker's run-up side) that opens into the wall cone ahead: at distance d>0
+  // the half width is max(minHalfWidth, slope * d), where `slope` comes from the wall edges (0 when
+  // there is no wall). Players inside are pushed perpendicular to the axis, never radially, so they
+  // leave the kick line; `extraPush` adds a further sideways offset (half the ball->wall distance).
+  // Returns the untouched position when already outside.
+  Vector3 PushOutOfFreeKickLane(const Vector3 &pos, const Vector3 &apex,
+                                const Vector3 &axis, const Vector3 &perp, float slope, float extraPush,
+                                float runupHalfWidth, float minHalfWidth, float margin,
+                                float runupBack, float laneForward) {
+    Vector3 rel = pos - apex; rel.coords[2] = 0.0f;
+    float d = rel.GetDotProduct(axis);
+    if (d < -runupBack || d > laneForward) return pos;
+    float halfWidth = minHalfWidth;
+    if (d <= 0.0f) {
+      halfWidth = runupHalfWidth;
+    } else {
+      float cone = slope * d;
+      if (cone > halfWidth) halfWidth = cone;
+    }
+    float s = rel.GetDotProduct(perp);
+    if (s <= -(halfWidth + margin) || s >= (halfWidth + margin)) return pos; // already outside
+    float newS = (s >= 0.0f ? 1.0f : -1.0f) * (halfWidth + margin + extraPush);
+    return apex + axis * d + perp * newS;
+  }
+}
+
 Referee::Referee(Match *match) : match(match) {
   buffer.desiredSetPiece = e_SetPiece_KickOff;
   buffer.teamID = 0;
@@ -264,34 +293,72 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
   match->GetTeam(1)->GetController()->PrepareSetPiece(setPiece, buffer.teamID);
 
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
+
+  // FIFA/PES-like: keep the free-kick lane clear of everyone but the taker, the keepers and the
+  // wall, so nobody stands between the taker and the wall (or in the kick line). The lane is the
+  // run-up corridor behind the ball opening into the cone through the wall edges. Ported from
+  // open_football free_kick_controller._clear_ball_to_wall_cone.
+  if (setPiece == e_SetPiece_FreeKick) {
+    Vector3 apex = match->GetBall()->Predict(0).Get2D();
+    Team *takerTeam = match->GetTeam(buffer.teamID);
+    Vector3 axis(-takerTeam->GetSide() * pitchHalfW, 0, 0); axis = axis - apex; axis.coords[2] = 0.0f;
+    if (axis.GetLength() >= 0.01f) {
+      axis.Normalize();
+      Vector3 perp(-axis.coords[1], axis.coords[0], 0.0f);
+      Team *defendingTeam = match->GetTeam(abs(buffer.teamID - 1));
+      const std::vector<Player*> &wall = defendingTeam->GetController()->GetFreeKickWallPlayers();
+      float slope = 0.0f;        // lane half width per metre ahead, from the wall edges
+      float wallDist = 0.0f;     // ball -> wall distance along the axis (0 when there is no wall)
+      if (wall.size() >= 2) {
+        Vector3 a = wall.front()->GetPosition() - apex; a.coords[2] = 0.0f;
+        Vector3 b = wall.back()->GetPosition() - apex; b.coords[2] = 0.0f;
+        float dist = (a.GetDotProduct(axis) + b.GetDotProduct(axis)) * 0.5f;
+        if (dist < 0.01f) dist = 0.01f;
+        float hwA = fabs(a.GetDotProduct(perp));
+        float hwB = fabs(b.GetDotProduct(perp));
+        slope = (hwA > hwB ? hwA : hwB) / dist;
+        wallDist = dist;
+      }
+      // outside the lane, push a further half of the ball->wall distance sideways, so a player can
+      // not sit just at the lane edge and still get in the way
+      float extraPush = _default_FreeKick_LanePushFactor * wallDist;
+      for (int t = 0; t < 2; t++) {
+        std::vector<Player*> players;
+        match->GetTeam(t)->GetActivePlayers(players);
+        for (unsigned int i = 0; i < players.size(); i++) {
+          Player *p = players.at(i);
+          if (p == buffer.taker) continue;
+          if (p->GetFormationEntry().role == e_PlayerRole_GK) continue;
+          bool isWall = false;
+          for (unsigned int w = 0; w < wall.size(); w++) { if (wall.at(w) == p) { isWall = true; break; } }
+          if (isWall) continue;
+
+          Vector3 pushed = PushOutOfFreeKickLane(p->GetPosition(), apex, axis, perp, slope, extraPush,
+                                                 _default_FreeKick_LaneRunupHalfWidth,
+                                                 _default_FreeKick_LaneMinHalfWidth,
+                                                 _default_FreeKick_LaneMargin,
+                                                 _default_FreeKick_LaneRunupBack,
+                                                 _default_FreeKick_LaneForward);
+          if ((pushed - p->GetPosition()).GetLength() > 0.001f) p->ResetPosition(pushed, apex);
+        }
+      }
+    }
+  }
 }
 
-void Referee::DebugForcePenalty(int teamID, Player *taker) {
-  // prototype #9: force a penalty for the given team with a chosen (human) taker, so the reticle
-  // can be tested without having to earn a foul. Caller must ensure a clean play state.
-  Team *team = match->GetTeam(teamID);
-  // the penalty spot sits 11 m from the goal this team attacks, i.e. on the defending side
-  Vector3 spot(-team->GetSide() * (pitchHalfW - 11.0f), 0, 0);
-
-  buffer.desiredSetPiece = e_SetPiece_Penalty;
+void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {
+  // wayfinder #9/#12: force a set piece for the given team so it can be tested without earning a
+  // foul. The taker is chosen, and handed to the human, by the normal set-piece flow.
+  buffer.desiredSetPiece = setPiece;
   buffer.teamID = teamID;
   buffer.stopTime = match->GetActualTime_ms();
   buffer.prepareTime = match->GetActualTime_ms();
   buffer.startTime = match->GetActualTime_ms();
-  buffer.restartPos = spot;
+  buffer.restartPos = restartPos;
   buffer.active = true;
   buffer.endPhase = false;
 
-  Player *previousTaker = team->GetController()->GetPieceTaker();
-  PrepareSetPiece(e_SetPiece_Penalty);
-  buffer.taker = taker;
-  team->GetController()->DebugSetPieceTaker(taker);
-
-  // no run-up in this prototype: put the taker right behind the ball, and push the AI's
-  // initially-chosen taker (placed behind the ball by PrepareSetPiece) out of the camera's way
-  Vector3 behindBall = -Vector3(-team->GetSide(), 0, 0);
-  taker->ResetPosition(spot + behindBall * 0.5f, spot);
-  if (previousTaker && previousTaker != taker) previousTaker->ResetPosition(spot + behindBall * 9.0f, spot);
+  PrepareSetPiece(setPiece);
 
   match->StartPlay();
   match->StartSetPiece();

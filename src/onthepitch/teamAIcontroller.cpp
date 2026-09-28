@@ -671,6 +671,7 @@ void TeamAIController::ApplyOffsideTrap(Vector3 &position) const {
 
 void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
   setPieceType = setPiece;
+  freeKickWallPlayers.clear();
 
   if (takerTeamID == -1) assert(setPieceType == e_SetPiece_None);
   if (setPieceType == e_SetPiece_None) return;
@@ -841,6 +842,9 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
           toGoal.Normalize();
           result.at(i)->ResetPosition(match->GetBall()->Predict(0).Get2D() + toGoal * 9.15f, match->GetBall()->Predict(0).Get2D());
         }
+        // first/last are the two lateral extremes (the y offset above); the referee uses them as
+        // the cone edges when clearing the shot lane
+        freeKickWallPlayers = result;
       }
 
       break;

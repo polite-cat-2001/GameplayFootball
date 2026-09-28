@@ -1256,18 +1256,49 @@ void Match::Process() {
     UserEventManager::GetInstance().SetKeyboardState(SDLK_F2, false);
   }
 
-  // prototype debug (ticket #9): P forces a penalty for the human's team so the reticle can be tested
-  if (UserEventManager::GetInstance().GetKeyboardState(SDLK_P)) {
-    UserEventManager::GetInstance().SetKeyboardState(SDLK_P, false);
-    if (IsInPlay() && !IsInSetPiece()) {
+  // Debug activation for set-piece testing (wayfinder #9/#12). P/F/Y force an attacking set piece
+  // for the human's team (human takes), Alt+P/Alt+F/Alt+Y force one against it (AI opponent takes,
+  // the human defends: keeper for the penalty, wall for the free kick, AI defence for the corner).
+  // Only from a clean play state: never during a set piece or the goal celebration (after a goal
+  // StopPlay is active until the kickoff).
+  {
+    bool alt = (SDL_GetModState() & SDL_KMOD_ALT) != 0;
+    bool debugPenalty = UserEventManager::GetInstance().GetKeyboardState(SDLK_P);
+    bool debugFreeKick = UserEventManager::GetInstance().GetKeyboardState(SDLK_F);
+    bool debugCorner = UserEventManager::GetInstance().GetKeyboardState(SDLK_Y);
+    if (debugPenalty) UserEventManager::GetInstance().SetKeyboardState(SDLK_P, false);
+    if (debugFreeKick) UserEventManager::GetInstance().SetKeyboardState(SDLK_F, false);
+    if (debugCorner) UserEventManager::GetInstance().SetKeyboardState(SDLK_Y, false);
+
+    if ((debugPenalty || debugFreeKick || debugCorner) && IsInPlay() && !IsInSetPiece()) {
+      int humanTeamID = -1;
       for (int t = 0; t < 2; t++) {
         std::vector<Player*> players;
         teams[t]->GetActivePlayers(players);
-        Player *humanTaker = 0;
         for (unsigned int i = 0; i < players.size(); i++) {
-          if (teams[t]->IsHumanControlled(players.at(i)->GetID())) { humanTaker = players.at(i); break; }
+          if (teams[t]->IsHumanControlled(players.at(i)->GetID())) { humanTeamID = t; break; }
         }
-        if (humanTaker) { referee->DebugForcePenalty(t, humanTaker); break; }
+        if (humanTeamID != -1) break;
+      }
+      if (humanTeamID != -1) {
+        // Attacking scenarios give the set piece to the human's team: the normal flow picks a
+        // taker and Team::UpdateSwitch hands control to it. The Alt variants give it to the
+        // opponent AI instead, so the human defends (keeper / wall / AI defence).
+        int takerTeamID = alt ? abs(humanTeamID - 1) : humanTeamID;
+        Team *takerTeam = teams[takerTeamID];
+        if (debugPenalty) {
+          // penalty spot: 11 m from the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_Penalty, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * (pitchHalfW - 11.0f), 0, 0));
+        } else if (debugFreeKick) {
+          // 25 m out, central, in front of the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_FreeKick, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * (pitchHalfW - 25.0f), 0, 0));
+        } else {
+          // corner flag of the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_Corner, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * pitchHalfW, pitchHalfH, 0));
+        }
       }
     }
   }

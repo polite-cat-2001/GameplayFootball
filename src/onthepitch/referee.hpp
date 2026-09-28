@@ -46,7 +46,10 @@ class Referee {
     void Process();
 
     void PrepareSetPiece(e_SetPiece setPiece);
-    void DebugForcePenalty(int teamID, Player *taker); // prototype #9: start a penalty for testing
+    // Debug activation for manual testing (wayfinder #9/#12). Caller must ensure a clean play
+    // state. restartPos is the ball spot; the taker, and the human's control of it, come from the
+    // normal set-piece flow (TeamAIController::PrepareSetPiece + Team::UpdateSwitch).
+    void DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos);
 
     const RefereeBuffer &GetBuffer() { return buffer; };
 
