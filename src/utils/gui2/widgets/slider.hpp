@@ -45,6 +45,9 @@ namespace blunted {
 
       void SetQuantization(int steps) { quantizationSteps = std::max(steps, 2); }
 
+      // prototype: show the numeric value (scaled/rounded) next to the caption
+      void SetValueDisplay(float displayScale, int decimals) { showValue = true; valueDisplayScale = displayScale; valueDisplayDecimals = decimals; RefreshCaption(); }
+
       int AddHelperValue(const Vector3 &color, const std::string &description, float initialValue = 0.0f);
       void SetHelperValue(int index, float value);
       void DeleteHelperValue(int index);
@@ -69,6 +72,12 @@ namespace blunted {
 
       float value;
       float quantizedValue;
+
+      bool showValue;
+      float valueDisplayScale;
+      int valueDisplayDecimals;
+
+      void RefreshCaption();
 
   };
 

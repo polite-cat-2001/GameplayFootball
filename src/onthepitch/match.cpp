@@ -396,6 +396,8 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   gameOver = false;
 
+  debugRemoveOpponents = false;
+
   possessionSideHistory = new ValueHistory<float>(6000);
 
   Log(e_Notice, "Match", "Match", "Done creating match!");
@@ -591,6 +593,24 @@ void Match::SetRandomSunParams() {
   if (Verbose()) randomAddition.Print();
 
   static_pointer_cast<Light>(sunNode->GetObject("sun"))->SetColor(sunColor * brightness);
+}
+
+void Match::DebugParkOpponents(bool park) {
+  for (int t = 0; t < 2; t++) {
+    if (teams[t]->GetHumanGamerCount() > 0) continue;
+    Player *goalie = teams[t]->GetGoalie();
+    const std::vector<Player*> &players = teams[t]->GetAllPlayers();
+    for (unsigned int p = 0; p < players.size(); p++) {
+      Player *player = players.at(p);
+      if (!player->IsActive() || player == goalie) continue; // keeper stays in goal
+      if (park) {
+        player->ResetPosition(Vector3(60.0f, -35.0f + p * 6.0f, 0.0f), Vector3(0, 0, 0));
+      } else {
+        Vector3 basePos = player->GetFormationEntry().position * Vector3(-teams[t]->GetSide() * pitchHalfW * 0.7f, -teams[t]->GetSide() * pitchHalfH * 0.7f, 0.0f);
+        player->ResetPosition(basePos, Vector3(0, 0, 0));
+      }
+    }
+  }
 }
 
 void Match::GetCameraState(Quaternion &outCameraOrientation, Quaternion &outNodeOrientation, Vector3 &outNodePosition, float &outFov, float &outNearCap, float &outFarCap) {
@@ -1222,6 +1242,14 @@ void Match::Process() {
     UserEventManager::GetInstance().SetKeyboardState(SDLK_F1, false);
   }
 
+  // prototype debug: F2 toggles parking the non-human outfield team off the pitch
+  if (UserEventManager::GetInstance().GetKeyboardState(SDLK_F2)) {
+    debugRemoveOpponents = !debugRemoveOpponents;
+    DebugParkOpponents(debugRemoveOpponents);
+    Log(e_Notice, "Match", "Match", std::string("debugRemoveOpponents = ") + (debugRemoveOpponents ? "true" : "false"));
+    UserEventManager::GetInstance().SetKeyboardState(SDLK_F2, false);
+  }
+
   if (gameOver) {
     // todonow: just once ^
     sig_OnGameOver(this);
@@ -1264,6 +1292,9 @@ void Match::Process() {
     teams[0]->Process();
     teams[1]->Process();
     officials->Process();
+
+    // prototype debug (F2): park the non-human outfield players off the pitch so shots can be tested unobstructed
+    if (debugRemoveOpponents) DebugParkOpponents(true);
 
     teams[0]->UpdatePossessionStats();
     teams[1]->UpdatePossessionStats();

@@ -452,10 +452,41 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   if (Verbose()) printf("(ease) RESULTING difficultyFactor: %f\n", difficultyFactor);
 
 
-  // best case result
+  // best case result: ballistic launch toward a point on the opponent goal line, with the
+  // aim height scaling with charge (ported from open_football ShotSystem). A short charge
+  // is a driven flat shot; a full charge can rise toward/over the crossbar.
+  Vector3 from = ball->Predict(0);
+  Vector3 goalCenter(player->GetTeam()->GetSide() * -pitchHalfW, 0.0f, 0.0f);
+  Vector3 desiredDirection2D = currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D();
+  float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
 
-  float desiredHeight = 0.05f;
-  Vector3 desiredShot = (currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
+  Vector3 aim = goalCenter;
+  if (fabs(desiredDirection2D.coords[0]) > 0.001f) {
+    float aimT = (goalCenter.coords[0] - from.coords[0]) / desiredDirection2D.coords[0];
+    if (aimT > 0.0f) aim.coords[1] = from.coords[1] + desiredDirection2D.coords[1] * aimT;
+  }
+  aim.coords[1] = clamp(aim.coords[1], -goalHalfWidth * 1.5f, goalHalfWidth * 1.5f);
+  bool groundShot = charge < _default_Shot_GroundChargeMax;
+  // open_football parity: a short tap is a driven ground shot given a strong fixed launch
+  // speed, so it reads as a hard low drive rather than a weak roller
+  if (groundShot) power = std::max(power, _default_Shot_GroundPower);
+  float aimHeight = groundShot ? _default_Shot_GroundAimY
+                               : _default_Shot_AimYMin + (goalHeight + _default_Shot_OverLift - _default_Shot_AimYMin) * charge;
+  aim.coords[2] = aimHeight;
+
+  Vector3 aimHoriz = Vector3(aim.coords[0] - from.coords[0], aim.coords[1] - from.coords[1], 0.0f);
+  float aimDist = std::max(aimHoriz.GetLength(), 1.0f);
+  Vector3 aimDir = aimHoriz.GetNormalized(desiredDirection2D);
+  float horizontalSpeed = std::max(power, 0.001f);
+  Vector3 desiredShot;
+  if (groundShot) {
+    desiredShot = aimDir * horizontalSpeed;
+  } else {
+    float flightTime = std::max(aimDist / horizontalSpeed, 0.001f);
+    float verticalSpeed = (aim.coords[2] - from.coords[2]) / flightTime + 0.5f * 9.81f * flightTime;
+    verticalSpeed = clamp(verticalSpeed, 0.0f, _default_Shot_MaxLift);
+    desiredShot = aimDir * horizontalSpeed + Vector3(0, 0, verticalSpeed);
+  }
   if (Verbose()) {
     desiredShot.Print();
     printf("^ shot: desired\n");
@@ -513,6 +544,25 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   radian amount = bodyTouchAngle * 0.25f;
   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
   zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+
+  // prototype: curl/chip shot types (ticket #8)
+  e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
+  if (shotType == e_ShotType_Curl) {
+    // aim further outside, then bend the ball back in with strong lateral spin
+    radian curlSign = (radian)signSide(bodyTouchAngle);
+    shot.Rotate2D(curlSign * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
+    zRot = -curlSign * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
+  } else if (shotType == e_ShotType_Chip) {
+    // high arc: flatten, trade horizontal power for a fixed vertical launch speed (~sqrt(2gh))
+    shot.coords[2] = 0;
+    shot *= _default_Shot_Chip_HorizFactor;
+    shot.coords[2] = _default_Shot_Chip_Loft;
+  }
+
+  // open_football parity: a driven ground shot stays flat (its ground_shot has vy = 0)
+  if (groundShot && shotType != e_ShotType_Chip) {
+    shot.coords[2] = 0.0f;
+  }
 
   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
 

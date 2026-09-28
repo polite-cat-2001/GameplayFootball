@@ -63,7 +63,23 @@ const float _default_ThroughPass_AutoDirection = 0.2f;
 const float _default_ThroughPass_AutoPower = 0.7f;
 const float _default_HighPass_AutoDirection = 0.2f;
 const float _default_HighPass_AutoPower = 0.5f;
-const float _default_Shot_AutoDirection = 0.2f;
+const float _default_Shot_AutoDirection = 0.74f;
+
+// Prototype: curl/chip shot feel (wayfinder ticket #8). Tune while playing, not final.
+const float _default_Shot_Curl_ZRot = 90.0f;        // lateral spin magnitude for a curled shot (rad/s * 1000)
+const float _default_Shot_Curl_AimOut = 0.1f;       // radians to aim outside the target so the curve bends back in
+const float _default_Shot_Curl_ZRotMax = 300.0f;    // slider range for curl spin (rad/s * 1000)
+const float _default_Shot_Curl_AimOutMax = 0.3f;    // slider range for curl aim offset (radians)
+const float _default_Shot_Chip_HorizFactor = 0.55f; // chip loses horizontal power
+const float _default_Shot_Chip_Loft = 8.0f;         // vertical launch speed for a chip (m/s), ~sqrt(2*g*h)
+// Shot trajectory, ported from open_football ShotSystem: the ball is launched ballistically
+// toward a point on the goal line, and that aim height scales with shot charge.
+const float _default_Shot_AimYMin = 0.8f;           // aim height at zero charge (m)
+const float _default_Shot_OverLift = 1.0f;          // full charge may aim this far above the crossbar (m)
+const float _default_Shot_GroundChargeMax = 0.35f;  // below this charge (desiredPower scale) the shot is driven flat along the ground
+const float _default_Shot_GroundAimY = 0.25f;       // aim height for a driven flat shot (m)
+const float _default_Shot_MaxLift = 6.0f;           // cap on vertical launch speed (m/s) so short-range shots stay down
+const float _default_Shot_GroundPower = 60.0f;      // driven low shot gets at least this horizontal speed (m/s), open_football parity
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
@@ -157,6 +173,12 @@ enum e_PlayerCommandModifier {
   e_PlayerCommandModifier_KnockOn = 1
 };
 
+enum e_ShotType {
+  e_ShotType_Normal,
+  e_ShotType_Curl,
+  e_ShotType_Chip
+};
+
 class IController;
 
 struct TouchInfo {
@@ -168,6 +190,7 @@ struct TouchInfo {
     targetPlayer = 0;
     forcedTargetPlayer = 0;
     desiredPower = 0;
+    shotType = e_ShotType_Normal;
   }
 
   Vector3         inputDirection;
@@ -180,6 +203,8 @@ struct TouchInfo {
   float           desiredPower;
   Player          *targetPlayer; // null == do not use
   Player          *forcedTargetPlayer; // null == do not use
+
+  e_ShotType      shotType;
 
 };
 

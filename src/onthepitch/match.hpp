@@ -134,6 +134,8 @@ class Match {
     void Exit();
 
     void SetRandomSunParams();
+    // prototype debug: park the non-human outfield team off the pitch (keeper stays in goal), or restore them
+    void DebugParkOpponents(bool park);
     void GetSunParams(Vector3 &position, Vector3 &color);
     void GetCameraState(Quaternion &cameraOrientation, Quaternion &nodeOrientation, Vector3 &nodePosition, float &fov, float &nearCap, float &farCap);
     void SetSunParams(const Vector3 &position, const Vector3 &color);
@@ -413,6 +415,9 @@ class Match {
     int remoteAppliedSubstitutions;
 
     bool gameOver;
+
+    // prototype debug (F2): park the team without human gamers off the pitch to ease shot testing
+    bool debugRemoveOpponents;
 
     boost::intrusive_ptr<Node> fullbodyNode;
     std::map<Vector3, Vector3> colorCoords;

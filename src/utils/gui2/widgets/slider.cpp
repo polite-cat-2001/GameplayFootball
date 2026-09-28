@@ -6,6 +6,8 @@
 
 #include "../windowmanager.hpp"
 
+#include <cstdio>
+
 namespace blunted {
 
   Gui2Slider::Gui2Slider(Gui2WindowManager *windowManager, const std::string &name, float x_percent, float y_percent, float width_percent, float height_percent, const std::string &caption) : Gui2View(windowManager, name, x_percent, y_percent, width_percent, height_percent), quantizationSteps(51), caption(caption) {
@@ -24,6 +26,10 @@ namespace blunted {
 
     value = 0.5f;
     quantizedValue = value;
+
+    showValue = false;
+    valueDisplayScale = 1.0f;
+    valueDisplayDecimals = 0;
 
     titleCaption = new Gui2Caption(windowManager, name + "caption", 1.0, 0.2, width_percent, 2.4, caption);
     this->AddView(titleCaption);
@@ -146,6 +152,7 @@ namespace blunted {
       if (value < 0.0f) value = 0.0f;
       quantizedValue = round(value * (quantizationSteps - 1)) / (quantizationSteps - 1.0f);
       sig_OnChange(this);
+      RefreshCaption();
       Redraw();
     } else {
       event->Ignore();
@@ -170,7 +177,18 @@ namespace blunted {
   void Gui2Slider::SetValue(float newValue) {
     value = clamp(newValue, 0.0f, 1.0f);
     quantizedValue = round(value * (quantizationSteps - 1)) / (quantizationSteps - 1.0f);
+    RefreshCaption();
     Redraw();
+  }
+
+  void Gui2Slider::RefreshCaption() {
+    if (!showValue) {
+      titleCaption->SetCaption(caption);
+      return;
+    }
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%.*f", valueDisplayDecimals, quantizedValue * valueDisplayScale);
+    titleCaption->SetCaption(caption + ": " + std::string(buffer));
   }
 
   int Gui2Slider::AddHelperValue(const Vector3 &color, const std::string &description, float initialValue) {
