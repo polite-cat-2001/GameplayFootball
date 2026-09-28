@@ -46,6 +46,7 @@ class Referee {
     void Process();
 
     void PrepareSetPiece(e_SetPiece setPiece);
+    void DebugForcePenalty(int teamID, Player *taker); // prototype #9: start a penalty for testing
 
     const RefereeBuffer &GetBuffer() { return buffer; };
 

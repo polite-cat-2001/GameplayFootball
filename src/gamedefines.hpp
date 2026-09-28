@@ -81,6 +81,24 @@ const float _default_Shot_GroundAimY = 0.25f;       // aim height for a driven f
 const float _default_Shot_MaxLift = 6.0f;           // cap on vertical launch speed (m/s) so short-range shots stay down
 const float _default_Shot_GroundPower = 60.0f;      // driven low shot gets at least this horizontal speed (m/s), open_football parity
 
+// Prototype: penalty reticle (wayfinder ticket #9), values ported from open_football
+// penalty_logic.gd / penalty_controller.gd. Temporary, to be tuned by playing.
+const float _default_Pen_ReticleSpeed = 6.0f;    // reticle travel speed across the goal plane (m/s)
+const float _default_Pen_ReticleReturn = 12.0f;  // how fast the idle reticle returns to centre (1/s)
+const float _default_Pen_ReticleStartY = 1.2f;   // initial reticle height above the ground (m)
+const float _default_Pen_AimOverhang = 0.6f;     // the reticle may aim this far beyond post/crossbar (m)
+const float _default_Pen_SpreadMinR = 0.15f;     // spread disc radius at zero charge (m)
+const float _default_Pen_SpreadMaxR = 1.6f;      // spread disc radius at full charge (m)
+const float _default_Pen_PowerMinSpeed = 24.0f;  // ball launch speed at zero charge (m/s)
+const float _default_Pen_PowerMaxSpeed = 44.0f;  // ball launch speed at full charge (m/s)
+// Penalty camera (prototype #9, pose numbers from wayfinder #5). Fixed behind the taker, looking
+// at the goal; released ~1.5 s after the strike.
+const float _default_Pen_CamBack = 6.0f;    // camera distance behind the ball (m)
+const float _default_Pen_CamAhead = 2.0f;   // look-at point distance toward the goal (m)
+const float _default_Pen_CamHeight = 2.5f;  // camera height (m)
+const float _default_Pen_CamLookY = 1.2f;   // look-at height (m)
+const float _default_Pen_CamFov = 40.0f;    // field of view (deg)
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;
@@ -191,6 +209,10 @@ struct TouchInfo {
     forcedTargetPlayer = 0;
     desiredPower = 0;
     shotType = e_ShotType_Normal;
+    useAimTarget = false;
+    aimLateral = 0;
+    aimHeight = 0;
+    aimSpeed = 0;
   }
 
   Vector3         inputDirection;
@@ -205,6 +227,13 @@ struct TouchInfo {
   Player          *forcedTargetPlayer; // null == do not use
 
   e_ShotType      shotType;
+
+  // Prototype #9: when set, the shot is launched ballistically at (aimLateral, aimHeight) on the
+  // attacker's goal plane at aimSpeed, ignoring the charge-driven aim height. Penalty reticle only.
+  bool            useAimTarget;
+  float           aimLateral; // Y offset from the goal centre (m)
+  float           aimHeight;  // height above the ground (m)
+  float           aimSpeed;   // horizontal launch speed (m/s)
 
 };
 

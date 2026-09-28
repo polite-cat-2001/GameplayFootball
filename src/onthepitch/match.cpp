@@ -187,6 +187,12 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   autoUpdateIngameCamera = true;
 
+  // prototype #9: set-piece camera override
+  setPieceCameraWasActive = false;
+  setPieceCameraHoldUntil_ms = 0;
+  setPieceCameraEye = Vector3(0);
+  setPieceCameraLook = Vector3(0);
+
 
   // stadium
 
@@ -1250,6 +1256,22 @@ void Match::Process() {
     UserEventManager::GetInstance().SetKeyboardState(SDLK_F2, false);
   }
 
+  // prototype debug (ticket #9): P forces a penalty for the human's team so the reticle can be tested
+  if (UserEventManager::GetInstance().GetKeyboardState(SDLK_P)) {
+    UserEventManager::GetInstance().SetKeyboardState(SDLK_P, false);
+    if (IsInPlay() && !IsInSetPiece()) {
+      for (int t = 0; t < 2; t++) {
+        std::vector<Player*> players;
+        teams[t]->GetActivePlayers(players);
+        Player *humanTaker = 0;
+        for (unsigned int i = 0; i < players.size(); i++) {
+          if (teams[t]->IsHumanControlled(players.at(i)->GetID())) { humanTaker = players.at(i); break; }
+        }
+        if (humanTaker) { referee->DebugForcePenalty(t, humanTaker); break; }
+      }
+    }
+  }
+
   if (gameOver) {
     // todonow: just once ^
     sig_OnGameOver(this);
@@ -1436,6 +1458,29 @@ void Match::Process() {
         SetAutoUpdateIngameCamera(true);
       }
 
+    }
+
+    // prototype #9: penalty camera — fixed behind the taker, held ~1.5 s after the strike
+    {
+      bool penaltySetPiece = GetReferee()->GetBuffer().active && GetReferee()->GetBuffer().desiredSetPiece == e_SetPiece_Penalty;
+      if (penaltySetPiece) {
+        int teamID = GetReferee()->GetBuffer().teamID;
+        float side = GetTeam(teamID)->GetSide();
+        Vector3 spot = GetReferee()->GetBuffer().restartPos;
+        Vector3 toGoal(-side, 0, 0);
+        setPieceCameraEye = spot - toGoal * _default_Pen_CamBack + Vector3(0, 0, _default_Pen_CamHeight);
+        setPieceCameraLook = spot + toGoal * _default_Pen_CamAhead + Vector3(0, 0, _default_Pen_CamLookY);
+        setPieceCameraHoldUntil_ms = GetActualTime_ms() + 1500;
+        setPieceCameraWasActive = true;
+        SetSetPieceCamera(setPieceCameraEye, setPieceCameraLook);
+      } else if (setPieceCameraWasActive) {
+        if (GetActualTime_ms() < setPieceCameraHoldUntil_ms) {
+          SetSetPieceCamera(setPieceCameraEye, setPieceCameraLook);
+        } else {
+          setPieceCameraWasActive = false;
+          ClearSetPieceCamera();
+        }
+      }
     }
 
   } // end if !pause
@@ -2573,6 +2618,23 @@ void Match::FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, V
   nodeOrientation.SetAngleAxis(targetPosition.GetAngle2D() + 1.5 * pi, Vector3(0, 0, 1));
   position = targetPosition - targetPosition.Get2D().GetNormalized(Vector3(0, -1, 0)) * 10 * (1.0f / zoom) + Vector3(0, 0, 3);
   FOV = 60.0f;
+}
+
+void Match::SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt) {
+  SetAutoUpdateIngameCamera(false);
+  cameraNodePosition = eye;
+  Vector3 dir = lookAt - eye;
+  float horiz = std::max(dir.Get2D().GetLength(), 0.001f);
+  float pitch = 0.5f * pi + std::atan2(dir.coords[2], horiz);
+  cameraOrientation.SetAngleAxis(pitch, Vector3(1, 0, 0));
+  cameraNodeOrientation.SetAngleAxis(dir.GetAngle2D() + 1.5f * pi, Vector3(0, 0, 1));
+  cameraFOV = _default_Pen_CamFov;
+  cameraNearCap = 1.0f;
+  cameraFarCap = 250.0f;
+}
+
+void Match::ClearSetPieceCamera() {
+  SetAutoUpdateIngameCamera(true);
 }
 
 void Match::SetReplayCamera(int camType, const Vector3 &target, float modifierValue) {

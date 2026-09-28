@@ -276,6 +276,11 @@ class Match {
     void FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, Vector3 &position, float &FOV, const Vector3 &targetPosition, float zoom);
     void SetReplayCamera(int camType, const Vector3 &target, float modifierValue);
 
+    // prototype #9: fixed set-piece camera override (pattern of the film-referee camera); pose
+    // supplied as eye/lookAt in world space, presentation-only
+    void SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt);
+    void ClearSetPieceCamera();
+
     void SetAutoUpdateIngameCamera(bool autoUpdate = true) { if (autoUpdate != autoUpdateIngameCamera) { camPos.clear(); autoUpdateIngameCamera = autoUpdate; } }
 
     // Thin client: use this peer's own camera params instead of the host camera
@@ -425,6 +430,12 @@ class Match {
     ValueHistory<float> *possessionSideHistory;
 
     bool autoUpdateIngameCamera;
+
+    // prototype #9: set-piece camera override state
+    bool setPieceCameraWasActive;
+    unsigned long setPieceCameraHoldUntil_ms;
+    Vector3 setPieceCameraEye;
+    Vector3 setPieceCameraLook;
 
     // camera
     Quaternion cameraOrientation;

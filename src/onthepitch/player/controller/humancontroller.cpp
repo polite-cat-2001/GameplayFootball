@@ -188,8 +188,27 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         command.touchInfo.inputDirection = inputDirection;
         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
         if (GetHIDevice()->GetDeviceType() == e_HIDeviceType_Keyboard) command.touchInfo.autoDirectionBias = 1.0f;
-        command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
         command.touchInfo.desiredPower = clamp(pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
+
+        if (_IsPenaltyTaker()) {
+          // prototype #9: penalties aim at the reticle (no auto-aim); the final target is the
+          // reticle point plus a random sample inside a spread disc that grows with charge.
+          float ratio = clamp(gaugeFactor, 0.0f, 1.0f);
+          float spread = _default_Pen_SpreadMinR + (_default_Pen_SpreadMaxR - _default_Pen_SpreadMinR) * ratio;
+          float angle = random(0.0f, 2.0f * pi);
+          float radius = spread * sqrt(random(0.0f, 1.0f));
+          float lateral = penaltyAim.coords[0] + cos(angle) * radius;
+          float height = clamp(penaltyAim.coords[1] + sin(angle) * radius, 0.0f, goalHeight + _default_Pen_AimOverhang);
+          float side = CastPlayer()->GetTeam()->GetSide();
+          Vector3 target(-side * pitchHalfW, lateral, height);
+          command.touchInfo.desiredDirection = (target - CastPlayer()->GetPosition()).GetNormalized(CastPlayer()->GetDirectionVec());
+          command.touchInfo.useAimTarget = true;
+          command.touchInfo.aimLateral = lateral;
+          command.touchInfo.aimHeight = height;
+          command.touchInfo.aimSpeed = _default_Pen_PowerMinSpeed + (_default_Pen_PowerMaxSpeed - _default_Pen_PowerMinSpeed) * ratio;
+        } else {
+          command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
+        }
 
         // prototype: curl/chip shot modifiers (ticket #8)
         bool curlHeld = hid->GetButton(e_ButtonFunction_Dribble);
@@ -472,6 +491,8 @@ void HumanController::Process() {
 
   if (hid->GetButton(e_ButtonFunction_Switch) && hasPossession) team->GetController()->ApplyAttackingRun();
 
+  _UpdatePenaltyAim();
+
 }
 
 Vector3 HumanController::GetDirection() {
@@ -503,7 +524,64 @@ void HumanController::Reset() {
   steadyDirection = Vector3(0, -1, 0);
   previousDirection = Vector3(0, -1, 0);
 
+  penaltyAimActive = false;
+  penaltyAimFrozen = false;
+  penaltyAim = Vector3(0, _default_Pen_ReticleStartY, 0);
+  lastPenaltyAimTime_ms = 0;
+
   fadingTeamPossessionAmount = 1.0;
+}
+
+bool HumanController::_IsPenaltyTaker() {
+  return match->IsInSetPiece() &&
+         team->GetController()->GetPieceTaker() == CastPlayer() &&
+         team->GetController()->GetSetPieceType() == e_SetPiece_Penalty;
+}
+
+void HumanController::_UpdatePenaltyAim() {
+  if (!_IsPenaltyTaker()) {
+    if (penaltyAimActive) {
+      penaltyAimActive = false;
+      penaltyAimFrozen = false;
+      SetYellowDebugPilon(Vector3(0, 0, -100)); // marker reset once the penalty is over
+    }
+    lastPenaltyAimTime_ms = 0;
+    return;
+  }
+
+  unsigned long now = match->GetActualTime_ms();
+  if (!penaltyAimActive) {
+    penaltyAim = Vector3(0, _default_Pen_ReticleStartY, 0);
+    penaltyAimFrozen = false;
+    penaltyAimActive = true;
+    lastPenaltyAimTime_ms = now;
+  }
+
+  // commit the aim the moment the shot button is pressed: the reticle freezes here
+  if (!penaltyAimFrozen && actionMode == 2 && actionButton == e_ButtonFunction_Shot) penaltyAimFrozen = true;
+
+  float dt = (now - lastPenaltyAimTime_ms) / 1000.0f;
+  lastPenaltyAimTime_ms = now;
+  if (dt <= 0.0f || dt > 0.2f) dt = 0.01f;
+
+  if (!penaltyAimFrozen) {
+    Vector3 stick = hid->GetDirection();
+    if (stick.GetLength() < analogStickDeadzone) {
+      // no input: the reticle drifts back to the centre of the goal
+      float returnFactor = clamp(_default_Pen_ReticleReturn * dt, 0.0f, 1.0f);
+      penaltyAim.coords[0] += (0.0f - penaltyAim.coords[0]) * returnFactor;
+      penaltyAim.coords[1] += (_default_Pen_ReticleStartY - penaltyAim.coords[1]) * returnFactor;
+    } else {
+      penaltyAim.coords[0] -= stick.coords[0] * _default_Pen_ReticleSpeed * dt; // screen-right = +lateral
+      penaltyAim.coords[1] += stick.coords[1] * _default_Pen_ReticleSpeed * dt;
+    }
+    penaltyAim.coords[0] = clamp(penaltyAim.coords[0], -(goalHalfWidth + _default_Pen_AimOverhang), goalHalfWidth + _default_Pen_AimOverhang);
+    penaltyAim.coords[1] = clamp(penaltyAim.coords[1], 0.0f, goalHeight + _default_Pen_AimOverhang);
+  }
+
+  // debug marker: a point on the attacker's goal plane (temporary, ticket #9)
+  float side = CastPlayer()->GetTeam()->GetSide();
+  SetYellowDebugPilon(Vector3(-side * pitchHalfW, penaltyAim.coords[0], penaltyAim.coords[1]));
 }
 
 void HumanController::_GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat) {

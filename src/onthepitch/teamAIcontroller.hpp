@@ -49,6 +49,7 @@ class TeamAIController {
     void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1);
     Player *GetPieceTaker() { return taker; }
     e_SetPiece GetSetPieceType() { return setPieceType; }
+    void DebugSetPieceTaker(Player *p) { taker = p; } // prototype #9: force a human set-piece taker
     void ApplyAttackingRun(Player *manualPlayer = 0);
     void ApplyTeamPressure();
     void ApplyKeeperRush();

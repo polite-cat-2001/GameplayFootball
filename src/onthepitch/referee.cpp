@@ -266,6 +266,37 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
 }
 
+void Referee::DebugForcePenalty(int teamID, Player *taker) {
+  // prototype #9: force a penalty for the given team with a chosen (human) taker, so the reticle
+  // can be tested without having to earn a foul. Caller must ensure a clean play state.
+  Team *team = match->GetTeam(teamID);
+  // the penalty spot sits 11 m from the goal this team attacks, i.e. on the defending side
+  Vector3 spot(-team->GetSide() * (pitchHalfW - 11.0f), 0, 0);
+
+  buffer.desiredSetPiece = e_SetPiece_Penalty;
+  buffer.teamID = teamID;
+  buffer.stopTime = match->GetActualTime_ms();
+  buffer.prepareTime = match->GetActualTime_ms();
+  buffer.startTime = match->GetActualTime_ms();
+  buffer.restartPos = spot;
+  buffer.active = true;
+  buffer.endPhase = false;
+
+  Player *previousTaker = team->GetController()->GetPieceTaker();
+  PrepareSetPiece(e_SetPiece_Penalty);
+  buffer.taker = taker;
+  team->GetController()->DebugSetPieceTaker(taker);
+
+  // no run-up in this prototype: put the taker right behind the ball, and push the AI's
+  // initially-chosen taker (placed behind the ball by PrepareSetPiece) out of the camera's way
+  Vector3 behindBall = -Vector3(-team->GetSide(), 0, 0);
+  taker->ResetPosition(spot + behindBall * 0.5f, spot);
+  if (previousTaker && previousTaker != taker) previousTaker->ResetPosition(spot + behindBall * 9.0f, spot);
+
+  match->StartPlay();
+  match->StartSetPiece();
+}
+
 void Referee::AlterSetPiecePrepareTime(unsigned long newTime_ms) {
   if (buffer.active) {
     buffer.prepareTime = newTime_ms;

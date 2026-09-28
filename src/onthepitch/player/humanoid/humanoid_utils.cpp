@@ -460,31 +460,42 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   Vector3 desiredDirection2D = currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D();
   float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
 
+  bool useAimTarget = currentAnim->originatingCommand.touchInfo.useAimTarget;
+
   Vector3 aim = goalCenter;
-  if (fabs(desiredDirection2D.coords[0]) > 0.001f) {
-    float aimT = (goalCenter.coords[0] - from.coords[0]) / desiredDirection2D.coords[0];
-    if (aimT > 0.0f) aim.coords[1] = from.coords[1] + desiredDirection2D.coords[1] * aimT;
+  if (useAimTarget) {
+    // prototype #9: the penalty reticle dictates the target point on the goal plane directly
+    aim.coords[1] = currentAnim->originatingCommand.touchInfo.aimLateral;
+    aim.coords[2] = currentAnim->originatingCommand.touchInfo.aimHeight;
+  } else {
+    if (fabs(desiredDirection2D.coords[0]) > 0.001f) {
+      float aimT = (goalCenter.coords[0] - from.coords[0]) / desiredDirection2D.coords[0];
+      if (aimT > 0.0f) aim.coords[1] = from.coords[1] + desiredDirection2D.coords[1] * aimT;
+    }
+    aim.coords[1] = clamp(aim.coords[1], -goalHalfWidth * 1.5f, goalHalfWidth * 1.5f);
   }
-  aim.coords[1] = clamp(aim.coords[1], -goalHalfWidth * 1.5f, goalHalfWidth * 1.5f);
-  bool groundShot = charge < _default_Shot_GroundChargeMax;
+  bool groundShot = !useAimTarget && charge < _default_Shot_GroundChargeMax;
   // open_football parity: a short tap is a driven ground shot given a strong fixed launch
   // speed, so it reads as a hard low drive rather than a weak roller
   if (groundShot) power = std::max(power, _default_Shot_GroundPower);
-  float aimHeight = groundShot ? _default_Shot_GroundAimY
-                               : _default_Shot_AimYMin + (goalHeight + _default_Shot_OverLift - _default_Shot_AimYMin) * charge;
-  aim.coords[2] = aimHeight;
+  if (!useAimTarget) {
+    float aimHeight = groundShot ? _default_Shot_GroundAimY
+                                 : _default_Shot_AimYMin + (goalHeight + _default_Shot_OverLift - _default_Shot_AimYMin) * charge;
+    aim.coords[2] = aimHeight;
+  }
 
   Vector3 aimHoriz = Vector3(aim.coords[0] - from.coords[0], aim.coords[1] - from.coords[1], 0.0f);
   float aimDist = std::max(aimHoriz.GetLength(), 1.0f);
   Vector3 aimDir = aimHoriz.GetNormalized(desiredDirection2D);
   float horizontalSpeed = std::max(power, 0.001f);
+  if (useAimTarget) horizontalSpeed = std::max(currentAnim->originatingCommand.touchInfo.aimSpeed, 0.001f);
   Vector3 desiredShot;
   if (groundShot) {
     desiredShot = aimDir * horizontalSpeed;
   } else {
     float flightTime = std::max(aimDist / horizontalSpeed, 0.001f);
     float verticalSpeed = (aim.coords[2] - from.coords[2]) / flightTime + 0.5f * 9.81f * flightTime;
-    verticalSpeed = clamp(verticalSpeed, 0.0f, _default_Shot_MaxLift);
+    verticalSpeed = clamp(verticalSpeed, 0.0f, useAimTarget ? 100.0f : _default_Shot_MaxLift);
     desiredShot = aimDir * horizontalSpeed + Vector3(0, 0, verticalSpeed);
   }
   if (Verbose()) {
@@ -522,6 +533,9 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   float worstCaseFactor = random(0.0f, 1.0f);
   worstCaseFactor =
       std::pow(worstCaseFactor, player->GetStat("technical_shot") * 0.7f);
+  // prototype #9: a penalty goes exactly to the sampled reticle point (spread is applied there),
+  // so skip the skill-based worst-case deviation for it
+  if (useAimTarget) worstCaseFactor = 0.0f;
 
   Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
                  worstCaseShot * worstCaseFactor;
@@ -536,14 +550,17 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   xRot = -currentAnim->originatingCommand.touchInfo.desiredDirection.coords[1] * 20.0f + (random(-20, 20) * randomCurveFactor);
   yRot = -currentAnim->originatingCommand.touchInfo.desiredDirection.coords[0] * 20.0f + (random(-20, 20) * randomCurveFactor);
 
-  // lateral curve
-  radian bodyTouchAngle = spatialState.bodyDirectionVec.GetAngle2D(shot) / pi;
-  if (fabs(bodyTouchAngle) > 0.5f) bodyTouchAngle = (1.0f - fabs(bodyTouchAngle)) * signSide(bodyTouchAngle);
-  bodyTouchAngle *= 2.0f;
-  //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
-  radian amount = bodyTouchAngle * 0.25f;
-  shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
-  zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+  // lateral curve (skipped for the penalty reticle: the shot must go where the marker points)
+  radian bodyTouchAngle = 0.0f;
+  if (!useAimTarget) {
+    bodyTouchAngle = spatialState.bodyDirectionVec.GetAngle2D(shot) / pi;
+    if (fabs(bodyTouchAngle) > 0.5f) bodyTouchAngle = (1.0f - fabs(bodyTouchAngle)) * signSide(bodyTouchAngle);
+    bodyTouchAngle *= 2.0f;
+    //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
+    radian amount = bodyTouchAngle * 0.25f;
+    shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
+    zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+  }
 
   // prototype: curl/chip shot types (ticket #8)
   e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;

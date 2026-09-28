@@ -36,6 +36,10 @@ class HumanController : public PlayerController {
 
     void _GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat);
 
+    // prototype #9: penalty reticle state (lateral, height) on the attacker's goal plane
+    bool _IsPenaltyTaker();
+    void _UpdatePenaltyAim();
+
     IHIDevice *hid;
 
     // set when a contextual button (example: pass/defend button) is pressed
@@ -51,6 +55,11 @@ class HumanController : public PlayerController {
     Vector3 previousDirection;
     Vector3 steadyDirection;
     int lastSteadyDirectionSnapshotTime_ms;
+
+    bool penaltyAimActive;
+    bool penaltyAimFrozen;
+    Vector3 penaltyAim; // coords[0] = lateral (Y on the goal plane), coords[1] = height (Z)
+    int lastPenaltyAimTime_ms;
 
 };
 
