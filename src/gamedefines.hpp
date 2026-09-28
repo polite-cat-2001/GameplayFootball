@@ -334,6 +334,19 @@ const float _default_FreeKick_LaneRunupHalfWidth = 1.5f; // half width of the co
 const float _default_FreeKick_LaneRunupBack = 5.0f;      // clear this far behind the ball (taker side, m)
 const float _default_FreeKick_LaneForward = 30.0f;       // clear this far ahead toward the goal (m)
 
+// Set-piece kicker run-up (wayfinder #17 prototype): the penalty taker starts behind the ball
+// instead of standing right next to it, and runs in before striking. Distances echo
+// open_football (PEN_RUNUP_DIST = 2.8 m) but a little shorter here so GF's short shot clips
+// close the last metre. Tuned visually; see ticket #17.
+const float _default_SetPiece_RunupDist = 2.2f;          // taker start distance behind the ball (m)
+const float _default_SetPiece_RunupFootLateral = 0.4f;   // start offset sideways, under the standing foot (m)
+const float _default_SetPiece_KickReach = 1.1f;          // stop running up within this range of the ball (m)
+// Penalty run-up / camera corridor: the fixed penalty camera looks down this lane behind the
+// ball, so teammates must be kept out of it (they otherwise block the view on the way in).
+const float _default_SetPiece_PenCorridorHalfWidth = 1.5f; // corridor half width behind the ball (m)
+const float _default_SetPiece_PenCorridorBack = 6.0f;      // clear this far behind the ball (m)
+const float _default_SetPiece_PenCorridorMargin = 0.4f;    // extra clearance beyond the edge (m)
+
 enum e_TeamRole {
   e_TeamRole_Captain,
   e_TeamRole_PenaltyTaker,

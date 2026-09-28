@@ -61,6 +61,10 @@ class HumanController : public PlayerController {
     Vector3 penaltyAim; // coords[0] = lateral (Y on the goal plane), coords[1] = height (Z)
     int lastPenaltyAimTime_ms;
 
+    // prototype #17: set-piece run-up. While true the taker runs up to the ball and the kick is
+    // held back until he reaches it.
+    bool setPieceRunupActive;
+
 };
 
 #endif

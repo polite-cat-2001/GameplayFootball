@@ -94,11 +94,21 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
   // execute buffer?
 
+  // prototype #17: penalty run-up. While the taker is still far from the ball, keep the run-up
+  // flag set and hold the kick back; it is released (flag cleared) once he has reached the ball.
+  if (!_IsPenaltyTaker() || match->GetBallRetainer() == player) {
+    setPieceRunupActive = false;
+  } else if (actionMode == 2 && actionButton == e_ButtonFunction_Shot) {
+    float ballDist = (match->GetBall()->Predict(0).Get2D() - CastPlayer()->GetPosition()).GetLength();
+    if (ballDist > _default_SetPiece_KickReach) setPieceRunupActive = true;
+  }
+
   if (actionMode == 2) {
 
-    if (!hid->GetButton(actionButton) ||
+    if (!setPieceRunupActive &&
+        (!hid->GetButton(actionButton) ||
         (hid->GetButton(actionButton) && gauge_ms > 500) || // allow anim to kick in before queue is complete (before button is released), it will usually touch ball after the remaining time anyway, so we still have time to add more power, yet still respond as fast as possible
-        (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0)) {
+        (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0))) {
 
       int baseTime_ms = 60; // substract a little because we can't really press a button shorter than this
       // open_football parity: shots charge over KICK_CHARGE_MAX_TIME (0.5 s); other actions keep 1 s
@@ -264,8 +274,28 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
   }
 
   // set piece?
-  if ((match->IsInSetPiece() && team->GetController()->GetPieceTaker() == player && (actionMode != 2 || (actionMode == 2 && hid->GetButton(actionButton)) || match->GetBallRetainer() == player)) ||
+  if ((match->IsInSetPiece() && team->GetController()->GetPieceTaker() == player && (actionMode != 2 || (actionMode == 2 && hid->GetButton(actionButton)) || match->GetBallRetainer() == player || setPieceRunupActive)) ||
       (match->IsInSetPiece() && team->GetController()->GetPieceTaker() != player && match->GetBallRetainer() == 0)) {
+    // wayfinder #17 prototype: penalty run-up. While setPieceRunupActive, the taker runs up to the
+    // ball instead of standing still; the kick is held back (see the buffer block above) until he
+    // is within reach, then fires from contact range, so the existing penalty shot anim completes
+    // the touch. The run-up itself uses the normal movement system (a sprint command toward the ball).
+    if (setPieceRunupActive && team->GetController()->GetSetPieceType() == e_SetPiece_Penalty) {
+      Vector3 toBall = match->GetBall()->Predict(0).Get2D() - CastPlayer()->GetPosition();
+      if (toBall.GetLength() > _default_SetPiece_KickReach) {
+        PlayerCommand runupCommand;
+        runupCommand.desiredFunctionType = e_FunctionType_Movement;
+        runupCommand.useDesiredMovement = true;
+        runupCommand.useDesiredLookAt = true;
+        runupCommand.desiredDirection = toBall.GetNormalized(CastPlayer()->GetDirectionVec());
+        runupCommand.desiredVelocityFloat = sprintVelocity;
+        runupCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+        commandQueue.push_back(runupCommand);
+        return;
+      }
+      // arrived: clear the flag so the next RequestCommand fires the held-back kick from range
+      setPieceRunupActive = false;
+    }
     _SetPieceCommand(commandQueue);
     //if (team->GetController()->GetPieceTaker() == player) printf("waiting to take set piece!\n");
     //if (team->GetController()->GetPieceTaker() != player) printf("waiting for teammate to take set piece!\n");
@@ -528,6 +558,8 @@ void HumanController::Reset() {
   penaltyAimFrozen = false;
   penaltyAim = Vector3(0, _default_Pen_ReticleStartY, 0);
   lastPenaltyAimTime_ms = 0;
+
+  setPieceRunupActive = false;
 
   fadingTeamPossessionAmount = 1.0;
 }

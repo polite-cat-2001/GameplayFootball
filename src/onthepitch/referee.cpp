@@ -344,6 +344,33 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
       }
     }
   }
+
+  // Penalty run-up / camera corridor: the fixed penalty camera looks down the lane behind the
+  // ball, so teammates lined up there block the view on the way in. Push everyone but the taker
+  // and the keepers out of a corridor of constant half width behind the ball. Wayfinder #17.
+  if (setPiece == e_SetPiece_Penalty) {
+    Vector3 apex = match->GetBall()->Predict(0).Get2D();
+    Team *takerTeam = match->GetTeam(buffer.teamID);
+    Vector3 behind(takerTeam->GetSide(), 0, 0);
+    Vector3 perp(-behind.coords[1], behind.coords[0], 0.0f);
+    for (int t = 0; t < 2; t++) {
+      std::vector<Player*> players;
+      match->GetTeam(t)->GetActivePlayers(players);
+      for (unsigned int i = 0; i < players.size(); i++) {
+        Player *p = players.at(i);
+        if (p == buffer.taker) continue;
+        if (p->GetFormationEntry().role == e_PlayerRole_GK) continue;
+        Vector3 rel = p->GetPosition() - apex; rel.coords[2] = 0.0f;
+        float d = rel.GetDotProduct(behind);
+        if (d < -0.5f || d > _default_SetPiece_PenCorridorBack) continue; // only the lane behind the ball
+        float s = rel.GetDotProduct(perp);
+        float half = _default_SetPiece_PenCorridorHalfWidth;
+        if (s <= -(half + _default_SetPiece_PenCorridorMargin) || s >= (half + _default_SetPiece_PenCorridorMargin)) continue;
+        float newS = (s >= 0.0f ? 1.0f : -1.0f) * (half + _default_SetPiece_PenCorridorMargin);
+        p->ResetPosition(apex + behind * d + perp * newS, apex);
+      }
+    }
+  }
 }
 
 void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {

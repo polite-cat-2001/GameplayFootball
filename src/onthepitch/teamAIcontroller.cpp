@@ -931,7 +931,18 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
       taker->SelectRetainAnim();
     }
     if (setPiece == e_SetPiece_Penalty) {
-      taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + Vector3(team->GetSide(), 0, 0) * 3.0, match->GetBall()->Predict(0).Get2D());
+      // wayfinder #17 prototype: a human-controlled taker starts behind the ball and runs up to
+      // it (HumanController drives the approach while the kick button is held). The AI taker keeps
+      // the old close position, since its penalty branch strikes without a run-up.
+      if (team->IsHumanControlled(taker->GetID())) {
+        Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
+        Vector3 behind(team->GetSide(), 0, 0);
+        Vector3 perp(-behind.coords[1], behind.coords[0], 0.0f);
+        Vector3 start = ballPos + behind * _default_SetPiece_RunupDist + perp * _default_SetPiece_RunupFootLateral;
+        taker->ResetPosition(start, ballPos);
+      } else {
+        taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + Vector3(team->GetSide(), 0, 0) * 3.0, match->GetBall()->Predict(0).Get2D());
+      }
     }
 
   } else taker = 0;
