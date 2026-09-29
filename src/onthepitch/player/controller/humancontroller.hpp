@@ -70,10 +70,10 @@ class HumanController : public PlayerController {
     int lastSteadyDirectionSnapshotTime_ms;
 
     // penalty reticle state (lateral, height) on the attacker's goal plane
-    bool penaltyAimActive;
-    bool penaltyAimFrozen;
-    setpiecelogic::PenaltyAim penaltyAim;
-    unsigned long lastPenaltyAimTime_ms;
+    bool penaltyAimActive = false;
+    bool penaltyAimFrozen = false;
+    setpiecelogic::PenaltyAim penaltyAim = setpiecelogic::DefaultPenaltyAim();
+    unsigned long lastPenaltyAimTime_ms = 0;
 
 };
 

@@ -534,6 +534,9 @@ void HumanController::Reset() {
   steadyDirection = Vector3(0, -1, 0);
   previousDirection = Vector3(0, -1, 0);
 
+  // do not strand the reticle marker: Reset() runs on every control switch (SetExternalController),
+  // which can happen before the post-penalty _UpdatePenaltyAim sees the taker role end
+  if (penaltyAimActive) SetYellowDebugPilon(Vector3(0, 0, -100));
   penaltyAimActive = false;
   penaltyAimFrozen = false;
   penaltyAim = setpiecelogic::DefaultPenaltyAim();
