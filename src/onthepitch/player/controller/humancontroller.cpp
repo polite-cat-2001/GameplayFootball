@@ -274,10 +274,14 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     // ball control?
     bool keepCurrentBodyDirection = false;
     // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
+    size_t knockQueueSize = commandQueue.size();
     _BallControlCommand(commandQueue, idleTurnToOpponentGoal, knockOn, true, keepCurrentBodyDirection);
 
     // trap?
     _TrapCommand(commandQueue, idleTurnToOpponentGoal, knockOn);
+
+    // one knock per double-tap: consume the modifier as soon as a touch command carried it
+    if (knockOn && commandQueue.size() > knockQueueSize) knockOnArmed = false;
 
     // reload original input
     if (actionMode == 2) {
@@ -357,17 +361,17 @@ void HumanController::Process() {
 
   _CalculateSituation();
 
-  // double-tap Sprint arms knock-on; a single tap stays a plain sprint
+  // double-tap Sprint arms a one-shot knock-on; a single tap stays a plain sprint
   int sprintTime_ms = match->GetActualTime_ms();
   bool sprintPressed = hid->GetButton(e_ButtonFunction_Sprint);
   if (sprintPressed && !hid->GetPreviousButtonState(e_ButtonFunction_Sprint)) {
     if (sprintTime_ms - lastSprintTapTime_ms <= sprintDoubleTapWindow_ms) {
       knockOnArmed = true;
-      knockOnReleaseGraceUntil_ms = sprintTime_ms + sprintDoubleTapWindow_ms;
+      knockOnExpireTime_ms = sprintTime_ms + sprintDoubleTapWindow_ms;
     }
     lastSprintTapTime_ms = sprintTime_ms;
   }
-  if (knockOnArmed && !sprintPressed && sprintTime_ms > knockOnReleaseGraceUntil_ms) knockOnArmed = false;
+  if (knockOnArmed && sprintTime_ms > knockOnExpireTime_ms) knockOnArmed = false;
 
   // action?
 
@@ -502,7 +506,7 @@ void HumanController::Reset() {
 
   lastSprintTapTime_ms = -100000;
   knockOnArmed = false;
-  knockOnReleaseGraceUntil_ms = 0;
+  knockOnExpireTime_ms = 0;
 
   lastSwitchTime_ms = -10000;
   lastSwitchTimeDuration_ms = 300;
