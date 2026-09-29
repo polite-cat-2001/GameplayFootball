@@ -38,9 +38,10 @@ const float analogStickDeadzone = 0.3f;
 
 // Max gap between two Sprint presses that counts as a double-tap; a single press
 // stays a plain sprint (see HumanController).
-const int sprintDoubleTapWindow_ms = 300;
-// How long an armed knock-on waits for the actual ball touch before it lapses.
-const int sprintKnockOnWindow_ms = 800;
+const int sprintDoubleTapWindow_ms = 400;
+// How long a double-tap keeps feeding the knock-on modifier to ball touches,
+// long enough to span one ball-control animation and its touch frame.
+const int sprintKnockOnWindow_ms = 600;
 
 // gamepad layout presets (which face button does what). PES6 style is the default.
 enum e_ControllerLayout {

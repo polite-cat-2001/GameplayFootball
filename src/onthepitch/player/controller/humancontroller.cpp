@@ -274,17 +274,10 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     // ball control?
     bool keepCurrentBodyDirection = false;
     // sidestep dribble disabled for now, too quirky: if (hid->GetButton(e_ButtonFunction_Dribble)) keepCurrentBodyDirection = true;
-    size_t knockQueueSize = commandQueue.size();
     _BallControlCommand(commandQueue, idleTurnToOpponentGoal, knockOn, true, keepCurrentBodyDirection);
 
     // trap?
     _TrapCommand(commandQueue, idleTurnToOpponentGoal, knockOn);
-
-    // remember the pre-touch state; Process disarms the one-shot once this player touches the ball
-    if (knockOn && !knockOnBaselineSet && commandQueue.size() > knockQueueSize) {
-      knockOnTouchBaseline_ms = CastPlayer()->GetLastTouchTime_ms();
-      knockOnBaselineSet = true;
-    }
 
     // reload original input
     if (actionMode == 2) {
@@ -371,18 +364,11 @@ void HumanController::Process() {
     if (sprintTime_ms - lastSprintTapTime_ms <= sprintDoubleTapWindow_ms) {
       knockOnArmed = true;
       knockOnExpireTime_ms = sprintTime_ms + sprintKnockOnWindow_ms;
-      knockOnBaselineSet = false;
     }
     lastSprintTapTime_ms = sprintTime_ms;
   }
-  if (knockOnArmed) {
-    // consume on the actual touch, or give up after the knock-on window
-    if (sprintTime_ms > knockOnExpireTime_ms ||
-        (knockOnBaselineSet && CastPlayer()->GetLastTouchTime_ms() > knockOnTouchBaseline_ms)) {
-      knockOnArmed = false;
-      knockOnBaselineSet = false;
-    }
-  }
+  // the modifier is fed to ball touches for the duration of the knock-on window
+  if (knockOnArmed && sprintTime_ms > knockOnExpireTime_ms) knockOnArmed = false;
 
   // action?
 
@@ -518,8 +504,6 @@ void HumanController::Reset() {
   lastSprintTapTime_ms = -100000;
   knockOnArmed = false;
   knockOnExpireTime_ms = 0;
-  knockOnBaselineSet = false;
-  knockOnTouchBaseline_ms = 0;
 
   lastSwitchTime_ms = -10000;
   lastSwitchTimeDuration_ms = 300;
