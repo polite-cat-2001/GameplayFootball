@@ -137,6 +137,8 @@ class Match {
     void GetSunParams(Vector3 &position, Vector3 &color);
     void GetCameraState(Quaternion &cameraOrientation, Quaternion &nodeOrientation, Vector3 &nodePosition, float &fov, float &nearCap, float &farCap);
     void SetSunParams(const Vector3 &position, const Vector3 &color);
+    // Debug (F2): park a non-human team's outfield players off the pitch, or restore them (keeper stays).
+    void DebugParkOpponents(bool park);
     // Host pause options: sun (weather) + kit numbers, mirrored to clients.
     void GetMatchEnvironment(NetMatchEnvironment &environment);
     void BroadcastMatchOptions();
@@ -396,6 +398,7 @@ class Match {
     bool pause;
     e_MatchPhase matchPhase; // 0 - first half; 1 - second half; 2 - 1st extra time; 3 - 2nd extra time; 4 - penalties
     bool inPlay;
+    bool debugRemoveOpponents; // F2 debug: non-human outfield players parked off the pitch
     e_SetPiece setPieceType;
     bool goalScored; // true after goal scored, false again after next match state change
     bool ballIsInGoal;
