@@ -36,6 +36,10 @@ const bool quantizeDirection = true;
 
 const float analogStickDeadzone = 0.3f;
 
+// Two presses of the Sprint button within this window arm the knock-on modifier;
+// a single press stays a plain sprint (see HumanController).
+const int sprintDoubleTapWindow_ms = 300;
+
 // gamepad layout presets (which face button does what). PES6 style is the default.
 enum e_ControllerLayout {
   e_ControllerLayout_PES,

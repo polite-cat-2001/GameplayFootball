@@ -255,7 +255,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     bool idleTurnToOpponentGoal = false;
     bool knockOn = false;
     if (hid->GetButton(e_ButtonFunction_Dribble)) idleTurnToOpponentGoal = true;
-    if (!IsChargingShotVariant() && hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) knockOn = true;
+    if (!IsChargingShotVariant() && knockOnArmed) knockOn = true;
 
     // special adapted input for ballcontrol and trap, when we have shoot/pass buffers
     Vector3 inputDirectionSave2 = inputDirection;
@@ -318,7 +318,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 */
 
     // super cancel
-    if (!IsChargingShotVariant() && hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) {
+    if (!IsChargingShotVariant() && hid->GetButton(e_ButtonFunction_Special)) {
       if (!hasBestPossession) {
         command.desiredDirection = inputDirection;
         command.desiredVelocityFloat = inputVelocityFloat;
@@ -356,6 +356,18 @@ void HumanController::Process() {
   }
 
   _CalculateSituation();
+
+  // double-tap Sprint arms knock-on; a single tap stays a plain sprint
+  int sprintTime_ms = match->GetActualTime_ms();
+  bool sprintPressed = hid->GetButton(e_ButtonFunction_Sprint);
+  if (sprintPressed && !hid->GetPreviousButtonState(e_ButtonFunction_Sprint)) {
+    if (sprintTime_ms - lastSprintTapTime_ms <= sprintDoubleTapWindow_ms) {
+      knockOnArmed = true;
+      knockOnReleaseGraceUntil_ms = sprintTime_ms + sprintDoubleTapWindow_ms;
+    }
+    lastSprintTapTime_ms = sprintTime_ms;
+  }
+  if (knockOnArmed && !sprintPressed && sprintTime_ms > knockOnReleaseGraceUntil_ms) knockOnArmed = false;
 
   // action?
 
@@ -461,7 +473,7 @@ void HumanController::Process() {
     }
   }
 
-  if (hid->GetButton(e_ButtonFunction_Switch) && hasPossession) team->GetController()->ApplyAttackingRun();
+  if (hid->GetButton(e_ButtonFunction_Special) && hasPossession) team->GetController()->ApplyAttackingRun();
 
 }
 
@@ -487,6 +499,10 @@ void HumanController::Reset() {
   actionButton = e_ButtonFunction_ShortPass;
   actionBufferTime_ms = 0;
   pendingShotType = e_ShotType_Normal;
+
+  lastSprintTapTime_ms = -100000;
+  knockOnArmed = false;
+  knockOnReleaseGraceUntil_ms = 0;
 
   lastSwitchTime_ms = -10000;
   lastSwitchTimeDuration_ms = 300;
@@ -515,7 +531,7 @@ void HumanController::_GetHidInput(Vector3 &rawInputDirection, float &rawInputVe
   } else {
     if (hid->GetButton(e_ButtonFunction_Sprint)) rawInputVelocityFloat = sprintVelocity;
     else if (hid->GetButton(e_ButtonFunction_Dribble)) rawInputVelocityFloat = dribbleVelocity;
-    else if (hid->GetButton(e_ButtonFunction_Switch) && match->GetDesignatedPossessionPlayer() == CastPlayer()) rawInputVelocityFloat = idleVelocity;
+    else if (hid->GetButton(e_ButtonFunction_Special) && match->GetDesignatedPossessionPlayer() == CastPlayer()) rawInputVelocityFloat = idleVelocity;
     else rawInputVelocityFloat = walkVelocity;
     assert(rawInputDirection.GetLength() > 0.001f);
     rawInputDirection.Normalize(); // hid should do this, but still

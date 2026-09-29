@@ -2169,3 +2169,30 @@ GitHub blocking-зависимостями. 21 тикет помечен `ready-
 - Эталоны `tools/determinism` не трогались: ввод хеш не двигает, `shotType` пока никем не
   читается. Сборка Release x86 зелёная. Вики: секция «Варианты удара (curl/chip)» в `docs/wiki/матч.md`.
 
+## [2026-09-29] feat | #22: переезд биндов на Special и двойной тап Sprint
+
+Тикет #22 (часть распила #19–#40, фаза 1) закрыт на ветке `of_port`. В
+`HumanController` четыре механики переехали с комбо `Dribble`+`Sprint`:
+
+- **attacking-run** (`Process`, с мячом) и **стоп-на-месте** (`_GetHidInput`, designated =
+  управляемый) — на `Special` (`L2` / `Z`).
+- **super-cancel** (`RequestCommand`, `!hasBestPossession`) — на `Special`.
+- **knock-on** — на **двойной тап `Sprint`** (`R1` / `E`): новая инфраструктура двойного тапа в
+  `HumanController` (`lastSprintTapTime_ms` / `knockOnArmed` / `knockOnReleaseGraceUntil_ms`) и
+  константа `sprintDoubleTapWindow_ms = 300` в `src/gamedefines.hpp`. Второй тап в окне
+  вооружает `e_PlayerCommandModifier_KnockOn`; флаг держится, пока `Sprint` удержан, и ещё окно
+  после второго тапа, если кнопку отпустили раньше. Одиночный тап — обычный спринт.
+- Комбо `Dribble`+`Sprint` удалено полностью; `Dribble` остаётся ведением и модификатором curl,
+  `Switch` — переключением игрока и модификатором chip.
+- Согласованность с #21: `IsChargingShotVariant` теперь гейтит новые триггеры — knock-on
+  (двойной тап) и super-cancel (`Special`); подавление edge-переключения при заряде chip в
+  `Team::Process` не тронуто.
+- **Не переносилось**: баллистика/curl/chip (#23/#24), раскладки/sideselect (#20),
+  протокол/снапшот (#19).
+
+Проверка: Release x86 собран зелёным; `determinism_runner check
+7134def2c0863d4978bb18742b1f173358e4bf66` — без изменений (харнесс `HumanController` не
+запускает). Вики: «Ручной режим и бинды» в `docs/wiki/матч.md`, `sprintDoubleTapWindow_ms` в
+`docs/wiki/константы.md`, полевой хвост — в `docs/wiki/открытые-вопросы.md`. Вручную в открытой
+игре бинды ещё не проверялись.
+
