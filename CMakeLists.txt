@@ -254,6 +254,7 @@ add_library(gamelib STATIC
         src/onthepitch/ball.cpp
         src/onthepitch/match.cpp
         src/onthepitch/referee.cpp
+        src/onthepitch/setpiece/setpiecelogic.cpp
         src/onthepitch/AIsupport/mentalimage.cpp
         src/onthepitch/AIsupport/AIfunctions.cpp
         src/onthepitch/proceduralpitch.cpp

@@ -5,6 +5,7 @@
 #include "humancontroller.hpp"
 
 #include "../../AIsupport/AIfunctions.hpp"
+#include "../../setpiece/setpiecelogic.hpp"
 
 #include "../../../main.hpp"
 
@@ -101,7 +102,9 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0)) {
 
       int baseTime_ms = 60; // substract a little because we can't really press a button shorter than this
-      float gaugeFactor = (gauge_ms - baseTime_ms) * (1.0f / float(1000 - baseTime_ms));
+      // shots charge over KICK_CHARGE_MAX_TIME; other actions keep the 1 s gauge
+      float gaugeScale_ms = (actionButton == e_ButtonFunction_Shot) ? KICK_CHARGE_MAX_TIME * 1000.0f : 1000.0f;
+      float gaugeFactor = (gauge_ms - baseTime_ms) * (1.0f / (gaugeScale_ms - baseTime_ms));
       gaugeFactor = clamp(gaugeFactor, 0.0f, 1.0f);
 
       // action button released!
@@ -188,7 +191,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         if (GetHIDevice()->GetDeviceType() == e_HIDeviceType_Keyboard) command.touchInfo.autoDirectionBias = 1.0f;
         command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
         command.touchInfo.desiredPower = clamp(pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
-        command.touchInfo.shotType = pendingShotType;
+        setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
 
         commandQueue.push_back(command);
 

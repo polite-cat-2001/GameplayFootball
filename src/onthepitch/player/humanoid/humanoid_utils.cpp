@@ -21,6 +21,7 @@
 #include "../../../main.hpp"
 
 #include "../../match.hpp"
+#include "../../setpiece/setpiecelogic.hpp"
 
 #include "humanoid.hpp"
 
@@ -454,8 +455,23 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
 
   // best case result
 
-  float desiredHeight = 0.05f;
-  Vector3 desiredShot = (currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D() + Vector3(0, 0, desiredHeight)).GetNormalized() * power;
+  // Ballistic launch toward a point on the opponent goal line (ported from open_football
+  // ShotSystem). The aim height scales with charge unless a controller planned one, and a
+  // short tap is a driven flat shot.
+  Vector3 from = ball->Predict(0);
+  Vector3 desiredDirection2D = currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D();
+  float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
+  bool groundShot = setpiecelogic::IsGroundShot(charge);
+
+  float aimHeight = currentAnim->originatingCommand.touchInfo.useAimHeight
+                        ? currentAnim->originatingCommand.touchInfo.aimHeight
+                        : setpiecelogic::CalculateAimHeight(charge);
+  float aimLateral = setpiecelogic::CalculateAimLateral(from.coords[0], from.coords[1], desiredDirection2D.coords[0], desiredDirection2D.coords[1], player->GetTeam()->GetSide());
+  Vector3 aim(player->GetTeam()->GetSide() * -pitchHalfW, aimLateral, aimHeight);
+
+  // a short tap is given a strong fixed launch speed so it reads as a hard low drive
+  if (groundShot) power = std::max(power, _default_Shot_GroundPower);
+  Vector3 desiredShot = setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, power, groundShot, _default_Shot_MaxLift);
   if (Verbose()) {
     desiredShot.Print();
     printf("^ shot: desired\n");
@@ -513,6 +529,22 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   radian amount = bodyTouchAngle * 0.25f;
   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
   zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+
+  // shot variants: curl bends the ball with planned lateral spin, chip trades horizontal
+  // power for a fixed high arc
+  e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
+  if (shotType == e_ShotType_Curl) {
+    radian curlSign = (radian)signSide(bodyTouchAngle);
+    shot.Rotate2D(curlSign * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
+    zRot = -curlSign * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
+  } else if (shotType == e_ShotType_Chip) {
+    shot.coords[2] = 0.0f;
+    shot *= _default_Shot_Chip_HorizFactor;
+    shot.coords[2] = _default_Shot_Chip_Loft;
+  }
+
+  // a driven ground shot stays flat (its ballistic launch has no vertical speed)
+  if (groundShot && shotType != e_ShotType_Chip) shot.coords[2] = 0.0f;
 
   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
 

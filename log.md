@@ -2271,3 +2271,30 @@ controlled collision, отклонённый requeue), а окно детект�
 Вики: [[сеть]] (v15, идентичность стандарта), [[матч]] (`setPieceType`), [[константы]].
 Сборка Release x86 зелёная; `lanmatchtest` PASS (42), `nettest` PASS (59).
 
+## [2026-09-29] session | #23: баллистика удара и curl/chip (общий расчёт)
+
+Тикет #23 (распил #19–#40, фаза 2) закрыт на ветке `of_port`: расчёт удара вынесен в чистый
+модуль и приведён к спеке §2/§7.
+
+- Новый `src/onthepitch/setpiece/setpiecelogic.{hpp,cpp}` — чистые функции без `Match`/`Player`
+  (headless-пригодны): `IsGroundShot`, `CalculateAimHeight`, `CalculateAimLateral`,
+  `CalculateShotVelocity` и планировщик `PlanShot`. Отдаёт направление/мощность/высоту/тип.
+- `Humanoid::GetShotVector`: вместо фиксированной высоты `0.05` — баллистический пуск в точку
+  на линии ворот (латераль клампится у створа), высота растёт с зарядом
+  (`_default_Shot_AimYMin` → `goalHeight + _default_Shot_OverLift`), вертикаль из
+  `vz = Δz/t + ½g·t` с потолком `_default_Shot_MaxLift`; короткий тап — низом не ниже
+  `_default_Shot_GroundPower`. Curl — доворот `_default_Shot_Curl_AimOut` + вращение
+  `_default_Shot_Curl_ZRot` (низом вертикаль 0, вращение остаётся); chip — дуга
+  `_default_Shot_Chip_Loft` × `_default_Shot_Chip_HorizFactor`.
+- `TouchInfo` получил `aimHeight`/`useAimHeight`; `HumanController` и `ElizaController`
+  (пенальти) зовут `PlanShot` — один путь для человека и ИИ. `_default_Shot_AutoDirection`
+  0.2 → 0.74. Заряд удара — `KICK_CHARGE_MAX_TIME` 0.5 с (пасы 1 с), автовыстрел на полном.
+- Константы добавлены в `src/gamedefines.hpp`; `setpiecelogic.cpp` подключён в `gamelib`.
+
+Детерминизм: `tools/determinism` за 5000 шагов не совершает ни одного удара (`GetShotVector`
+не вызывается), поэтому хеш не сдвинулся (`3b9fa5f2…`, как после #19) — эталоны не трогали,
+перегенерация за #40. Ручная проверка удара (низом/верхом, короткий тап, curl/chip) остаётся.
+
+Вики: [[матч]] (расчёт траектории), [[константы]] (секция удара, +дефолт ассиста),
+[[открытые-вопросы]] (хвост не покрывает удар). Сборка Release x86 зелёная.
+

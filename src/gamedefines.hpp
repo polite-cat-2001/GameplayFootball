@@ -64,7 +64,23 @@ const float _default_ThroughPass_AutoDirection = 0.2f;
 const float _default_ThroughPass_AutoPower = 0.7f;
 const float _default_HighPass_AutoDirection = 0.2f;
 const float _default_HighPass_AutoPower = 0.5f;
-const float _default_Shot_AutoDirection = 0.2f;
+const float _default_Shot_AutoDirection = 0.74f;
+
+// Curl/chip shot feel and ballistic launch (spec 2026-09-29 §7). Tune by playing.
+const float _default_Shot_Curl_ZRot = 90.0f;        // lateral spin magnitude for a curled shot
+const float _default_Shot_Curl_AimOut = 0.1f;       // radians to aim outside the target so the curve bends back in
+const float _default_Shot_Chip_HorizFactor = 0.55f; // chip trades horizontal power for height
+const float _default_Shot_Chip_Loft = 8.0f;         // vertical launch speed for a chip (m/s)
+const float _default_Shot_AimYMin = 0.8f;           // aim height at zero charge (m)
+const float _default_Shot_OverLift = 3.5f;          // full charge may aim this far above the crossbar (m)
+const float _default_Shot_GroundChargeMax = 0.35f;  // below this charge (desiredPower scale) the shot is driven flat
+const float _default_Shot_GroundAimY = 0.25f;       // aim height for a driven flat shot (m)
+const float _default_Shot_MaxLift = 6.0f;           // cap on vertical launch speed (m/s), keeps short-range shots down
+const float _default_Shot_GroundPower = 60.0f;      // driven low shot gets at least this horizontal speed (m/s)
+const float _default_Shot_Gravity = 9.81f;          // vertical ballistic acceleration (m/s^2)
+const float _default_Shot_AimLateralMargin = 1.5f;  // aim may overshoot the posts by this many goal half-widths
+// Shots charge over this time; other actions keep the 1 s gauge (HumanController).
+const float KICK_CHARGE_MAX_TIME = 0.5f;            // seconds
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
@@ -176,6 +192,8 @@ struct TouchInfo {
     forcedTargetPlayer = 0;
     desiredPower = 0;
     shotType = e_ShotType_Normal;
+    aimHeight = 0;
+    useAimHeight = false;
   }
 
   Vector3         inputDirection;
@@ -190,6 +208,11 @@ struct TouchInfo {
   Player          *forcedTargetPlayer; // null == do not use
 
   e_ShotType      shotType; // curl/chip modifier, sampled when the shot button is pressed
+
+  // Planned launch height on the attacker's goal plane (m), set by the set-piece
+  // shot planner; when useAimHeight is false the physics layer derives it from the charge.
+  float           aimHeight;
+  bool            useAimHeight;
 
 };
 
