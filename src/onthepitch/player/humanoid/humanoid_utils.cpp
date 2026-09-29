@@ -473,6 +473,8 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
 
   // a short tap is given a strong fixed launch speed so it reads as a hard low drive
   if (groundShot) power = std::max(power, _default_Shot_GroundPower);
+  // finesse trades some power for placement and curl
+  if (shotType == e_ShotType_Curl) power *= _default_Shot_Curl_SpeedFactor;
   Vector3 desiredShot = setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, power, groundShot, _default_Shot_MaxLift);
   if (Verbose()) {
     desiredShot.Print();

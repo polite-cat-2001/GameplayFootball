@@ -69,13 +69,14 @@ const float _default_Shot_AutoDirection = 0.74f;
 // Curl/chip shot feel and ballistic launch (spec 2026-09-29 §7). Tune by playing.
 const float _default_Shot_Curl_ZRot = 90.0f;        // lateral spin magnitude for a curled shot
 const float _default_Shot_Curl_AimOut = 0.1f;       // radians to aim outside the target so the curve bends back in
+const float _default_Shot_Curl_SpeedFactor = 0.85f; // finesse trades some power for placement/curl
 const float _default_Shot_Chip_Angle = 30.0f * pi / 180.0f; // chip launch angle (radians); steeper than a normal shot
 const float _default_Shot_Chip_SpeedFactor = 0.45f; // chip total speed as a fraction of the shot power
 const float _default_Shot_AimYMin = 0.8f;           // aim height at zero charge (m)
-const float _default_Shot_OverLift = 3.5f;          // full charge may aim this far above the crossbar (m)
+const float _default_Shot_OverLift = 1.0f;          // full charge may aim this far above the crossbar (m)
 const float _default_Shot_GroundChargeMax = 0.35f;  // below this charge (desiredPower scale) the shot is driven flat
 const float _default_Shot_GroundAimY = 0.25f;       // aim height for a driven flat shot (m)
-const float _default_Shot_MaxLift = 6.0f;           // cap on vertical launch speed (m/s), keeps short-range shots down
+const float _default_Shot_MaxLift = 12.0f;          // cap on vertical launch speed (m/s); high enough to clear the bar and miss high
 const float _default_Shot_GroundPower = 60.0f;      // driven low shot gets at least this horizontal speed (m/s)
 const float _default_Shot_Gravity = 9.81f;          // vertical ballistic acceleration (m/s^2)
 const float _default_Shot_AimLateralMargin = 1.5f;  // aim may overshoot the posts by this many goal half-widths
