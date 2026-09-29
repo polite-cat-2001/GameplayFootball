@@ -30,7 +30,6 @@ struct SideSelectParticipant {
   bool canControl = false; // this client may change this participant
   bool isLocalPeer = false;
   bool isGamepad = false;
-  int layout = 0;          // e_ControllerLayout (local devices only)
   std::string label;
 };
 
@@ -50,7 +49,6 @@ class SideSelectBackend {
     virtual void SetSide(int id, int side) = 0;
     virtual void SetReady(int id, bool ready) = 0;
     virtual void SetDevice(int device) {}
-    virtual void ToggleLayout(int id) {}
     virtual bool AllReady() = 0;
 
     virtual void Commit() = 0; // apply the selection (no navigation)
@@ -73,7 +71,6 @@ class LocalSideSelectBackend : public SideSelectBackend {
 
     void SetSide(int id, int side) override;
     void SetReady(int id, bool ready) override;
-    void ToggleLayout(int id) override;
     bool AllReady() override;
 
     void Commit() override;

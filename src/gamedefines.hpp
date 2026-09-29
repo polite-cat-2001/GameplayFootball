@@ -43,12 +43,6 @@ const int sprintDoubleTapWindow_ms = 400;
 // long enough to span one ball-control animation and its touch frame.
 const int sprintKnockOnWindow_ms = 600;
 
-// gamepad layout presets (which face button does what). PES6 style is the default.
-enum e_ControllerLayout {
-  e_ControllerLayout_PES,
-  e_ControllerLayout_FIFA
-};
-const e_ControllerLayout defaultControllerLayout = e_ControllerLayout_PES;
 const bool defaultControllerSimpleMode = false; // reserved: simple mode for sticks-less gamepads is a future feature (see docs/wiki/открытые-вопросы.md)
 
 const float _default_CameraZoom = 0.5f;

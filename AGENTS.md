@@ -56,7 +56,7 @@ Get/Process/Put и буферами (см. `docs/wiki/матч`). AI игрок�
   OFF — консоль для дебага): в `src/main.cpp` собственная WinMain-заглушка (SDL3 не даёт SDLmain).
 - **`google_brain` и `windows` — чужие ветки.** Это форк Google Brain RL и отдельная Windows-линия;
   не вливай их целиком в `master` без разбора.
-- **`dataSetSortable`** (закомментирован в `src/gamedefines.hpp:70`) меняет тип `DataSet`
+- **`dataSetSortable`** (закомментирован в `src/gamedefines.hpp:88`) меняет тип `DataSet`
   (std::list ↔ std::deque) — код под обоими собран не был.
 - **Упаковка macOS — только под bash 4.** `tools/release/package_macos.sh` использует
   `declare -A`, а системный bash на macOS — 3.2; запускать через

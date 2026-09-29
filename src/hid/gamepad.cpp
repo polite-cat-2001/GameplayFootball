@@ -7,6 +7,7 @@
 #include "managers/usereventmanager.hpp"
 #include "base/utils.hpp"
 
+#include "../gamedefines.hpp"
 #include "../main.hpp"
 
 HIDGamepad::HIDGamepad(int gamepadID) : gamepadID(gamepadID) {
@@ -27,8 +28,9 @@ HIDGamepad::HIDGamepad(int gamepadID) : gamepadID(gamepadID) {
 HIDGamepad::~HIDGamepad() {
 }
 
-static const std::vector<e_ControllerButton>& GetPresetFunctionMapping(e_ControllerLayout layout) {
-  static const std::vector<e_ControllerButton> pesPreset = {
+static const std::vector<e_ControllerButton>& GetDefaultFunctionMapping() {
+  // One PES-like layout: A = short pass, B = high pass, X = shot, Y = long pass.
+  static const std::vector<e_ControllerButton> preset = {
     e_ControllerButton_Up, e_ControllerButton_Right, e_ControllerButton_Down, e_ControllerButton_Left, // movement
     e_ControllerButton_Y,  // LongPass
     e_ControllerButton_B,  // HighPass
@@ -45,24 +47,7 @@ static const std::vector<e_ControllerButton>& GetPresetFunctionMapping(e_Control
     e_ControllerButton_Select, // Select
     e_ControllerButton_Start  // Start
   };
-  static const std::vector<e_ControllerButton> fifaPreset = {
-    e_ControllerButton_Up, e_ControllerButton_Right, e_ControllerButton_Down, e_ControllerButton_Left,
-    e_ControllerButton_Y,  // LongPass
-    e_ControllerButton_X,  // HighPass  (FIFA: X = cross/lob)
-    e_ControllerButton_A,  // ShortPass (FIFA: A = ground pass)
-    e_ControllerButton_B,  // Shot      (FIFA: B = shoot)
-    e_ControllerButton_Y,  // KeeperRush
-    e_ControllerButton_B,  // Sliding   (FIFA: B = tackle in defence)
-    e_ControllerButton_B,  // Pressure  (FIFA: B = standing tackle)
-    e_ControllerButton_X,  // TeamPressure
-    e_ControllerButton_L1, // Switch
-    e_ControllerButton_L2, // Special
-    e_ControllerButton_R1, // Sprint
-    e_ControllerButton_R2, // Dribble
-    e_ControllerButton_Select, // Select
-    e_ControllerButton_Start  // Start
-  };
-  return (layout == e_ControllerLayout_FIFA) ? fifaPreset : pesPreset;
+  return preset;
 }
 
 void HIDGamepad::LoadConfig() {
@@ -96,11 +81,10 @@ void HIDGamepad::LoadConfig() {
     controllerMapping[i] = GetConfiguration()->GetInt(("input_gamepad_" + GetIdentifier() + "_" + int_to_str(i)).c_str(), defaultButton);
   }
 
-  layout = (e_ControllerLayout)GetConfiguration()->GetInt(("input_gamepad_" + GetIdentifier() + "_layout").c_str(), defaultControllerLayout);
   // reserved simple-mode flag (future feature, currently unused)
   GetConfiguration()->GetBool(("input_gamepad_" + GetIdentifier() + "_simple").c_str(), defaultControllerSimpleMode);
 
-  const std::vector<e_ControllerButton> &preset = GetPresetFunctionMapping(layout);
+  const std::vector<e_ControllerButton> &preset = GetDefaultFunctionMapping();
   for (int i = 0; i < e_ButtonFunction_Size; i++) {
     functionMapping[i] = (e_ControllerButton)GetConfiguration()->GetInt(("input_gamepad_" + GetIdentifier() + "_mapping_" + int_to_str(i)).c_str(), preset.at(i));
   }
@@ -114,17 +98,6 @@ void HIDGamepad::SaveConfig() {
   for (int i = 0; i < e_ButtonFunction_Size; i++) {
     GetConfiguration()->Set(("input_gamepad_" + GetIdentifier() + "_mapping_" + int_to_str(i)).c_str(), functionMapping[i]);
   }
-  GetConfiguration()->SaveFile(GetConfigFilename());
-}
-
-void HIDGamepad::SetLayout(e_ControllerLayout newLayout) {
-  boost::mutex::scoped_lock blah(mutex);
-  layout = newLayout;
-  const std::vector<e_ControllerButton> &preset = GetPresetFunctionMapping(layout);
-  for (int i = 0; i < e_ButtonFunction_Size; i++) {
-    functionMapping[i] = preset.at(i);
-  }
-  GetConfiguration()->Set(("input_gamepad_" + GetIdentifier() + "_layout").c_str(), (int)layout);
   GetConfiguration()->SaveFile(GetConfigFilename());
 }
 

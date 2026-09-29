@@ -279,9 +279,9 @@ KeyboardPage::KeyboardPage(Gui2WindowManager *windowManager, const Gui2PageData 
   keyButtons[11]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 11, "team pressure"));
 
 
-  Gui2Caption *captionSwitch = new Gui2Caption(windowManager, "caption_keyboard_switch", 0, 0, 20, 3, "switch player");
+  Gui2Caption *captionSwitch = new Gui2Caption(windowManager, "caption_keyboard_switch", 0, 0, 20, 3, "switch");
   keyButtons[12] = new Gui2Button(windowManager, "button_keyboard_switch", 0, 0, 16, 3, SDL_GetKeyName(keyIDs[12]));
-  keyButtons[12]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 12, "switch player"));
+  keyButtons[12]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 12, "switch"));
 
   Gui2Caption *captionSpecial = new Gui2Caption(windowManager, "caption_keyboard_special", 0, 0, 20, 3, "special");
   keyButtons[13] = new Gui2Button(windowManager, "button_keyboard_special", 0, 0, 16, 3, SDL_GetKeyName(keyIDs[13]));
@@ -291,9 +291,9 @@ KeyboardPage::KeyboardPage(Gui2WindowManager *windowManager, const Gui2PageData 
   keyButtons[14] = new Gui2Button(windowManager, "button_keyboard_sprint", 0, 0, 16, 3, SDL_GetKeyName(keyIDs[14]));
   keyButtons[14]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 14, "sprint"));
 
-  Gui2Caption *captionSlow = new Gui2Caption(windowManager, "caption_keyboard_dribble", 0, 0, 20, 3, "slow dribble");
+  Gui2Caption *captionSlow = new Gui2Caption(windowManager, "caption_keyboard_dribble", 0, 0, 20, 3, "dribble");
   keyButtons[15] = new Gui2Button(windowManager, "button_keyboard_dribble", 0, 0, 16, 3, SDL_GetKeyName(keyIDs[15]));
-  keyButtons[15]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 15, "slow dribble"));
+  keyButtons[15]->sig_OnClick.connect(boost::bind(&KeyboardPage::SetKey, this, 15, "dribble"));
 
 
   Gui2Caption *captionSelect = new Gui2Caption(windowManager, "caption_keyboard_select", 0, 0, 20, 3, "select");
@@ -840,7 +840,7 @@ GamepadFunctionPage::GamepadFunctionPage(Gui2WindowManager *windowManager, const
   modifierButtons[2]->sig_OnLoseFocus.connect(boost::bind(&Gui2Image::LoadImage, modifierTargetImage[2], "media/menu/controller/controller_" + modifierTargetImageLRstr[2] + ".png"));
   modifierButtons[2]->SetToggleable(true);
 
-  Gui2Caption *captionDribble = new Gui2Caption(windowManager, "caption_gamepadfunction_dribble", 0, 0, 10, 3, "slow dribble");
+  Gui2Caption *captionDribble = new Gui2Caption(windowManager, "caption_gamepadfunction_dribble", 0, 0, 10, 3, "dribble");
   modifierButtons[3] = new Gui2Button(windowManager, "button_gamepadfunction_modifier3", 0, 0, 8, 3, modifierStr[3]);
   modifierButtons[3]->sig_OnClick.connect(boost::bind(&GamepadFunctionPage::SelectGpbutton, this, modifierButtons[3], gridModifier, modifierIDs));
   modifierButtons[3]->sig_OnGainFocus.connect(boost::bind(&Gui2Image::LoadImage, modifierTargetImage[3], "media/menu/controller/controller_" + modifierTargetImageLRstr[3] + "_" + modifierStr[3] + ".png"));

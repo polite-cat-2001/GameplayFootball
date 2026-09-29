@@ -10,7 +10,6 @@
 #include "ihidevice.hpp"
 
 #include <SDL3/SDL.h> // for SDL_JoystickID / SDL_Gamepad
-#include "../gamedefines.hpp" // for e_ControllerLayout
 
 using namespace blunted;
 
@@ -39,13 +38,10 @@ class HIDGamepad : public IHIDevice {
     int GetGamepadID() { return gamepadID; }
 
     SDL_JoystickID GetJoystickID() const { return joystickID; }
-    e_ControllerLayout GetLayout() { boost::mutex::scoped_lock blah(mutex); return layout; }
-    void SetLayout(e_ControllerLayout newLayout);
 
   protected:
     int gamepadID;
     SDL_JoystickID joystickID;
-    e_ControllerLayout layout;
     float controllerButtonState[e_ControllerButton_Size];
     float previousControllerButtonState[e_ControllerButton_Size];
 

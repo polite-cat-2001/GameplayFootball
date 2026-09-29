@@ -2230,3 +2230,22 @@ controlled collision, отклонённый requeue), а окно детект�
 `knockOnTouchBaseline_ms`. Удержание `Sprint` заряд не продлевает. Остаточный риск, за которым
 следят глазами: два проброса, если в окно попадают два ballcontrol-касания.
 
+## [2026-09-29] session | #20: одна PES-like раскладка геймпада
+
+Тикет #20 (часть распила #19–#40, фаза 1) закрыт на ветке `of_port`. Удалены PES/FIFA-пресеты
+геймпада — раскладка одна, PES-like.
+
+- `src/gamedefines.hpp`: убраны `enum e_ControllerLayout` и `defaultControllerLayout`;
+  `defaultControllerSimpleMode` оставлен (это отдельная фича — геймпады без стиков).
+- `src/hid/gamepad.{hpp,cpp}`: FIFA-пресет удалён, остался один `GetDefaultFunctionMapping`;
+  убраны `GetLayout`/`SetLayout` и чтение/запись конфиг-ключа `input_gamepad_<id>_layout`
+  (ключ мёртв); флаг `..._simple` по-прежнему читается.
+- `src/menu/sideselect.{hpp,cpp}`: убраны поле `layout`, `ToggleLayout`, подпись «LAYOUT: …»
+  и циклический переключатель раскладки LB/RB.
+- `src/menu/settings.cpp`: подписи функций ввода приведены к единому виду на обеих страницах —
+  `switch`, `special`, `sprint`, `dribble` (на клавиатуре было `switch player` / `slow dribble`,
+  на геймпаде — `switch` / `slow dribble`).
+
+Детерминизм не затронут (ввод/UI, симуляция не менялась). Сборка Release x86 зелёная. Вики:
+[[архитектура]], [[глоссарий]], [[константы]].
+

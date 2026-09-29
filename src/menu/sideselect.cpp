@@ -15,8 +15,6 @@
 #include "hid/gamepad.hpp"
 #include "hid/keyboard.hpp"
 
-#include "../gamedefines.hpp"
-
 #include "net/netserver.hpp"
 #include "net/netclient.hpp"
 #include "net/netmessages.hpp"
@@ -94,7 +92,6 @@ void LocalSideSelectBackend::BuildParticipants() {
         if (saved.at(s).joystickID == p.joystickID) { p.side = saved.at(s).side; break; }
       }
     }
-    if (p.isGamepad) p.layout = static_cast<HIDGamepad*>(controllers.at(i))->GetLayout();
 
     // auto-pick a side for the first device(s) when there is no previous setup
     if (!inGame && !built && live.empty() && saved.empty()) {
@@ -125,19 +122,6 @@ void LocalSideSelectBackend::SetSide(int id, int side) {
 void LocalSideSelectBackend::SetReady(int id, bool ready) {
   for (unsigned int i = 0; i < participants.size(); i++) {
     if (participants.at(i).id == id) { participants.at(i).ready = ready; return; }
-  }
-}
-
-void LocalSideSelectBackend::ToggleLayout(int id) {
-  for (unsigned int i = 0; i < participants.size(); i++) {
-    if (participants.at(i).id != id || !participants.at(i).isGamepad) continue;
-    const std::vector<IHIDevice*> &controllers = GetControllers();
-    if (id < 0 || id >= (int)controllers.size()) return;
-    HIDGamepad *gamepad = static_cast<HIDGamepad*>(controllers.at(id));
-    e_ControllerLayout next = (gamepad->GetLayout() == e_ControllerLayout_PES) ? e_ControllerLayout_FIFA : e_ControllerLayout_PES;
-    gamepad->SetLayout(next);
-    participants.at(i).layout = next;
-    return;
   }
 }
 
@@ -460,12 +444,7 @@ void SideSelectPage::RebuildRows() {
     rowImages.push_back(image);
 
     Gui2Caption *name = 0;
-    if (local) {
-      if (p.isGamepad) {
-        std::string layoutStr = (p.layout == e_ControllerLayout_PES) ? "PES" : "FIFA";
-        name = new Gui2Caption(windowManager, "caption_sideselect_layout" + int_to_str(i), 0, 0, 12, 3, "LAYOUT: " + layoutStr);
-      }
-    } else {
+    if (!local) {
       name = new Gui2Caption(windowManager, "caption_sideselect_name" + int_to_str(i), 0, 0, 28, 3, "");
     }
     if (name) {
@@ -504,15 +483,8 @@ void SideSelectPage::SetImagePositions() {
 
     Gui2Caption *name = rowNames.at(i);
     if (name) {
-      if (backend->IsLocal()) {
-        if (participants.at(i).isGamepad) {
-          std::string layoutStr = (participants.at(i).layout == e_ControllerLayout_PES) ? "PES" : "FIFA";
-          name->SetCaption("LAYOUT: " + layoutStr);
-        }
-      } else {
-        std::string label = participants.at(i).label;
-        name->SetCaption(participants.at(i).isLocalPeer ? "> " + label : label);
-      }
+      std::string label = participants.at(i).label;
+      name->SetCaption(participants.at(i).isLocalPeer ? "> " + label : label);
       name->SetPosition(x + 7 - name->GetTextWidthPercent() * 0.5, y + 10);
     }
 
@@ -714,11 +686,6 @@ void SideSelectPage::ProcessJoystickEvent(JoystickEvent *event) {
       if (now_ms - rowDelay.at(index) > 250) {
         if (gamepad->GetButtonValue(e_ButtonFunction_Left) > 0.5f) { ChangeSide(id, -1); rowDelay.at(index) = now_ms; }
         else if (gamepad->GetButtonValue(e_ButtonFunction_Right) > 0.5f) { ChangeSide(id, 1); rowDelay.at(index) = now_ms; }
-      }
-
-      if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_L1)) ||
-          event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_R1))) {
-        backend->ToggleLayout(id);
       }
 
       if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A))) {
