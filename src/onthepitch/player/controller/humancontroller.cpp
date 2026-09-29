@@ -188,6 +188,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         if (GetHIDevice()->GetDeviceType() == e_HIDeviceType_Keyboard) command.touchInfo.autoDirectionBias = 1.0f;
         command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
         command.touchInfo.desiredPower = clamp(pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
+        command.touchInfo.shotType = pendingShotType;
 
         commandQueue.push_back(command);
 
@@ -254,7 +255,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     bool idleTurnToOpponentGoal = false;
     bool knockOn = false;
     if (hid->GetButton(e_ButtonFunction_Dribble)) idleTurnToOpponentGoal = true;
-    if (hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) knockOn = true;
+    if (!IsChargingShotVariant() && hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) knockOn = true;
 
     // special adapted input for ballcontrol and trap, when we have shoot/pass buffers
     Vector3 inputDirectionSave2 = inputDirection;
@@ -317,7 +318,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 */
 
     // super cancel
-    if (hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) {
+    if (!IsChargingShotVariant() && hid->GetButton(e_ButtonFunction_Dribble) && hid->GetButton(e_ButtonFunction_Sprint)) {
       if (!hasBestPossession) {
         command.desiredDirection = inputDirection;
         command.desiredVelocityFloat = inputVelocityFloat;
@@ -442,6 +443,7 @@ void HumanController::Process() {
       if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot) && allowShot) {
         actionMode = 2;
         actionButton = e_ButtonFunction_Shot;
+        pendingShotType = _SampleShotType();
       }
 
     }
@@ -484,6 +486,7 @@ void HumanController::Reset() {
   gauge_ms = 0;
   actionButton = e_ButtonFunction_ShortPass;
   actionBufferTime_ms = 0;
+  pendingShotType = e_ShotType_Normal;
 
   lastSwitchTime_ms = -10000;
   lastSwitchTimeDuration_ms = 300;
@@ -493,6 +496,14 @@ void HumanController::Reset() {
   previousDirection = Vector3(0, -1, 0);
 
   fadingTeamPossessionAmount = 1.0;
+}
+
+e_ShotType HumanController::_SampleShotType() {
+  bool curlHeld = hid->GetButton(e_ButtonFunction_Dribble); // R2 / C
+  bool chipHeld = hid->GetButton(e_ButtonFunction_Switch);  // L1 / Q
+  if (curlHeld && !chipHeld) return e_ShotType_Curl;
+  if (chipHeld && !curlHeld) return e_ShotType_Chip;
+  return e_ShotType_Normal; // no modifier, or both held -> plain shot
 }
 
 void HumanController::_GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat) {

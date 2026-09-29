@@ -474,6 +474,8 @@ void Team::Process() {
 
         if (humanGamers.at(i)->GetHIDevice()->GetButton(e_ButtonFunction_Switch) &&
             !humanGamers.at(i)->GetHIDevice()->GetPreviousButtonState(e_ButtonFunction_Switch) &&
+            // Switch also charges a chip shot; don't steal the taker while charging
+            !humanGamers.at(i)->GetHumanController()->IsChargingChip() &&
             // don't switch if we are both best AND designated possession player. unless opponent team has ball.
             (!(selectedPlayerID == GetBestPossessionPlayerID() && selectedPlayerID == designatedTeamPossessionPlayer->GetID()) || GetTeamPossessionAmount() < 1.0f) &&
             !selectedPlayer->HasUniquePossession()) {

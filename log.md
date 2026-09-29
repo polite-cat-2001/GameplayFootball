@@ -2151,3 +2151,21 @@ GitHub blocking-зависимостями. 21 тикет помечен `ready-
 Эталоны детерминизма не трогались — все gameplay-сдвиги сходятся в #40, чтобы
 регенерировать их один раз. Frontier (без открытых блокеров): #19, #20, #21, #22, #34, #37.
 
+## [2026-09-29] session | #21: e_ShotType и curl/chip-модификаторы удара
+
+Тикет #21 (часть распила #19-#40) закрыт на ветке `of_port` (была пуста; ff-мержнута на
+`gameplan-substitutions` d14e90e). Из прототипа `prototype/curl-chip` портирован только
+вводный слой, согласованный со спекой §5 (без инлайн-архитектуры и без баллистики).
+
+- `enum e_ShotType {Normal, Curl, Chip}` и поле `TouchInfo::shotType` в `src/gamedefines.hpp`;
+  модификатор сэмплируется в `HumanController` в момент **нажатия** `Shot` (`_SampleShotType`)
+  и доезжает в ударную команду, в т.ч. для одно-касания/queued удара.
+- curl = `Dribble`(R2/C) + Shot, chip = `Switch`(L1/Q) + Shot; оба модификатора одновременно
+  (или ни одного) → `Normal`. Новых `e_ButtonFunction` и правок `defaultKeyIDs` нет.
+- При заряде варианта подавлены knock-on и super-cancel (`IsChargingShotVariant`); при заряде
+  chip `Switch` не переключает игрока (`IsChargingChip` в гейте `Team::Process`).
+- **Не переносилось**: баллистика curl/chip (Магнус, дуга, заряд 0.5 с, автодирекшн,
+  settings-ползунки, debug F2) — это #23/#24.
+- Эталоны `tools/determinism` не трогались: ввод хеш не двигает, `shotType` пока никем не
+  читается. Сборка Release x86 зелёная. Вики: секция «Варианты удара (curl/chip)» в `docs/wiki/матч.md`.
+

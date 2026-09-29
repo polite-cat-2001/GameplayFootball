@@ -157,6 +157,12 @@ enum e_PlayerCommandModifier {
   e_PlayerCommandModifier_KnockOn = 1
 };
 
+enum e_ShotType {
+  e_ShotType_Normal,
+  e_ShotType_Curl,
+  e_ShotType_Chip
+};
+
 class IController;
 
 struct TouchInfo {
@@ -168,6 +174,7 @@ struct TouchInfo {
     targetPlayer = 0;
     forcedTargetPlayer = 0;
     desiredPower = 0;
+    shotType = e_ShotType_Normal;
   }
 
   Vector3         inputDirection;
@@ -180,6 +187,8 @@ struct TouchInfo {
   float           desiredPower;
   Player          *targetPlayer; // null == do not use
   Player          *forcedTargetPlayer; // null == do not use
+
+  e_ShotType      shotType; // curl/chip modifier, sampled when the shot button is pressed
 
 };
 

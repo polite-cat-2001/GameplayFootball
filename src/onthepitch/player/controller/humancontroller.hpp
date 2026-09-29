@@ -30,11 +30,16 @@ class HumanController : public PlayerController {
 
     int GetActionMode() { return actionMode; }
 
+    // shot variant fixed at the moment Shot was pressed (curl/chip modifier)
+    bool IsChargingChip() { return actionMode == 2 && actionButton == e_ButtonFunction_Shot && pendingShotType == e_ShotType_Chip; }
+    bool IsChargingShotVariant() { return actionMode == 2 && actionButton == e_ButtonFunction_Shot && pendingShotType != e_ShotType_Normal; }
+
     virtual void Reset();
 
   protected:
 
     void _GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat);
+    e_ShotType _SampleShotType();
 
     IHIDevice *hid;
 
@@ -46,6 +51,8 @@ class HumanController : public PlayerController {
     e_ButtonFunction actionButton;
     int actionBufferTime_ms;
     int gauge_ms;
+
+    e_ShotType pendingShotType;
 
     // stuff to keep track of analog stick (or keys even) so that we can use a direction once it's been pointed in for a while, instead of directly
     Vector3 previousDirection;
