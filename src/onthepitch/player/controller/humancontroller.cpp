@@ -280,8 +280,11 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     // trap?
     _TrapCommand(commandQueue, idleTurnToOpponentGoal, knockOn);
 
-    // one knock per double-tap: consume the modifier as soon as a touch command carried it
-    if (knockOn && commandQueue.size() > knockQueueSize) knockOnArmed = false;
+    // remember the pre-touch state; Process disarms the one-shot once this player touches the ball
+    if (knockOn && !knockOnBaselineSet && commandQueue.size() > knockQueueSize) {
+      knockOnTouchBaseline_ms = CastPlayer()->GetLastTouchTime_ms();
+      knockOnBaselineSet = true;
+    }
 
     // reload original input
     if (actionMode == 2) {
@@ -367,11 +370,19 @@ void HumanController::Process() {
   if (sprintPressed && !hid->GetPreviousButtonState(e_ButtonFunction_Sprint)) {
     if (sprintTime_ms - lastSprintTapTime_ms <= sprintDoubleTapWindow_ms) {
       knockOnArmed = true;
-      knockOnExpireTime_ms = sprintTime_ms + sprintDoubleTapWindow_ms;
+      knockOnExpireTime_ms = sprintTime_ms + sprintKnockOnWindow_ms;
+      knockOnBaselineSet = false;
     }
     lastSprintTapTime_ms = sprintTime_ms;
   }
-  if (knockOnArmed && sprintTime_ms > knockOnExpireTime_ms) knockOnArmed = false;
+  if (knockOnArmed) {
+    // consume on the actual touch, or give up after the knock-on window
+    if (sprintTime_ms > knockOnExpireTime_ms ||
+        (knockOnBaselineSet && CastPlayer()->GetLastTouchTime_ms() > knockOnTouchBaseline_ms)) {
+      knockOnArmed = false;
+      knockOnBaselineSet = false;
+    }
+  }
 
   // action?
 
@@ -507,6 +518,8 @@ void HumanController::Reset() {
   lastSprintTapTime_ms = -100000;
   knockOnArmed = false;
   knockOnExpireTime_ms = 0;
+  knockOnBaselineSet = false;
+  knockOnTouchBaseline_ms = 0;
 
   lastSwitchTime_ms = -10000;
   lastSwitchTimeDuration_ms = 300;

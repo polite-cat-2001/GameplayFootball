@@ -54,10 +54,12 @@ class HumanController : public PlayerController {
 
     e_ShotType pendingShotType;
 
-    // double-tap Sprint (knock-on) tracking; one-shot per double-tap
+    // double-tap Sprint (knock-on) tracking; one-shot per double-tap, consumed on touch
     int lastSprintTapTime_ms;
     bool knockOnArmed;
     int knockOnExpireTime_ms;
+    bool knockOnBaselineSet;
+    unsigned long knockOnTouchBaseline_ms;
 
     // stuff to keep track of analog stick (or keys even) so that we can use a direction once it's been pointed in for a while, instead of directly
     Vector3 previousDirection;

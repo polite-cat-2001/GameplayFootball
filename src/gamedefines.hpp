@@ -36,9 +36,11 @@ const bool quantizeDirection = true;
 
 const float analogStickDeadzone = 0.3f;
 
-// Two presses of the Sprint button within this window arm the knock-on modifier;
-// a single press stays a plain sprint (see HumanController).
+// Max gap between two Sprint presses that counts as a double-tap; a single press
+// stays a plain sprint (see HumanController).
 const int sprintDoubleTapWindow_ms = 300;
+// How long an armed knock-on waits for the actual ball touch before it lapses.
+const int sprintKnockOnWindow_ms = 800;
 
 // gamepad layout presets (which face button does what). PES6 style is the default.
 enum e_ControllerLayout {
