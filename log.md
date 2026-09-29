@@ -2340,3 +2340,23 @@ finesse/controlled — «обмен силы на точность и закру
 Числа — на плейтест. Вики: [[матч]], [[константы]]. Сборка Release x86 зелёная, детерминизм
 `3b9fa5f2…` не двигался (фикстура ударов не делает).
 
+## [2026-09-29] session | #24: curl как вход TouchInfo + ползунки
+
+Тикет #24 (фаза 2, распил стандартов) закрыт на ветке `of_port`. Механики curl/chip в основном
+уже вошли в #23; здесь доделан шов «curl — вход, а не вывод».
+
+- `TouchInfo` получил поле `curl` (знак out-направления, 0 = нет). `PlanShot` теперь принимает
+  `(from, side, desiredDirection, charge, shotType)` и выводит знак закрутки из **прицела**
+  (`CalculateAimLateral`), а не из случайного `bodyTouchAngle`; `ApplyShotPlan` кладёт `curl`.
+- `GetShotVector`: ветка curl берёт знак из `touchInfo.curl`, спин/доворот — из конфига
+  (`gameplay_shot_curlspin`/`gameplay_shot_curlaimout`). Оба контроллера зовут `PlanShot` с
+  позицией мяча и стороной.
+- Добавлены `_default_Shot_Curl_ZRotMax` 300 и `_default_Shot_Curl_AimOutMax` 0.3, ползунки
+  «shot curl - spin / aim offset» на странице геймплея с числовым показом (порт
+  `Gui2Slider::SetValueDisplay`), запись в конфиг в `Exit`.
+- Chip считать закрытым (реализован ранее, модель фикс. угол + заряд).
+- Случайный `zRot` в ударном пути **не трогали** — решим отдельно.
+
+Вики: [[матч]] (Curl), [[константы]] (+2 константы ползунков). Сборка Release x86 зелёная,
+`nettest`/`lanmatchtest` PASS, детерминизм `3b9fa5f2…` без изменений.
+

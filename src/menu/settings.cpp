@@ -104,6 +104,17 @@ GameplayPage::GameplayPage(Gui2WindowManager *windowManager, const Gui2PageData 
   slider_Shot_AutoDirection->AddHelperValue(Vector3(80, 80, 250), "factory setting", _default_Shot_AutoDirection);
   slider_Shot_AutoDirection->SetValue(GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection));
 
+  slider_Shot_CurlSpin = new Gui2Slider(windowManager, "slider_shot_curlspin", 0, 0, 30, 6, "shot curl - spin");
+  slider_Shot_CurlSpin->AddHelperValue(Vector3(80, 80, 250), "factory setting", _default_Shot_Curl_ZRot / _default_Shot_Curl_ZRotMax);
+  slider_Shot_CurlSpin->SetValue(GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot) / _default_Shot_Curl_ZRotMax);
+  slider_Shot_CurlAimOut = new Gui2Slider(windowManager, "slider_shot_curlaimout", 0, 0, 30, 6, "shot curl - aim offset");
+  slider_Shot_CurlAimOut->AddHelperValue(Vector3(80, 80, 250), "factory setting", _default_Shot_Curl_AimOut / _default_Shot_Curl_AimOutMax);
+  slider_Shot_CurlAimOut->SetValue(GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut) / _default_Shot_Curl_AimOutMax);
+
+  // expose numeric values so the constants can be read off while tuning (§7)
+  slider_Shot_CurlSpin->SetValueDisplay(_default_Shot_Curl_ZRotMax, 0);
+  slider_Shot_CurlAimOut->SetValueDisplay(_default_Shot_Curl_AimOutMax, 2);
+
   slider_Agility = new Gui2Slider(windowManager, "slider_agility", 0, 0, 30, 6, "human agility factor");
   slider_Agility->AddHelperValue(Vector3(80, 80, 250), "factory setting", _default_AgilityFactor);
   slider_Agility->SetValue(GetConfiguration()->GetReal("gameplay_agilityfactor", _default_AgilityFactor));
@@ -126,6 +137,8 @@ GameplayPage::GameplayPage(Gui2WindowManager *windowManager, const Gui2PageData 
   grid->AddView(slider_HighPass_AutoPower);
 
   grid->AddView(slider_Shot_AutoDirection);
+  grid->AddView(slider_Shot_CurlSpin);
+  grid->AddView(slider_Shot_CurlAimOut);
 
   grid->AddView(slider_Agility);
   grid->AddView(slider_Acceleration);
@@ -158,6 +171,8 @@ void GameplayPage::Exit() {
   GetConfiguration()->Set("gameplay_highpass_autopower", slider_HighPass_AutoPower->GetValue());
 
   GetConfiguration()->Set("gameplay_shot_autodirection", slider_Shot_AutoDirection->GetValue());
+  GetConfiguration()->Set("gameplay_shot_curlspin", slider_Shot_CurlSpin->GetValue() * _default_Shot_Curl_ZRotMax);
+  GetConfiguration()->Set("gameplay_shot_curlaimout", slider_Shot_CurlAimOut->GetValue() * _default_Shot_Curl_AimOutMax);
 
   GetConfiguration()->Set("gameplay_agilityfactor", slider_Agility->GetValue());
   GetConfiguration()->Set("gameplay_accelerationfactor", slider_Acceleration->GetValue());

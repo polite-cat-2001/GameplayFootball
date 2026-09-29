@@ -145,7 +145,7 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       actionCommand.useDesiredLookAt = false;
       actionCommand.touchInfo.desiredDirection = (Vector3(-team->GetSide() * pitchHalfW, random(-5, 5), 0) - CastPlayer()->GetPosition()).GetNormalized(Vector3(-team->GetSide(), 0, 0));
       actionCommand.touchInfo.desiredPower = random(0.4f, 1.0f);
-      setpiecelogic::ApplyShotPlan(actionCommand.touchInfo, setpiecelogic::PlanShot(actionCommand.touchInfo.desiredDirection, actionCommand.touchInfo.desiredPower, e_ShotType_Normal));
+      setpiecelogic::ApplyShotPlan(actionCommand.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), team->GetSide(), actionCommand.touchInfo.desiredDirection, actionCommand.touchInfo.desiredPower, e_ShotType_Normal));
 
       commandQueue.push_back(actionCommand);
 

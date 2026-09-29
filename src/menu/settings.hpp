@@ -52,6 +52,8 @@ class GameplayPage : public Gui2Page {
     Gui2Slider *slider_HighPass_AutoDirection;
     Gui2Slider *slider_HighPass_AutoPower;
     Gui2Slider *slider_Shot_AutoDirection;
+    Gui2Slider *slider_Shot_CurlSpin;
+    Gui2Slider *slider_Shot_CurlAimOut;
 
     Gui2Slider *slider_Agility;
     Gui2Slider *slider_Acceleration;

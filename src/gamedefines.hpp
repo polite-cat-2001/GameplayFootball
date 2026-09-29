@@ -69,6 +69,8 @@ const float _default_Shot_AutoDirection = 0.74f;
 // Curl/chip shot feel and ballistic launch (spec 2026-09-29 §7). Tune by playing.
 const float _default_Shot_Curl_ZRot = 90.0f;        // lateral spin magnitude for a curled shot
 const float _default_Shot_Curl_AimOut = 0.1f;       // radians to aim outside the target so the curve bends back in
+const float _default_Shot_Curl_ZRotMax = 300.0f;    // slider range for curl spin
+const float _default_Shot_Curl_AimOutMax = 0.3f;    // slider range for curl aim offset (radians)
 const float _default_Shot_Curl_SpeedFactor = 0.85f; // finesse trades some power for placement/curl
 const float _default_Shot_Chip_Angle = 30.0f * pi / 180.0f; // chip launch angle (radians); steeper than a normal shot
 const float _default_Shot_Chip_SpeedFactor = 0.45f; // chip total speed as a fraction of the shot power
@@ -195,6 +197,7 @@ struct TouchInfo {
     shotType = e_ShotType_Normal;
     aimHeight = 0;
     useAimHeight = false;
+    curl = 0;
   }
 
   Vector3         inputDirection;
@@ -214,6 +217,10 @@ struct TouchInfo {
   // shot planner; when useAimHeight is false the physics layer derives it from the charge.
   float           aimHeight;
   bool            useAimHeight;
+
+  // Planned curl: out-direction sign (-1/+1) so a curled shot bends back toward the goal;
+  // 0 means no curl. The spin/aim-out magnitudes come from the gameplay config.
+  float           curl;
 
 };
 

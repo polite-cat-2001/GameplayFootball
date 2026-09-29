@@ -42,12 +42,21 @@ Vector3 CalculateShotVelocity(const Vector3 &from, const Vector3 &aim, const Vec
   return aimDir * speed + Vector3(0.0f, 0.0f, verticalSpeed);
 }
 
-ShotPlan PlanShot(const Vector3 &desiredDirection, float charge, e_ShotType shotType) {
+ShotPlan PlanShot(const Vector3 &from, int side, const Vector3 &desiredDirection, float charge, e_ShotType shotType) {
   ShotPlan plan;
   plan.desiredDirection = desiredDirection;
   plan.desiredPower = charge;
   plan.aimHeight = CalculateAimHeight(charge);
   plan.shotType = shotType;
+  // Curl bends around into the far corner: aim further outside the crossing point, then spin back
+  // in. The out-direction follows the aim (never the random body-touch angle).
+  plan.curl = 0.0f;
+  if (shotType == e_ShotType_Curl) {
+    Vector3 dir2D = desiredDirection.Get2D();
+    float aimLateral = CalculateAimLateral(from.coords[0], from.coords[1], dir2D.coords[0], dir2D.coords[1], side);
+    float lateral = (fabs(aimLateral) > 0.05f) ? aimLateral : from.coords[1];
+    plan.curl = (float)signSide(lateral);
+  }
   return plan;
 }
 
@@ -57,6 +66,7 @@ void ApplyShotPlan(TouchInfo &touchInfo, const ShotPlan &plan) {
   touchInfo.aimHeight = plan.aimHeight;
   touchInfo.useAimHeight = true;
   touchInfo.shotType = plan.shotType;
+  touchInfo.curl = plan.curl;
 }
 
 }

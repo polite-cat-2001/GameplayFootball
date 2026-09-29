@@ -35,10 +35,13 @@ struct ShotPlan {
   float      desiredPower;
   float      aimHeight;
   e_ShotType shotType; // curl/chip plan
+  float      curl;     // planned curl out-direction sign (-1/+1); 0 = none
 };
 
-// Plans a shot from a desired direction and charge. One path for human and AI.
-ShotPlan PlanShot(const Vector3 &desiredDirection, float charge, e_ShotType shotType);
+// Plans a shot from the ball position and the desired direction/charge. One path for human and
+// AI: the plan carries the launch height and the curl direction derived from the aim (never the
+// random body-touch sign), so GetShotVector is a pure consumer of TouchInfo.
+ShotPlan PlanShot(const Vector3 &from, int side, const Vector3 &desiredDirection, float charge, e_ShotType shotType);
 
 // Copies a plan into the shot command's TouchInfo (shared by the human and AI controllers).
 void ApplyShotPlan(TouchInfo &touchInfo, const ShotPlan &plan);

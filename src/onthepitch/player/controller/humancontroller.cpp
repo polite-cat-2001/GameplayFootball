@@ -191,7 +191,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         if (GetHIDevice()->GetDeviceType() == e_HIDeviceType_Keyboard) command.touchInfo.autoDirectionBias = 1.0f;
         command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
         command.touchInfo.desiredPower = clamp(pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
-        setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
+        setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), CastPlayer()->GetTeam()->GetSide(), command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
 
         commandQueue.push_back(command);
 

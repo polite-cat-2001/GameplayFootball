@@ -536,8 +536,9 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
 
   // shot variants: curl bends the ball with planned lateral spin, chip launches at a fixed
   // steep angle with charge scaling the whole kick
-  if (shotType == e_ShotType_Curl) {
-    radian curlSign = (radian)signSide(bodyTouchAngle);
+  if (shotType == e_ShotType_Curl && currentAnim->originatingCommand.touchInfo.curl != 0.0f) {
+    // curl is planned input from TouchInfo: aim further outside the far corner, then spin back in
+    float curlSign = currentAnim->originatingCommand.touchInfo.curl;
     shot.Rotate2D(curlSign * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
     zRot = -curlSign * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
   } else if (shotType == e_ShotType_Chip) {
