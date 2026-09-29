@@ -1250,6 +1250,50 @@ void Match::Process() {
     UserEventManager::GetInstance().SetKeyboardState(SDLK_F2, false);
   }
 
+  // debug set-piece activation (spec §11): P/F/Y force an attacking penalty / free kick / corner
+  // for the human's team (human takes), Alt+P/F/Y force one against it (AI opponent takes, the human
+  // defends). Only from a clean play state: never during a set piece or the goal celebration
+  // (StopPlay is active until the kickoff).
+  {
+    bool alt = (SDL_GetModState() & SDL_KMOD_ALT) != 0;
+    bool debugPenalty = UserEventManager::GetInstance().GetKeyboardState(SDLK_P);
+    bool debugFreeKick = UserEventManager::GetInstance().GetKeyboardState(SDLK_F);
+    bool debugCorner = UserEventManager::GetInstance().GetKeyboardState(SDLK_Y);
+    if (debugPenalty) UserEventManager::GetInstance().SetKeyboardState(SDLK_P, false);
+    if (debugFreeKick) UserEventManager::GetInstance().SetKeyboardState(SDLK_F, false);
+    if (debugCorner) UserEventManager::GetInstance().SetKeyboardState(SDLK_Y, false);
+
+    if ((debugPenalty || debugFreeKick || debugCorner) && IsInPlay() && !IsInSetPiece()) {
+      int humanTeamID = -1;
+      for (int t = 0; t < 2 && humanTeamID == -1; t++) {
+        std::vector<Player*> players;
+        teams[t]->GetActivePlayers(players);
+        for (unsigned int i = 0; i < players.size(); i++) {
+          if (teams[t]->IsHumanControlled(players.at(i)->GetID())) { humanTeamID = t; break; }
+        }
+      }
+      if (humanTeamID != -1) {
+        // attacking variants give the set piece to the human's team: the normal flow picks a taker
+        // and Team::UpdateSwitch hands control to it. Alt gives it to the opponent AI instead.
+        int takerTeamID = alt ? abs(humanTeamID - 1) : humanTeamID;
+        Team *takerTeam = teams[takerTeamID];
+        if (debugPenalty) {
+          // penalty spot: 11 m from the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_Penalty, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * (pitchHalfW - 11.0f), 0, 0));
+        } else if (debugFreeKick) {
+          // 25 m out, central, in front of the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_FreeKick, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * (pitchHalfW - 25.0f), 0, 0));
+        } else {
+          // corner flag of the goal the taker team attacks
+          referee->DebugForceSetPiece(e_SetPiece_Corner, takerTeamID,
+                                      Vector3(-takerTeam->GetSide() * pitchHalfW, pitchHalfH, 0));
+        }
+      }
+    }
+  }
+
   if (gameOver) {
     // todonow: just once ^
     sig_OnGameOver(this);

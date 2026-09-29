@@ -266,6 +266,25 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
 }
 
+void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {
+  // Debug activation for manual testing (spec §11): force a set piece for the given team so it can
+  // be tested without earning a foul. The taker is chosen, and handed to the human, by the normal
+  // set-piece flow. Caller must ensure a clean play state.
+  buffer.desiredSetPiece = setPiece;
+  buffer.teamID = teamID;
+  buffer.stopTime = match->GetActualTime_ms();
+  buffer.prepareTime = match->GetActualTime_ms();
+  buffer.startTime = match->GetActualTime_ms();
+  buffer.restartPos = restartPos;
+  buffer.active = true;
+  buffer.endPhase = false;
+
+  PrepareSetPiece(setPiece);
+
+  match->StartPlay();
+  match->StartSetPiece(setPiece);
+}
+
 void Referee::AlterSetPiecePrepareTime(unsigned long newTime_ms) {
   if (buffer.active) {
     buffer.prepareTime = newTime_ms;
