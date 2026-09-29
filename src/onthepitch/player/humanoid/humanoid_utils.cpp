@@ -461,7 +461,9 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   Vector3 from = ball->Predict(0);
   Vector3 desiredDirection2D = currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D();
   float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
-  bool groundShot = setpiecelogic::IsGroundShot(charge);
+  e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
+  // a chip always arcs, so it is never treated as a driven ground shot
+  bool groundShot = setpiecelogic::IsGroundShot(charge) && shotType != e_ShotType_Chip;
 
   float aimHeight = currentAnim->originatingCommand.touchInfo.useAimHeight
                         ? currentAnim->originatingCommand.touchInfo.aimHeight
@@ -530,21 +532,25 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
   zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
 
-  // shot variants: curl bends the ball with planned lateral spin, chip trades horizontal
-  // power for a fixed high arc
-  e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
+  // shot variants: curl bends the ball with planned lateral spin, chip launches at a fixed
+  // steep angle with charge scaling the whole kick
   if (shotType == e_ShotType_Curl) {
     radian curlSign = (radian)signSide(bodyTouchAngle);
     shot.Rotate2D(curlSign * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
     zRot = -curlSign * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
   } else if (shotType == e_ShotType_Chip) {
-    shot.coords[2] = 0.0f;
-    shot *= _default_Shot_Chip_HorizFactor;
-    shot.coords[2] = _default_Shot_Chip_Loft;
+    // Chip: fixed steep launch angle, charge (through the shot power) scales the whole kick.
+    // A tap still lofts over a rushing keeper but stays short; a full charge sails it over the
+    // bar (FIFA/PES parity).
+    Vector3 chipHorizontal(shot.coords[0], shot.coords[1], 0.0f);
+    float chipSpeed = chipHorizontal.GetLength() * _default_Shot_Chip_SpeedFactor;
+    Vector3 chipDirection = chipHorizontal.GetNormalized(desiredDirection2D);
+    shot = chipDirection * (chipSpeed * std::cos(_default_Shot_Chip_Angle)) +
+           Vector3(0.0f, 0.0f, chipSpeed * std::sin(_default_Shot_Chip_Angle));
   }
 
   // a driven ground shot stays flat (its ballistic launch has no vertical speed)
-  if (groundShot && shotType != e_ShotType_Chip) shot.coords[2] = 0.0f;
+  if (groundShot) shot.coords[2] = 0.0f;
 
   //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
 

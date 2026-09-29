@@ -69,8 +69,8 @@ const float _default_Shot_AutoDirection = 0.74f;
 // Curl/chip shot feel and ballistic launch (spec 2026-09-29 §7). Tune by playing.
 const float _default_Shot_Curl_ZRot = 90.0f;        // lateral spin magnitude for a curled shot
 const float _default_Shot_Curl_AimOut = 0.1f;       // radians to aim outside the target so the curve bends back in
-const float _default_Shot_Chip_HorizFactor = 0.55f; // chip trades horizontal power for height
-const float _default_Shot_Chip_Loft = 8.0f;         // vertical launch speed for a chip (m/s)
+const float _default_Shot_Chip_Angle = 30.0f * pi / 180.0f; // chip launch angle (radians); steeper than a normal shot
+const float _default_Shot_Chip_SpeedFactor = 0.45f; // chip total speed as a fraction of the shot power
 const float _default_Shot_AimYMin = 0.8f;           // aim height at zero charge (m)
 const float _default_Shot_OverLift = 3.5f;          // full charge may aim this far above the crossbar (m)
 const float _default_Shot_GroundChargeMax = 0.35f;  // below this charge (desiredPower scale) the shot is driven flat
