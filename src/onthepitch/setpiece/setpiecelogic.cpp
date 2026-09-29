@@ -1,6 +1,7 @@
 #include "setpiecelogic.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 using namespace blunted;
 
@@ -67,6 +68,38 @@ void ApplyShotPlan(TouchInfo &touchInfo, const ShotPlan &plan) {
   touchInfo.useAimHeight = true;
   touchInfo.shotType = plan.shotType;
   touchInfo.curl = plan.curl;
+}
+
+PenaltyAim DefaultPenaltyAim() {
+  return PenaltyAim{ 0.0f, _default_Pen_ReticleStartY };
+}
+
+PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt) {
+  PenaltyAim result = aim;
+  if (hasInput) {
+    // the stick points at the screen, so lateral is inverted to line up with the goal
+    result.lateral -= stickLateral * _default_Pen_ReticleSpeed * dt;
+    result.height += stickHeight * _default_Pen_ReticleSpeed * dt;
+  } else {
+    float returnFactor = clamp(_default_Pen_ReticleReturn * dt, 0.0f, 1.0f);
+    result.lateral += (0.0f - result.lateral) * returnFactor;
+    result.height += (_default_Pen_ReticleStartY - result.height) * returnFactor;
+  }
+  result.lateral = clamp(result.lateral, -(goalHalfWidth + _default_Pen_AimOverhang), goalHalfWidth + _default_Pen_AimOverhang);
+  result.height = clamp(result.height, 0.0f, goalHeight + _default_Pen_AimOverhang);
+  return result;
+}
+
+PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge) {
+  float ratio = clamp(charge, 0.0f, 1.0f);
+  float spread = _default_Pen_SpreadMinR + (_default_Pen_SpreadMaxR - _default_Pen_SpreadMinR) * ratio;
+  float angle = random(0.0f, 2.0f * pi);
+  float radius = spread * std::sqrt(random(0.0f, 1.0f));
+  PenaltyShotPlan plan;
+  plan.lateral = aim.lateral + std::cos(angle) * radius;
+  plan.height = clamp(aim.height + std::sin(angle) * radius, 0.0f, goalHeight + _default_Pen_AimOverhang);
+  plan.speed = _default_Pen_PowerMinSpeed + (_default_Pen_PowerMaxSpeed - _default_Pen_PowerMinSpeed) * ratio;
+  return plan;
 }
 
 }

@@ -189,9 +189,26 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         command.touchInfo.inputDirection = inputDirection;
         command.touchInfo.autoDirectionBias = GetConfiguration()->GetReal("gameplay_shot_autodirection", _default_Shot_AutoDirection);
         if (GetHIDevice()->GetDeviceType() == e_HIDeviceType_Keyboard) command.touchInfo.autoDirectionBias = 1.0f;
-        command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
         command.touchInfo.desiredPower = clamp(pow(gaugeFactor, 0.6f), 0.01f, 1.0f);
-        setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), CastPlayer()->GetTeam()->GetSide(), command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
+        command.touchInfo.shotType = pendingShotType;
+
+        if (_IsPenaltyTaker()) {
+          // penalty: aim at the reticle instead of auto-aim. The struck point is the frozen
+          // reticle plus a random sample from the spread disc that grows with the charge.
+          float charge = clamp(gaugeFactor, 0.0f, 1.0f);
+          setpiecelogic::PenaltyShotPlan plan = setpiecelogic::PlanPenaltyShot(penaltyAim, charge);
+          float side = CastPlayer()->GetTeam()->GetSide();
+          Vector3 target(-side * pitchHalfW, plan.lateral, plan.height);
+          command.touchInfo.desiredDirection = (target - CastPlayer()->GetPosition()).GetNormalized(CastPlayer()->GetDirectionVec());
+          command.touchInfo.useAimTarget = true;
+          command.touchInfo.aimLateral = plan.lateral;
+          command.touchInfo.aimHeight = plan.height;
+          command.touchInfo.useAimHeight = true;
+          command.touchInfo.aimSpeed = plan.speed;
+        } else {
+          command.touchInfo.desiredDirection = AI_GetShotDirection(CastPlayer(), command.touchInfo.inputDirection, command.touchInfo.autoDirectionBias);
+          setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), CastPlayer()->GetTeam()->GetSide(), command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
+        }
 
         commandQueue.push_back(command);
 
@@ -479,6 +496,8 @@ void HumanController::Process() {
 
   if (hid->GetButton(e_ButtonFunction_Special) && hasPossession) team->GetController()->ApplyAttackingRun();
 
+  _UpdatePenaltyAim();
+
 }
 
 Vector3 HumanController::GetDirection() {
@@ -515,7 +534,55 @@ void HumanController::Reset() {
   steadyDirection = Vector3(0, -1, 0);
   previousDirection = Vector3(0, -1, 0);
 
+  penaltyAimActive = false;
+  penaltyAimFrozen = false;
+  penaltyAim = setpiecelogic::DefaultPenaltyAim();
+  lastPenaltyAimTime_ms = 0;
+
   fadingTeamPossessionAmount = 1.0;
+}
+
+bool HumanController::_IsPenaltyTaker() {
+  return match->IsInSetPiece() &&
+         team->GetController()->GetPieceTaker() == CastPlayer() &&
+         team->GetController()->GetSetPieceType() == e_SetPiece_Penalty;
+}
+
+void HumanController::_UpdatePenaltyAim() {
+  if (!_IsPenaltyTaker()) {
+    if (penaltyAimActive) {
+      penaltyAimActive = false;
+      penaltyAimFrozen = false;
+      SetYellowDebugPilon(Vector3(0, 0, -100)); // marker reset once the penalty is over
+    }
+    lastPenaltyAimTime_ms = 0;
+    return;
+  }
+
+  unsigned long now = match->GetActualTime_ms();
+  if (!penaltyAimActive) {
+    penaltyAim = setpiecelogic::DefaultPenaltyAim();
+    penaltyAimFrozen = false;
+    penaltyAimActive = true;
+    lastPenaltyAimTime_ms = now;
+  }
+
+  // commit the aim the moment the shot button is pressed: the reticle freezes here
+  if (!penaltyAimFrozen && actionMode == 2 && actionButton == e_ButtonFunction_Shot) penaltyAimFrozen = true;
+
+  float dt = (now - lastPenaltyAimTime_ms) / 1000.0f;
+  lastPenaltyAimTime_ms = now;
+  if (dt <= 0.0f || dt > 0.2f) dt = 0.01f;
+
+  if (!penaltyAimFrozen) {
+    Vector3 stick = hid->GetDirection();
+    bool hasInput = stick.GetLength() >= analogStickDeadzone;
+    penaltyAim = setpiecelogic::UpdatePenaltyAim(penaltyAim, stick.coords[0], stick.coords[1], hasInput, dt);
+  }
+
+  // debug marker: a point on the attacker's goal plane (temporary, ticket #25)
+  float side = CastPlayer()->GetTeam()->GetSide();
+  SetYellowDebugPilon(Vector3(-side * pitchHalfW, penaltyAim.lateral, penaltyAim.height));
 }
 
 e_ShotType HumanController::_SampleShotType() {

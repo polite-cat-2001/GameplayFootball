@@ -85,6 +85,17 @@ const float _default_Shot_AimLateralMargin = 1.5f;  // aim may overshoot the pos
 // Shots charge over this time; other actions keep the 1 s gauge (HumanController).
 const float KICK_CHARGE_MAX_TIME = 0.5f;            // seconds
 
+// Penalty reticle (spec 2026-09-29 §7): a 2D aim point on the attacker's goal plane, driven
+// by the stick, with a charge-scaled spread disc. Tune by playing.
+const float _default_Pen_ReticleSpeed = 6.0f;    // reticle travel speed across the goal plane (m/s)
+const float _default_Pen_ReticleReturn = 12.0f;  // how fast the idle reticle returns to centre (1/s)
+const float _default_Pen_ReticleStartY = 1.2f;   // initial reticle height above the ground (m)
+const float _default_Pen_AimOverhang = 0.6f;     // the reticle may aim this far beyond post/crossbar (m)
+const float _default_Pen_SpreadMinR = 0.15f;     // spread disc radius at zero charge (m)
+const float _default_Pen_SpreadMaxR = 1.6f;      // spread disc radius at full charge (m)
+const float _default_Pen_PowerMinSpeed = 24.0f;  // ball launch speed at zero charge (m/s)
+const float _default_Pen_PowerMaxSpeed = 44.0f;  // ball launch speed at full charge (m/s)
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;
@@ -198,6 +209,9 @@ struct TouchInfo {
     aimHeight = 0;
     useAimHeight = false;
     curl = 0;
+    useAimTarget = false;
+    aimLateral = 0;
+    aimSpeed = 0;
   }
 
   Vector3         inputDirection;
@@ -221,6 +235,13 @@ struct TouchInfo {
   // Planned curl: out-direction sign (-1/+1) so a curled shot bends back toward the goal;
   // 0 means no curl. The spin/aim-out magnitudes come from the gameplay config.
   float           curl;
+
+  // Penalty reticle (spec 2026-09-29 §7): when set, the shot is launched ballistically at
+  // (aimLateral, aimHeight) on the attacker's goal plane at aimSpeed, ignoring the
+  // charge-driven aim height, the skill spread and the lateral body curve. Penalty only.
+  bool            useAimTarget;
+  float           aimLateral; // y offset from the goal centre (m)
+  float           aimSpeed;   // horizontal launch speed (m/s)
 
 };
 

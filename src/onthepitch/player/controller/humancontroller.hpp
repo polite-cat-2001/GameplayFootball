@@ -8,6 +8,7 @@
 #include "playercontroller.hpp"
 
 #include "../../../hid/ihidevice.hpp"
+#include "../../setpiece/setpiecelogic.hpp"
 
 class Player;
 
@@ -41,6 +42,10 @@ class HumanController : public PlayerController {
     void _GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat);
     e_ShotType _SampleShotType();
 
+    // penalty reticle (spec 2026-09-29 §7)
+    bool _IsPenaltyTaker();
+    void _UpdatePenaltyAim();
+
     IHIDevice *hid;
 
     // set when a contextual button (example: pass/defend button) is pressed
@@ -63,6 +68,12 @@ class HumanController : public PlayerController {
     Vector3 previousDirection;
     Vector3 steadyDirection;
     int lastSteadyDirectionSnapshotTime_ms;
+
+    // penalty reticle state (lateral, height) on the attacker's goal plane
+    bool penaltyAimActive;
+    bool penaltyAimFrozen;
+    setpiecelogic::PenaltyAim penaltyAim;
+    unsigned long lastPenaltyAimTime_ms;
 
 };
 

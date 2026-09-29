@@ -17,6 +17,7 @@
 
 #include "humanoid_utils.hpp"
 #include <cmath>
+#include <limits>
 
 #include "../../../main.hpp"
 
@@ -462,20 +463,27 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   Vector3 desiredDirection2D = currentAnim->originatingCommand.touchInfo.desiredDirection.Get2D();
   float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
   e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
-  // a chip always arcs, so it is never treated as a driven ground shot
-  bool groundShot = setpiecelogic::IsGroundShot(charge) && shotType != e_ShotType_Chip;
+  bool useAimTarget = currentAnim->originatingCommand.touchInfo.useAimTarget;
+  // a chip always arcs, so it is never treated as a driven ground shot; a penalty aims at the
+  // reticle height regardless of charge, so it is never ground-driven either
+  bool groundShot = !useAimTarget && setpiecelogic::IsGroundShot(charge) && shotType != e_ShotType_Chip;
 
   float aimHeight = currentAnim->originatingCommand.touchInfo.useAimHeight
                         ? currentAnim->originatingCommand.touchInfo.aimHeight
                         : setpiecelogic::CalculateAimHeight(charge);
-  float aimLateral = setpiecelogic::CalculateAimLateral(from.coords[0], from.coords[1], desiredDirection2D.coords[0], desiredDirection2D.coords[1], player->GetTeam()->GetSide());
+  float aimLateral = useAimTarget
+                         ? currentAnim->originatingCommand.touchInfo.aimLateral
+                         : setpiecelogic::CalculateAimLateral(from.coords[0], from.coords[1], desiredDirection2D.coords[0], desiredDirection2D.coords[1], player->GetTeam()->GetSide());
   Vector3 aim(player->GetTeam()->GetSide() * -pitchHalfW, aimLateral, aimHeight);
 
   // a short tap is given a strong fixed launch speed so it reads as a hard low drive
   if (groundShot) power = std::max(power, _default_Shot_GroundPower);
   // finesse trades some power for placement and curl
   if (shotType == e_ShotType_Curl) power *= _default_Shot_Curl_SpeedFactor;
-  Vector3 desiredShot = setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, power, groundShot, _default_Shot_MaxLift);
+  // a penalty launches at the reticle's planned speed, with its ballistic vertical uncapped
+  float launchSpeed = useAimTarget ? std::max(currentAnim->originatingCommand.touchInfo.aimSpeed, 0.001f) : power;
+  float maxLift = useAimTarget ? std::numeric_limits<float>::max() : _default_Shot_MaxLift;
+  Vector3 desiredShot = setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, launchSpeed, groundShot, maxLift);
   if (Verbose()) {
     desiredShot.Print();
     printf("^ shot: desired\n");
@@ -511,6 +519,9 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   float worstCaseFactor = random(0.0f, 1.0f);
   worstCaseFactor =
       std::pow(worstCaseFactor, player->GetStat("technical_shot") * 0.7f);
+  // a penalty goes exactly to the sampled reticle point (the spread is applied there), so the
+  // skill-based worst-case deviation is skipped
+  if (useAimTarget) worstCaseFactor = 0.0f;
 
   Vector3 shot = desiredShot * (1.0f - worstCaseFactor) +
                  worstCaseShot * worstCaseFactor;
@@ -525,14 +536,17 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   xRot = -currentAnim->originatingCommand.touchInfo.desiredDirection.coords[1] * 20.0f + (random(-20, 20) * randomCurveFactor);
   yRot = -currentAnim->originatingCommand.touchInfo.desiredDirection.coords[0] * 20.0f + (random(-20, 20) * randomCurveFactor);
 
-  // lateral curve
-  radian bodyTouchAngle = spatialState.bodyDirectionVec.GetAngle2D(shot) / pi;
-  if (fabs(bodyTouchAngle) > 0.5f) bodyTouchAngle = (1.0f - fabs(bodyTouchAngle)) * signSide(bodyTouchAngle);
-  bodyTouchAngle *= 2.0f;
-  //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
-  radian amount = bodyTouchAngle * 0.25f;
-  shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
-  zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+  // lateral curve (skipped for the penalty reticle: the shot must go where the marker points)
+  radian bodyTouchAngle = 0.0f;
+  if (!useAimTarget) {
+    bodyTouchAngle = spatialState.bodyDirectionVec.GetAngle2D(shot) / pi;
+    if (fabs(bodyTouchAngle) > 0.5f) bodyTouchAngle = (1.0f - fabs(bodyTouchAngle)) * signSide(bodyTouchAngle);
+    bodyTouchAngle *= 2.0f;
+    //printf("bodyTouchAngle: %f\n", bodyTouchAngle);
+    radian amount = bodyTouchAngle * 0.25f;
+    shot.Rotate2D(amount * (0.4f + 0.6f * NormalizedClamp(shot.GetLength(), 0.0f, 70.0f)));
+    zRot = amount * -420 + (random(-20, 20) * plannedCurveFactor);
+  }
 
   // shot variants: curl bends the ball with planned lateral spin, chip launches at a fixed
   // steep angle with charge scaling the whole kick

@@ -46,6 +46,33 @@ ShotPlan PlanShot(const Vector3 &from, int side, const Vector3 &desiredDirection
 // Copies a plan into the shot command's TouchInfo (shared by the human and AI controllers).
 void ApplyShotPlan(TouchInfo &touchInfo, const ShotPlan &plan);
 
+// Penalty reticle (spec 2026-09-29 §7): a 2D aim point (lateral, height) on the attacker's
+// goal plane. Kept separate from PlanShot: the reticle is presentation for the human taker,
+// not a shared shot plan.
+struct PenaltyAim {
+  float lateral; // y offset from the goal centre (m)
+  float height;  // above the ground (m)
+};
+
+// The reticle's start state: centred, at _default_Pen_ReticleStartY.
+PenaltyAim DefaultPenaltyAim();
+
+// Advances the reticle by dt seconds. The stick axes are screen-right/up positive and are
+// already deadzone-filtered by the caller: `hasInput` false drifts the reticle back to the
+// centre at _default_Pen_ReticleReturn per second, otherwise it moves at _default_Pen_ReticleSpeed.
+// The point stays within _default_Pen_AimOverhang past the frame.
+PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt);
+
+// The launch point actually struck: the frozen reticle plus a random sample from a spread
+// disc whose radius grows with the charge, and the charge-scaled launch speed.
+struct PenaltyShotPlan {
+  float lateral; // y offset from the goal centre (m)
+  float height;  // above the ground (m)
+  float speed;   // horizontal launch speed (m/s)
+};
+
+PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge);
+
 }
 
 #endif
