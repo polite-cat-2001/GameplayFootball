@@ -209,9 +209,13 @@ class Match {
     void StopPlay() { inPlay = false; }
     bool IsInPlay() const { return inPlay; }
 
-    void StartSetPiece() { inSetPiece = true; }
-    void StopSetPiece() { inSetPiece = false; }
-    bool IsInSetPiece() const { return inSetPiece; }
+    // The set-piece type is the single source of truth: `inSetPiece` is derived
+    // (type != None) and is never serialized on its own. Taker identity stays in
+    // the RefereeBuffer on the host and arrives via the snapshot on a thin client.
+    void StartSetPiece(e_SetPiece setPiece) { setPieceType = setPiece; }
+    void StopSetPiece() { setPieceType = e_SetPiece_None; }
+    bool IsInSetPiece() const { return setPieceType != e_SetPiece_None; }
+    e_SetPiece GetSetPieceType() const { return setPieceType; }
     Referee *GetReferee() { return referee; }
     Officials *GetOfficials() { return officials; }
     const RefereeBuffer &GetRefereeBuffer() { return referee->GetBuffer(); };
@@ -392,7 +396,7 @@ class Match {
     bool pause;
     e_MatchPhase matchPhase; // 0 - first half; 1 - second half; 2 - 1st extra time; 3 - 2nd extra time; 4 - penalties
     bool inPlay;
-    bool inSetPiece;
+    e_SetPiece setPieceType;
     bool goalScored; // true after goal scored, false again after next match state change
     bool ballIsInGoal;
     int lastGoalTeamID;

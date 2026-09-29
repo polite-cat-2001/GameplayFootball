@@ -36,7 +36,19 @@ Snapshot CaptureSnapshot(Match *match) {
   snapshot.score[1] = match->GetMatchData()->GetGoalCount(1);
   snapshot.matchPhase = (int)match->GetMatchPhase();
   snapshot.inPlay = match->IsInPlay();
-  snapshot.inSetPiece = match->IsInSetPiece();
+  snapshot.setPieceType = (int)match->GetSetPieceType();
+  snapshot.setPieceTakerTeam = -1;
+  snapshot.setPieceTakerSlot = -1;
+  if (match->IsInSetPiece()) {
+    const RefereeBuffer &refBuffer = match->GetRefereeBuffer();
+    if (refBuffer.taker && refBuffer.teamID >= 0 && refBuffer.teamID <= 1) {
+      int slot = match->GetTeam(refBuffer.teamID)->GetPlayerSlot(refBuffer.taker->GetID());
+      if (slot >= 0) {
+        snapshot.setPieceTakerTeam = refBuffer.teamID;
+        snapshot.setPieceTakerSlot = slot;
+      }
+    }
+  }
   snapshot.pause = match->GetPause();
   snapshot.bestPossessionTeamID = match->GetBestPossessionTeamID();
   snapshot.goalScored = match->IsGoalScored();
@@ -133,7 +145,9 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutU32((uint32_t)snapshot.score[1]);
   buffer.PutU32((uint32_t)snapshot.matchPhase);
   buffer.PutBool(snapshot.inPlay);
-  buffer.PutBool(snapshot.inSetPiece);
+  buffer.PutU32((uint32_t)snapshot.setPieceType);
+  buffer.PutU32((uint32_t)snapshot.setPieceTakerTeam);
+  buffer.PutU32((uint32_t)snapshot.setPieceTakerSlot);
   buffer.PutBool(snapshot.pause);
   buffer.PutU32((uint32_t)snapshot.bestPossessionTeamID);
   buffer.PutBool(snapshot.goalScored);
@@ -184,7 +198,9 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
   snapshot.score[1] = (int)buffer.GetU32();
   snapshot.matchPhase = (int)buffer.GetU32();
   snapshot.inPlay = buffer.GetBool();
-  snapshot.inSetPiece = buffer.GetBool();
+  snapshot.setPieceType = (int)buffer.GetU32();
+  snapshot.setPieceTakerTeam = (int)buffer.GetU32();
+  snapshot.setPieceTakerSlot = (int)buffer.GetU32();
   snapshot.pause = buffer.GetBool();
   snapshot.bestPossessionTeamID = (int)buffer.GetU32();
   snapshot.goalScored = buffer.GetBool();

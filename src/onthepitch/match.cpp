@@ -286,7 +286,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   matchTime_ms = 0;
   pause = false;
   inPlay = false;
-  inSetPiece = false;
+  setPieceType = e_SetPiece_None;
   goalScored = false;
   ballIsInGoal = false;
   lastGoalTeamID = 0;
@@ -1188,7 +1188,7 @@ void Match::ProcessState(EnvState *state) {
   state->process(goalScoredTimer);
   state->process(matchPhase);
   state->process(inPlay);
-  state->process(inSetPiece);
+  state->process(setPieceType);
   state->process(goalScored);
   state->process(ballIsInGoal);
   state->process(lastGoalTeamID);
@@ -1510,7 +1510,8 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   actualTime_ms = snapshot.actualTime_ms;
   matchPhase = (e_MatchPhase)snapshot.matchPhase;
   inPlay = snapshot.inPlay;
-  inSetPiece = snapshot.inSetPiece;
+  // `inSetPiece` is derived from the relayed type; the bool itself is not on the wire.
+  setPieceType = (e_SetPiece)snapshot.setPieceType;
   // Possession drives the camera's attacking-direction shift; Process() (which
   // normally maintains it) doesn't run on the client.
   bestPossessionTeamID = snapshot.bestPossessionTeamID;

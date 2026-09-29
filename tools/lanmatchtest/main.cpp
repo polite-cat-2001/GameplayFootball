@@ -118,6 +118,45 @@ int main(int argc, char **argv) {
     CHECK(snapshot.message == "host test message", "snapshot message mismatch");
     CHECK(snapshot.messageCounter == match->GetSpamMessageCounter(), "snapshot message counter mismatch");
     CHECK(snapshot.maxRtt_ms == 0, "snapshot maxRtt should be 0 without clients");
+    CHECK(snapshot.setPieceType == (int)e_SetPiece_None, "snapshot set piece type should be None at kickoff");
+  }
+
+  // Set-piece identity: the type drives IsInSetPiece() (never serialized as a
+  // bool) and the snapshot carries the actual taker as team + squad slot.
+  {
+    match->StartSetPiece(e_SetPiece_FreeKick);
+    CHECK(match->IsInSetPiece(), "StartSetPiece should mark the match in-set-piece");
+    CHECK(match->GetSetPieceType() == e_SetPiece_FreeKick, "set piece type not stored on the match");
+
+    NetBuffer buffer;
+    match->CaptureRemoteSnapshot(buffer);
+    buffer.ResetRead();
+    Snapshot snapshot = ReadSnapshot(buffer);
+    CHECK(snapshot.setPieceType == (int)e_SetPiece_FreeKick, "snapshot should carry the set piece type");
+    // No set piece was actually prepared, so the referee has no taker yet.
+    CHECK(snapshot.setPieceTakerTeam == -1 && snapshot.setPieceTakerSlot == -1,
+          "snapshot taker should be unassigned when there is no taker");
+
+    match->StopSetPiece();
+    CHECK(!match->IsInSetPiece(), "StopSetPiece should clear the match set-piece state");
+  }
+
+  // Wire round-trip of the set-piece identity (protocol v15).
+  {
+    Snapshot s;
+    s.setPieceType = (int)e_SetPiece_Penalty;
+    s.setPieceTakerTeam = 1;
+    s.setPieceTakerSlot = 7;
+
+    NetBuffer buffer;
+    WriteSnapshot(buffer, s);
+    buffer.ResetRead();
+    Snapshot restored = ReadSnapshot(buffer);
+    CHECK(!buffer.Failed(), "set-piece snapshot buffer failed");
+    CHECK(restored.setPieceType == (int)e_SetPiece_Penalty &&
+          restored.setPieceTakerTeam == 1 &&
+          restored.setPieceTakerSlot == 7,
+          "snapshot set-piece identity round-trip mismatch");
   }
 
   // Client-side interpolation: discrete state comes from the newer snapshot,

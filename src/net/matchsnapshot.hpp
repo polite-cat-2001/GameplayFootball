@@ -62,7 +62,9 @@ struct Snapshot {
     score[1] = 0;
     matchPhase = 0;
     inPlay = false;
-    inSetPiece = false;
+    setPieceType = e_SetPiece_None;
+    setPieceTakerTeam = -1;
+    setPieceTakerSlot = -1;
     pause = false;
     bestPossessionTeamID = -1;
     goalScored = false;
@@ -84,7 +86,13 @@ struct Snapshot {
   int score[2];
   int matchPhase;
   bool inPlay;
-  bool inSetPiece;
+  // Set-piece identity (basket B): the type (e_SetPiece_None when none) and the
+  // actual taker (team + squad slot). The client derives IsInSetPiece() from the
+  // type; the bool itself is not on the wire. Plan roles[] are unrelated to the
+  // taker and do not replace it.
+  int setPieceType;
+  int setPieceTakerTeam;
+  int setPieceTakerSlot;
   bool pause;
   int bestPossessionTeamID; // lets the client's camera pan like the host's
   bool goalScored; // synced so the goal replay triggers on every peer

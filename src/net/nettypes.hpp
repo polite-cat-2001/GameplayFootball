@@ -24,7 +24,9 @@
 // v13: PlayerDataRaw.tmId (player photo key) in the team setup stream.
 // v14: kits are a local-only preference per peer; removed the kit fields from
 //      NetLobbyState, NetMatchSetup and NetMatchEnvironment.
-const int net_protocolVersion = 14;
+// v15: snapshot carries the set-piece identity (e_SetPiece type + actual taker
+//      team/slot) instead of the inSetPiece bool, which is now derived.
+const int net_protocolVersion = 15;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

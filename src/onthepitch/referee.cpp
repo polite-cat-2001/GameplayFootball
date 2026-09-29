@@ -230,7 +230,7 @@ void Referee::Process() {
         whistle[1]->SetGain(0.3 * GetConfiguration()->GetReal("audio_volume", 0.5));
         whistle[1]->Poke(e_SystemType_Audio);
         match->StartPlay();
-        match->StartSetPiece();
+        match->StartSetPiece(buffer.desiredSetPiece);
       }
     }
   }

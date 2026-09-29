@@ -2249,3 +2249,25 @@ controlled collision, отклонённый requeue), а окно детект�
 Детерминизм не затронут (ввод/UI, симуляция не менялась). Сборка Release x86 зелёная. Вики:
 [[архитектура]], [[глоссарий]], [[константы]].
 
+## [2026-09-29] session | #19: снапшот v15 — тип стандарта и фактический бьющий
+
+Тикет #19 (распил #19–#40, фаза 1) закрыт на ветке `of_port` — единственное расширение
+снапшота из эффорта стандартов.
+
+- `Match`: `bool inSetPiece` заменён на `e_SetPiece setPieceType`; `IsInSetPiece()` выводится
+  (`type != None`), `StartSetPiece(type)` / `StopSetPiece()`, `GetSetPieceType()`.
+  `ProcessState` сериализует тип — хеш `tools/determinism` поплыл (`7134def2…` → `3b9fa5f2…`),
+  эталоны перегенерируются один раз в #40.
+- `Referee::Process` передаёт в `StartSetPiece` `buffer.desiredSetPiece`.
+- `Snapshot` (v15): вместо `bool inSetPiece` — `setPieceType` + `setPieceTakerTeam`/`Slot`
+  (team+slot, `-1` = не назначен). `CaptureSnapshot` берёт тип из `Match`, тэйкера — из
+  `RefereeBuffer.taker` через `Team::GetPlayerSlot`. `inSetPiece` на проводе нет; клиент
+  выводит его из типа в `ApplyRemoteSnapshot`.
+- План-роли (`Snapshot.roles`, v12) не тронуты и тэйкером не являются; потребитель
+  идентичности — презентация #26.
+- `net_protocolVersion` 14 → 15 (политика прежняя: несовпадение версии отклоняется в handshake);
+  `nettypes.hpp`, `lanmatchtest` (+7 проверок round-trip).
+
+Вики: [[сеть]] (v15, идентичность стандарта), [[матч]] (`setPieceType`), [[константы]].
+Сборка Release x86 зелёная; `lanmatchtest` PASS (42), `nettest` PASS (59).
+
