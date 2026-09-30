@@ -268,21 +268,21 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
 
 void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {
   // Debug activation for manual testing (spec §11): force a set piece for the given team so it can
-  // be tested without earning a foul. The taker is chosen, and handed to the human, by the normal
-  // set-piece flow. Caller must ensure a clean play state.
+  // be tested without earning a foul. Uses the normal set-piece timing: stop play now, position the
+  // teams at prepareTime and blow the whistle at startTime. This matches a real set piece (players
+  // settle before the ball goes live, the taker is handed to the human by the normal flow), instead
+  // of the old immediate drop-in that made players look like they slid on. Caller must ensure a
+  // clean play state.
   buffer.desiredSetPiece = setPiece;
   buffer.teamID = teamID;
   buffer.stopTime = match->GetActualTime_ms();
-  buffer.prepareTime = match->GetActualTime_ms();
-  buffer.startTime = match->GetActualTime_ms();
+  buffer.prepareTime = buffer.stopTime + 2000;
+  buffer.startTime = buffer.prepareTime + 2000;
   buffer.restartPos = restartPos;
   buffer.active = true;
   buffer.endPhase = false;
 
-  PrepareSetPiece(setPiece);
-
-  match->StartPlay();
-  match->StartSetPiece(setPiece);
+  match->StopPlay();
 }
 
 void Referee::AlterSetPiecePrepareTime(unsigned long newTime_ms) {

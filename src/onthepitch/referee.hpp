@@ -47,10 +47,10 @@ class Referee {
 
     void PrepareSetPiece(e_SetPiece setPiece);
 
-    // Debug activation for manual testing (spec §11). Forces a set piece for the given team and
-    // drops straight into play; the taker, and the human's control of it, come from the normal
-    // set-piece flow (TeamAIController::PrepareSetPiece + Team::UpdateSwitch). Caller must ensure a
-    // clean play state.
+    // Debug activation for manual testing (spec §11). Forces a set piece for the given team using
+    // the normal timing (stop play, prepareTime, then the whistle at startTime); the taker, and the
+    // human's control of it, come from the normal set-piece flow (TeamAIController::PrepareSetPiece
+    // + Team::UpdateSwitch). Caller must ensure a clean play state.
     void DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos);
 
     const RefereeBuffer &GetBuffer() { return buffer; };
