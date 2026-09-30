@@ -8,7 +8,6 @@
 #include "playercontroller.hpp"
 
 #include "../../../hid/ihidevice.hpp"
-#include "../../setpiece/setpiecelogic.hpp"
 
 class Player;
 
@@ -31,6 +30,9 @@ class HumanController : public PlayerController {
 
     int GetActionMode() { return actionMode; }
 
+    // 0..1 charge of the action in progress (spec §2.6 HUD state); 0 when not charging.
+    float GetChargeRatio() const;
+
     // shot variant fixed at the moment Shot was pressed (curl/chip modifier)
     bool IsChargingChip() { return actionMode == 2 && actionButton == e_ButtonFunction_Shot && pendingShotType == e_ShotType_Chip; }
     bool IsChargingShotVariant() { return actionMode == 2 && actionButton == e_ButtonFunction_Shot && pendingShotType != e_ShotType_Normal; }
@@ -42,7 +44,7 @@ class HumanController : public PlayerController {
     void _GetHidInput(Vector3 &rawInputDirection, float &rawInputVelocityFloat);
     e_ShotType _SampleShotType();
 
-    // penalty reticle (spec 2026-09-29 §7)
+    // penalty reticle (spec 2026-09-29 §7); the aim itself lives in SetPiecePresentation
     bool _IsPenaltyTaker();
     void _UpdatePenaltyAim();
 
@@ -68,12 +70,6 @@ class HumanController : public PlayerController {
     Vector3 previousDirection;
     Vector3 steadyDirection;
     int lastSteadyDirectionSnapshotTime_ms;
-
-    // penalty reticle state (lateral, height) on the attacker's goal plane
-    bool penaltyAimActive = false;
-    bool penaltyAimFrozen = false;
-    setpiecelogic::PenaltyAim penaltyAim = setpiecelogic::DefaultPenaltyAim();
-    unsigned long lastPenaltyAimTime_ms = 0;
 
 };
 

@@ -6,6 +6,7 @@
 
 #include "../../AIsupport/AIfunctions.hpp"
 #include "../../setpiece/setpiecelogic.hpp"
+#include "../../setpiece/setpiecepresentation.hpp"
 
 #include "../../../main.hpp"
 
@@ -101,11 +102,8 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         (hid->GetButton(actionButton) && gauge_ms > 500) || // allow anim to kick in before queue is complete (before button is released), it will usually touch ball after the remaining time anyway, so we still have time to add more power, yet still respond as fast as possible
         (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0)) {
 
-      int baseTime_ms = 60; // substract a little because we can't really press a button shorter than this
       // shots charge over KICK_CHARGE_MAX_TIME; other actions keep the 1 s gauge
-      float gaugeScale_ms = (actionButton == e_ButtonFunction_Shot) ? KICK_CHARGE_MAX_TIME * 1000.0f : 1000.0f;
-      float gaugeFactor = (gauge_ms - baseTime_ms) * (1.0f / (gaugeScale_ms - baseTime_ms));
-      gaugeFactor = clamp(gaugeFactor, 0.0f, 1.0f);
+      float gaugeFactor = GetChargeRatio();
 
       // action button released!
 
@@ -196,7 +194,7 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
           // penalty: aim at the reticle instead of auto-aim. The struck point is the frozen
           // reticle plus a random sample from the spread disc that grows with the charge.
           float charge = clamp(gaugeFactor, 0.0f, 1.0f);
-          setpiecelogic::PenaltyShotPlan plan = setpiecelogic::PlanPenaltyShot(penaltyAim, charge);
+          setpiecelogic::PenaltyShotPlan plan = setpiecelogic::PlanPenaltyShot(match->GetSetPiecePresentation()->GetPenaltyAim(), charge);
           float side = CastPlayer()->GetTeam()->GetSide();
           Vector3 target(-side * pitchHalfW, plan.lateral, plan.height);
           command.touchInfo.desiredDirection = (target - CastPlayer()->GetPosition()).GetNormalized(CastPlayer()->GetDirectionVec());
@@ -534,58 +532,32 @@ void HumanController::Reset() {
   steadyDirection = Vector3(0, -1, 0);
   previousDirection = Vector3(0, -1, 0);
 
-  // do not strand the reticle marker: Reset() runs on every control switch (SetExternalController),
-  // which can happen before the post-penalty _UpdatePenaltyAim sees the taker role end
-  if (penaltyAimActive) SetYellowDebugPilon(Vector3(0, 0, -100));
-  penaltyAimActive = false;
-  penaltyAimFrozen = false;
-  penaltyAim = setpiecelogic::DefaultPenaltyAim();
-  lastPenaltyAimTime_ms = 0;
-
   fadingTeamPossessionAmount = 1.0;
 }
 
 bool HumanController::_IsPenaltyTaker() {
-  return match->IsInSetPiece() &&
-         team->GetController()->GetPieceTaker() == CastPlayer() &&
-         team->GetController()->GetSetPieceType() == e_SetPiece_Penalty;
+  SetPiecePresentation *presentation = match->GetSetPiecePresentation();
+  return presentation->GetType() == e_SetPiece_Penalty &&
+         presentation->GetRole(CastPlayer()) == e_SetPieceRole_Kicker;
 }
 
 void HumanController::_UpdatePenaltyAim() {
-  if (!_IsPenaltyTaker()) {
-    if (penaltyAimActive) {
-      penaltyAimActive = false;
-      penaltyAimFrozen = false;
-      SetYellowDebugPilon(Vector3(0, 0, -100)); // marker reset once the penalty is over
-    }
-    lastPenaltyAimTime_ms = 0;
-    return;
-  }
+  // Only the local penalty kicker drives (and draws) the reticle; cleanup for a lost/changed taker
+  // is done once per tick by SetPiecePresentation::Process(), so non-takers must not clear it here.
+  if (!_IsPenaltyTaker()) return;
 
-  unsigned long now = match->GetActualTime_ms();
-  if (!penaltyAimActive) {
-    penaltyAim = setpiecelogic::DefaultPenaltyAim();
-    penaltyAimFrozen = false;
-    penaltyAimActive = true;
-    lastPenaltyAimTime_ms = now;
-  }
+  SetPiecePresentation *presentation = match->GetSetPiecePresentation();
+  Vector3 stick = hid->GetDirection();
+  bool hasInput = stick.GetLength() >= analogStickDeadzone;
+  bool shotPressed = (actionMode == 2 && actionButton == e_ButtonFunction_Shot);
+  presentation->UpdatePenaltyAim(stick.coords[0], stick.coords[1], hasInput, shotPressed, GetChargeRatio(), match->GetActualTime_ms());
+}
 
-  // commit the aim the moment the shot button is pressed: the reticle freezes here
-  if (!penaltyAimFrozen && actionMode == 2 && actionButton == e_ButtonFunction_Shot) penaltyAimFrozen = true;
-
-  float dt = (now - lastPenaltyAimTime_ms) / 1000.0f;
-  lastPenaltyAimTime_ms = now;
-  if (dt <= 0.0f || dt > 0.2f) dt = 0.01f;
-
-  if (!penaltyAimFrozen) {
-    Vector3 stick = hid->GetDirection();
-    bool hasInput = stick.GetLength() >= analogStickDeadzone;
-    penaltyAim = setpiecelogic::UpdatePenaltyAim(penaltyAim, stick.coords[0], stick.coords[1], hasInput, dt);
-  }
-
-  // debug marker: a point on the attacker's goal plane (temporary, ticket #25)
-  float side = CastPlayer()->GetTeam()->GetSide();
-  SetYellowDebugPilon(Vector3(-side * pitchHalfW, penaltyAim.lateral, penaltyAim.height));
+float HumanController::GetChargeRatio() const {
+  if (actionMode != 2) return 0.0f;
+  int baseTime_ms = 60; // substract a little because we can't really press a button shorter than this
+  float gaugeScale_ms = (actionButton == e_ButtonFunction_Shot) ? KICK_CHARGE_MAX_TIME * 1000.0f : 1000.0f;
+  return clamp((gauge_ms - baseTime_ms) * (1.0f / (gaugeScale_ms - baseTime_ms)), 0.0f, 1.0f);
 }
 
 e_ShotType HumanController::_SampleShotType() {

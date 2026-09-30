@@ -48,6 +48,7 @@ struct ReplayBallTouchesNetFrame {
 };
 
 class NetBuffer;
+class SetPiecePresentation;
 struct NetMatchEnvironment;
 struct Snapshot;
 
@@ -221,6 +222,8 @@ class Match {
     Referee *GetReferee() { return referee; }
     Officials *GetOfficials() { return officials; }
     const RefereeBuffer &GetRefereeBuffer() { return referee->GetBuffer(); };
+    // Set-piece presentation carrier (spec §2): roles, phase and HUD state for the local players.
+    SetPiecePresentation *GetSetPiecePresentation() { return setPiecePresentation; }
 
     void SetGoalScored(bool onOff) { if (onOff == false) ballIsInGoal = false; goalScored = onOff; }
     bool IsGoalScored() const { return goalScored; }
@@ -456,6 +459,8 @@ class Match {
     std::deque<Vector3> camPos; // todo: circular buffer?
 
     Referee *referee;
+
+    SetPiecePresentation *setPiecePresentation;
 
     boost::shared_ptr<MenuTask> menuTask;
 

@@ -2431,3 +2431,26 @@ headless не нажимаются). Полевой тест — в открыт
 прицелу закрыт; тикет #25 закрывается. Не проверено полем: `F`/`Y` и `Alt`-варианты дебаг-активации
 (остаются в открытых вопросах).
 
+## [2026-09-30] feat | #26: презентация стандартов — носитель и роли
+
+Тикет #26 (фаза 4 спеки стандартов, §2) закрыт на ветке `of_port`. Введён единый объект
+презентации `SetPiecePresentation` (`src/onthepitch/setpiece/setpiecepresentation.{hpp,cpp}`),
+владеемый `Match` (`GetSetPiecePresentation()`): своего автомата и жизненного цикла нет —
+фаза выводится из `RefereeBuffer.active` + `IsInSetPiece()` + таймеров, конец по-прежнему
+`buffer.taker->TouchAnim()` в `Referee::Process`.
+
+- Идентичность: на хосте `SetPiecePresentation::Process()` (зовётся из `Match::Process` после
+  `referee->Process()`) берёт тип/тэйкера из `RefereeBuffer`; на тонком клиенте
+  `SetRemoteIdentity()` из `ApplyRemoteSnapshot` разрешает тэйкера из снапшота v15 (team+slot).
+  Внутри — `switch (e_SetPiece)` только для набора ролей, класса-на-стандарт нет.
+- Роли `e_SetPieceRole { None, Kicker, Keeper }`: `Kicker` — локально управляемый игрок ==
+  тэйкер; `Keeper` — только на пенальти, вратарь защищающейся команды. Роль считается на
+  каждого локального игрока; локальность — `GetControllingPeerId` (хост) /
+  `GetRemoteOwnerId` (клиент). `Wall` не заводится.
+- `GetHudState(Player*)` отдаёт `{role, type, aimPoint, chargeRatio}`; отрисовка отдельная и
+  идёт только при `role != None`. Состояние ретикла пенальти переехало из `HumanController` в
+  носитель (плюс отрисовка жёлтого маркера); `HumanController` только скармливает сырой стик
+  (`UpdatePenaltyAim`) и читает прицел при ударе; `GetChargeRatio()` вынесен для HUD.
+
+Презентация — хеш не меняет: `tools/determinism` `3b9fa5f2` без изменений; `nettest` PASS (59),
+`lanmatchtest` PASS (42). Обновлены [[матч]], [[сеть]], [[глоссарий]].

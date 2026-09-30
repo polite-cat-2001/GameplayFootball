@@ -8,6 +8,8 @@
 
 #include "proceduralpitch.hpp"
 
+#include "setpiece/setpiecepresentation.hpp"
+
 #include "scene/objectfactory.hpp"
 #include "utils/splitgeometry.hpp"
 #include "utils/directoryparser.hpp"
@@ -251,6 +253,10 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   SetRandomSunParams();
 
 
+  // set-piece presentation (spec §2): roles/HUD for the local players, owned by the match
+  setPiecePresentation = new SetPiecePresentation(this);
+
+
   // human gamers
 
   Log(e_Notice, "Match", "Match", "Human gamer controller init");
@@ -451,6 +457,7 @@ void Match::Exit() {
   delete officials;
   delete ball;
   delete referee;
+  delete setPiecePresentation;
   delete matchData;
   menuTask->SetMatchData(0);
 
@@ -1310,6 +1317,10 @@ void Match::Process() {
 
     referee->Process();
 
+    // refresh set-piece presentation identity from RefereeBuffer (spec §2); the local taker's
+    // controller then advances the reticle in its own Process
+    setPiecePresentation->Process();
+
 
     // ball
 
@@ -1587,6 +1598,8 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   inPlay = snapshot.inPlay;
   // `inSetPiece` is derived from the relayed type; the bool itself is not on the wire.
   setPieceType = (e_SetPiece)snapshot.setPieceType;
+  // Thin client: build the presentation identity from the snapshot (type + actual taker team/slot).
+  setPiecePresentation->SetRemoteIdentity(setPieceType, snapshot.setPieceTakerTeam, snapshot.setPieceTakerSlot);
   // Possession drives the camera's attacking-direction shift; Process() (which
   // normally maintains it) doesn't run on the client.
   bestPossessionTeamID = snapshot.bestPossessionTeamID;
