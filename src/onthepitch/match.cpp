@@ -1706,6 +1706,11 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   if (autoUpdateIngameCamera) {
     if (remoteCameraOverride && designatedPossessionPlayer) {
       UpdateIngameCamera();
+    } else if (setPiecePresentation->IsCameraTypeSetPiece() && designatedPossessionPlayer) {
+      // Set-piece cameras are local presentation for the owner only. The owner would have turned the
+      // auto camera off above, so here this peer is not the owner: compute its own normal camera
+      // instead of inheriting the host's set-piece view.
+      UpdateIngameCamera();
     } else {
       cameraOrientation = snapshot.cameraOrientation;
       cameraNodeOrientation = snapshot.cameraNodeOrientation;

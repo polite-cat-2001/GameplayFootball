@@ -58,6 +58,9 @@ class SetPiecePresentation {
     e_SetPiece GetType() const { return type; }
     Player *GetTaker() const { return taker; }
     bool IsSetPiece() const { return type != e_SetPiece_None; }
+    // True for the four set pieces that own a camera (spec §4). The thin client uses it to avoid
+    // inheriting the host's set-piece camera when this peer is not the owner.
+    bool IsCameraTypeSetPiece() const { return HasSetPieceCamera(type); }
 
     // Phase derived from RefereeBuffer.active + IsInSetPiece() + stopTime/prepareTime/startTime.
     // On a thin client only the type is synced, so a non-None phase is Active.
