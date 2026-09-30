@@ -157,17 +157,26 @@ Player *SetPiecePresentation::CameraTaker() const {
   return match->GetRefereeBuffer().taker;
 }
 
+bool SetPiecePresentation::TeamHasLocalHuman(Team *team) const {
+  if (!team) return false;
+  const std::vector<Player*> &players = team->GetAllPlayers();
+  for (unsigned int i = 0; i < players.size(); i++) {
+    if (players.at(i)->IsActive() && IsLocalPlayer(players.at(i))) return true;
+  }
+  return false;
+}
+
 bool SetPiecePresentation::LocalRoleOwnsCamera(e_SetPiece camTypeNow, Player *camTaker) const {
   if (!camTaker) return false;
-  if (IsLocalPlayer(camTaker)) return true; // Kicker
+  // A local human on the taking side owns the camera. Checking the whole team (not just the taker)
+  // matters on a thin client: only the currently selected player carries a remote owner id, so the
+  // taker can read as AI there until selection catches up (control handoff is #29).
+  if (TeamHasLocalHuman(camTaker->GetTeam())) return true;
   // On a penalty the defending human follows the taker automatically, without having to select the
   // keeper: they see the same camera behind the kicker (spec §4). Picking the keeper for control is
   // a separate effort, so it must not gate the camera.
   if (camTypeNow == e_SetPiece_Penalty) {
-    const std::vector<Player*> &defenders = match->GetTeam(abs(camTaker->GetTeamID() - 1))->GetAllPlayers();
-    for (unsigned int i = 0; i < defenders.size(); i++) {
-      if (IsLocalPlayer(defenders.at(i))) return true;
-    }
+    if (TeamHasLocalHuman(match->GetTeam(abs(camTaker->GetTeamID() - 1)))) return true;
   }
   return false;
 }

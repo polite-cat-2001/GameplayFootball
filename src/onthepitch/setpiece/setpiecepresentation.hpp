@@ -14,6 +14,7 @@ using namespace blunted;
 
 class Match;
 class Player;
+class Team;
 
 // A local human player's part in the current set piece. There is deliberately no Wall role: the
 // wall is AI defenders.
@@ -93,6 +94,7 @@ class SetPiecePresentation {
     // free kick, corner and goal kick (throw-in and kickoff keep the normal camera).
     static bool HasSetPieceCamera(e_SetPiece type);
     Player *CameraTaker() const;
+    bool TeamHasLocalHuman(Team *team) const;
     bool LocalRoleOwnsCamera(e_SetPiece type, Player *taker) const;
     Vector3 CameraSpot() const;
     Vector3 CameraBaseForward(const Vector3 &spot, float side) const;
