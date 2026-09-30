@@ -21,6 +21,7 @@ SetPiecePresentation::SetPiecePresentation(Match *match) : match(match) {
 
   camActive = false;
   camFrozen = false;
+  camSuppressed = false;
   camType = e_SetPiece_None;
   camSpot = Vector3(0);
   camForward = Vector3(0, -1, 0);
@@ -224,6 +225,7 @@ void SetPiecePresentation::ReleaseCamera() {
   if (!camActive) return;
   camActive = false;
   camFrozen = false;
+  camSuppressed = true;
   camReleaseTime_ms = 0;
   match->SetAutoUpdateIngameCamera(true);
 }
@@ -274,6 +276,14 @@ void SetPiecePresentation::UpdateCamera() {
       }
     }
     ApplyCamera();
+    return;
+  }
+
+  // A camera released for this set piece stays released: otherwise the commit release and the still
+  // live set piece (ball not touched yet) would flip the camera on and off every couple of ticks.
+  // Cleared once the set piece is over, so the next one can engage.
+  if (camSuppressed) {
+    if (!HasSetPieceCamera(camTypeNow)) camSuppressed = false;
     return;
   }
 

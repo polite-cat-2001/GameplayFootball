@@ -111,6 +111,7 @@ class SetPiecePresentation {
 
     bool camActive;
     bool camFrozen;              // pose fixed at the kick, watching the flight
+    bool camSuppressed;          // released for this set piece: don't re-engage until it is gone
     e_SetPiece camType;
     Vector3 camSpot;            // ball spot at activation (z = 0), frozen
     Vector3 camForward;         // horizontal unit heading toward the target
