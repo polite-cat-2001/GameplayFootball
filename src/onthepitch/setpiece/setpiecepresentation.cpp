@@ -285,6 +285,14 @@ void SetPiecePresentation::UpdateCamera() {
         return;
       }
     }
+    if (!camFrozen) {
+      // Until the kick is committed, keep re-reading the spot. On a thin client the ball position is
+      // interpolated, so at activation it can still be en route to the restart position (e.g. right
+      // after a debug-forced set piece teleports the ball); freezing it there would leave the camera
+      // at the old ball spot. Once committed (or on the host, where the spot is fixed) this is a no-op.
+      camSpot = CameraSpot();
+      camForward = CameraBaseForward(camSpot, camSide);
+    }
     ApplyCamera();
     return;
   }
