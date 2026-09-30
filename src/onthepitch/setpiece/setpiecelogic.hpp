@@ -60,8 +60,11 @@ PenaltyAim DefaultPenaltyAim();
 // Advances the reticle by dt seconds. The stick axes are screen-right/up positive and are
 // already deadzone-filtered by the caller: `hasInput` false drifts the reticle back to the
 // centre at _default_Pen_ReticleReturn per second, otherwise it moves at _default_Pen_ReticleSpeed.
-// The point stays within _default_Pen_AimOverhang past the frame.
-PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt);
+// The point stays within _default_Pen_AimOverhang past the frame. `side` is the taker's team
+// side: the penalty camera looks from the spot toward the attacked goal (x = -side*pitchHalfW),
+// so screen-right is world +y when side == 1 and world -y when side == -1 (flips after the
+// half-time side swap).
+PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt, int side);
 
 // The launch point actually struck: the frozen reticle plus a random sample from a spread
 // disc whose radius grows with the charge, and the charge-scaled launch speed.

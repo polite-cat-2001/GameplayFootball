@@ -128,7 +128,8 @@ void SetPiecePresentation::UpdatePenaltyAim(float stickLateral, float stickHeigh
   lastPenaltyAimTime_ms = now;
   if (dt <= 0.0f || dt > 0.2f) dt = 0.01f;
 
-  if (!penaltyAimFrozen) penaltyAim = setpiecelogic::UpdatePenaltyAim(penaltyAim, stickLateral, stickHeight, hasInput, dt);
+  int side = taker ? taker->GetTeam()->GetSide() : 1;
+  if (!penaltyAimFrozen) penaltyAim = setpiecelogic::UpdatePenaltyAim(penaltyAim, stickLateral, stickHeight, hasInput, dt, side);
   this->chargeRatio = chargeRatio;
 
   DrawPenaltyReticle();

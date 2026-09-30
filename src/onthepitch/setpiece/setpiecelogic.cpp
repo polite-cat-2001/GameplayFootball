@@ -74,11 +74,12 @@ PenaltyAim DefaultPenaltyAim() {
   return PenaltyAim{ 0.0f, _default_Pen_ReticleStartY };
 }
 
-PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt) {
+PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float stickHeight, bool hasInput, float dt, int side) {
   PenaltyAim result = aim;
   if (hasInput) {
-    // the stick points at the screen, so lateral is inverted to line up with the goal
-    result.lateral -= stickLateral * _default_Pen_ReticleSpeed * dt;
+    // The stick points at the screen: map it to the goal plane through the camera's heading, whose
+    // right axis is world +y for side == 1 and -y for side == -1.
+    result.lateral += stickLateral * side * _default_Pen_ReticleSpeed * dt;
     result.height += stickHeight * _default_Pen_ReticleSpeed * dt;
   } else {
     float returnFactor = clamp(_default_Pen_ReticleReturn * dt, 0.0f, 1.0f);
