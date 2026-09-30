@@ -283,10 +283,12 @@ class Match {
     void FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, Vector3 &position, float &FOV, const Vector3 &targetPosition, float zoom);
     void SetReplayCamera(int camType, const Vector3 &target, float modifierValue);
 
-    // Set-piece camera override (spec §4), same pattern as the film-referee camera: turns the auto
-    // camera off and writes the six live fields from eye/lookAt (yaw -> cameraNodeOrientation,
-    // pitch -> cameraOrientation, position -> cameraNodePosition). FollowCamera is untouched.
+    // Set-piece camera (spec §4). Stored separately from the live camera so it is a local-only
+    // presentation: PreparePutBuffers feeds it to the display, while the live fields keep the normal
+    // host camera that is shipped in snapshots (non-owners must not inherit the set-piece view).
+    // Writes yaw -> node orientation, pitch -> orientation, position.
     void SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt, float fov, float nearCap, float farCap);
+    void ClearSetPieceCamera() { setPieceCameraActive = false; }
 
     void SetAutoUpdateIngameCamera(bool autoUpdate = true) { if (autoUpdate != autoUpdateIngameCamera) { camPos.clear(); autoUpdateIngameCamera = autoUpdate; } }
 
@@ -443,6 +445,16 @@ class Match {
     float cameraFOV;
     float cameraNearCap;
     float cameraFarCap;
+
+    // Local-only set-piece camera (spec §4). Kept apart from the live camera above so snapshots keep
+    // carrying the normal host camera; PreparePutBuffers swaps this in for the local display.
+    bool setPieceCameraActive;
+    Quaternion setPieceCameraOrientation;
+    Quaternion setPieceCameraNodeOrientation;
+    Vector3 setPieceCameraNodePosition;
+    float setPieceCameraFOV;
+    float setPieceCameraNearCap;
+    float setPieceCameraFarCap;
 
     TemporalSmoother<Quaternion> buf_cameraOrientation;
     TemporalSmoother<Quaternion> buf_cameraNodeOrientation;

@@ -191,6 +191,14 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   autoUpdateIngameCamera = true;
 
+  setPieceCameraActive = false;
+  setPieceCameraOrientation = QUATERNION_IDENTITY;
+  setPieceCameraNodeOrientation = QUATERNION_IDENTITY;
+  setPieceCameraNodePosition = Vector3(0);
+  setPieceCameraFOV = 60.0f;
+  setPieceCameraNearCap = 1.0f;
+  setPieceCameraFarCap = 220.0f;
+
 
   // stadium
 
@@ -1499,8 +1507,9 @@ void Match::Process() {
 
   } // end if !pause
 
-  // Set-piece camera (spec §4) overrides the auto camera while a local role owns it; it runs after
-  // the film-referee camera so it can take over at prepareTime.
+  // Set-piece camera (spec §4): a local role owner builds a display-only override while the normal
+  // camera keeps running (and shipping). Runs after the film-referee camera, so it takes over at
+  // prepareTime.
   setPiecePresentation->UpdateCamera();
 
   if (autoUpdateIngameCamera) UpdateIngameCamera();
@@ -1694,8 +1703,9 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     if (closestByTeam[t]) teams[t]->SetDesignatedTeamPossessionPlayer(closestByTeam[t]);
   }
 
-  // A local role owner builds the set-piece camera itself (spec §4); it turns the auto camera off,
-  // so the host-camera copy below is skipped while it is active.
+  // A local role owner builds the set-piece camera itself (spec §4); it is stored separately and fed
+  // to the display in PreparePutBuffers, so the host-camera copy below still runs (non-owners keep
+  // the normal host camera).
   setPiecePresentation->UpdateCamera();
 
   // The camera is computed on the host and shipped in the snapshot, so every
@@ -1705,11 +1715,6 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   // instead (autoUpdateIngameCamera is false).
   if (autoUpdateIngameCamera) {
     if (remoteCameraOverride && designatedPossessionPlayer) {
-      UpdateIngameCamera();
-    } else if (setPiecePresentation->UseLocalNormalCamera() && designatedPossessionPlayer) {
-      // Set-piece cameras are local presentation for the owner only. The owner would have turned the
-      // auto camera off above, so this peer is not the owner: compute its own normal camera instead
-      // of inheriting the host's set-piece view (also through the host's post-kick hold).
       UpdateIngameCamera();
     } else {
       cameraOrientation = snapshot.cameraOrientation;
@@ -1747,21 +1752,28 @@ void Match::PreparePutBuffers() {
     officials->PreparePutBuffers(snapshotTime_ms);
   }
 
-  buf_cameraOrientation.SetValue(cameraOrientation, snapshotTime_ms);
-  buf_cameraNodeOrientation.SetValue(cameraNodeOrientation, snapshotTime_ms);
+  // The set-piece camera is local presentation: feed it to the display buffers, while the live
+  // camera above stays the normal host camera that snapshots ship to non-owners.
+  const Quaternion &putCameraOrientation = setPieceCameraActive ? setPieceCameraOrientation : cameraOrientation;
+  const Quaternion &putCameraNodeOrientation = setPieceCameraActive ? setPieceCameraNodeOrientation : cameraNodeOrientation;
+  const Vector3 &putCameraNodePosition = setPieceCameraActive ? setPieceCameraNodePosition : cameraNodePosition;
+  const float putCameraFOV = setPieceCameraActive ? setPieceCameraFOV : cameraFOV;
+
+  buf_cameraOrientation.SetValue(putCameraOrientation, snapshotTime_ms);
+  buf_cameraNodeOrientation.SetValue(putCameraNodeOrientation, snapshotTime_ms);
 
   // test fun!
   //float xfun = sin((float)EnvironmentManager::GetInstance().GetTime_ms() * 0.001f) * 60;
   //float xfun = sin((float)(EnvironmentManager::GetInstance().GetTime_ms() + PredictFrameTimeToGo_ms(7)) * 0.001f) * 60;
   //float xfun = sin(snapshotTime_ms * 0.001f) * 60.0f;
-  //buf_cameraNodePosition.SetValue(cameraNodePosition + Vector3(xfun, 0, 0), snapshotTime_ms);
-  buf_cameraNodePosition.SetValue(cameraNodePosition, snapshotTime_ms);
+  //buf_cameraNodePosition.SetValue(putCameraNodePosition + Vector3(xfun, 0, 0), snapshotTime_ms);
+  buf_cameraNodePosition.SetValue(putCameraNodePosition, snapshotTime_ms);
 
   //printf("timetogo prediction: %i ms\n", PredictFrameTimeToGo_ms(7));
 
-  buf_cameraFOV.SetValue(cameraFOV, snapshotTime_ms);
-  buf_cameraNearCap = cameraNearCap;
-  buf_cameraFarCap = cameraFarCap;
+  buf_cameraFOV.SetValue(putCameraFOV, snapshotTime_ms);
+  buf_cameraNearCap = setPieceCameraActive ? setPieceCameraNearCap : cameraNearCap;
+  buf_cameraFarCap = setPieceCameraActive ? setPieceCameraFarCap : cameraFarCap;
 
   buf_matchTime_ms = matchTime_ms;
   buf_actualTime_ms = actualTime_ms;
@@ -2651,16 +2663,16 @@ void Match::FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, V
 }
 
 void Match::SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt, float fov, float nearCap, float farCap) {
-  SetAutoUpdateIngameCamera(false);
-  cameraNodePosition = eye;
+  setPieceCameraActive = true;
+  setPieceCameraNodePosition = eye;
   Vector3 dir = lookAt - eye;
   float horiz = std::max(dir.Get2D().GetLength(), 0.001f);
   float pitch = 0.5f * pi + std::atan2(dir.coords[2], horiz);
-  cameraOrientation.SetAngleAxis(pitch, Vector3(1, 0, 0));
-  cameraNodeOrientation.SetAngleAxis(dir.GetAngle2D() + 1.5f * pi, Vector3(0, 0, 1));
-  cameraFOV = fov;
-  cameraNearCap = nearCap;
-  cameraFarCap = farCap;
+  setPieceCameraOrientation.SetAngleAxis(pitch, Vector3(1, 0, 0));
+  setPieceCameraNodeOrientation.SetAngleAxis(dir.GetAngle2D() + 1.5f * pi, Vector3(0, 0, 1));
+  setPieceCameraFOV = fov;
+  setPieceCameraNearCap = nearCap;
+  setPieceCameraFarCap = farCap;
 }
 
 void Match::SetReplayCamera(int camType, const Vector3 &target, float modifierValue) {
