@@ -15,6 +15,7 @@ using namespace blunted;
 class Match;
 class Player;
 class Team;
+class IHIDevice;
 
 // A local human player's part in the current set piece. There is deliberately no Wall role: the
 // wall is AI defenders.
@@ -80,6 +81,10 @@ class SetPiecePresentation {
     void UpdateCamera();
     void NotifyKickerCommitted(bool isShot);
 
+    // Thin client: the local HID device, so the penalty reticle can be driven here. On a thin client
+    // HumanController never ticks (Match::Process early-returns), so nothing else feeds the aim.
+    void SetLocalHIDDevice(IHIDevice *device) { localDevice = device; }
+
   protected:
     bool IsPenalty() const { return type == e_SetPiece_Penalty; }
     bool IsLocalPlayer(Player *player) const;
@@ -93,6 +98,7 @@ class SetPiecePresentation {
     // set-piece camera never follows the ball. The type set that gets a camera is fixed: penalty,
     // free kick, corner and goal kick (throw-in and kickoff keep the normal camera).
     static bool HasSetPieceCamera(e_SetPiece type);
+    void UpdateRemotePenaltyAim();
     Player *CameraTaker() const;
     bool TeamHasLocalHuman(Team *team) const;
     bool LocalRoleOwnsCamera(e_SetPiece type, Player *taker) const;
@@ -110,6 +116,9 @@ class SetPiecePresentation {
     setpiecelogic::PenaltyAim penaltyAim;
     float chargeRatio;
     unsigned long lastPenaltyAimTime_ms;
+
+    IHIDevice *localDevice; // thin client only: drives the reticle locally
+    bool remoteShotHeld;
 
     bool camActive;
     bool camFrozen;              // pose fixed at the kick, watching the flight

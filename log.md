@@ -2614,3 +2614,18 @@ set-piece-камеру `_default_SetPiece_CamHold_ms` (1.5 с, смотрит п
 - Владелец по-прежнему видит set-piece-камеру (через display-поля); вход/выход сглаживает
   `TemporalSmoother` в `PreparePutBuffers`.
 - Хеш `3b9fa5f2` без изменений, `nettest` PASS (59), `lanmatchtest` PASS (42).
+
+## [2026-09-30] fix | маркер прицела пенальти на тонком клиенте (#25/#27)
+
+Полевой отчёт: на клиенте нет жёлтого маркера прицела на пенальти. Причина: маркер рисует
+`SetPiecePresentation::UpdatePenaltyAim`, а её зовёт `HumanController::_UpdatePenaltyAim`; на
+тонком клиенте `Match::Process` early-return, `Team::Process`/`HumanController` не тикают, поэтому
+ретикл вообще не обновлялся.
+
+- `NetMatchSession::ProcessClient` отдаёт презентации локальное HID-устройство
+  (`SetPiecePresentation::SetLocalHIDDevice`); `UpdateRemotePenaltyAim` (зовётся из `UpdateCamera`,
+  т.е. каждый тик из `ApplyRemoteSnapshot`) читает стик и эдж `Shot` (локальный флаг
+  `remoteShotHeld`) и двигает ретикл. `chargeRatio` на клиенте не важен (полоса силы не рисуется).
+- `DrawPenaltyReticle` теперь по команде бьющего (`TeamHasLocalHuman`), как и камера: на клиенте
+  конкретный тэйкер может читаться как ИИ до автопереключения (#29).
+- Хеш `3b9fa5f2` без изменений, `nettest` PASS (59), `lanmatchtest` PASS (42).

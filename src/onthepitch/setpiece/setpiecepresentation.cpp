@@ -5,6 +5,7 @@
 #include "../player/player.hpp"
 
 #include "../../main.hpp" // SetYellowDebugPilon
+#include "../../hid/ihidevice.hpp"
 
 #include <vector>
 
@@ -18,6 +19,8 @@ SetPiecePresentation::SetPiecePresentation(Match *match) : match(match) {
   penaltyAim = setpiecelogic::DefaultPenaltyAim();
   chargeRatio = 0.0f;
   lastPenaltyAimTime_ms = 0;
+  localDevice = 0;
+  remoteShotHeld = false;
 
   camActive = false;
   camFrozen = false;
@@ -255,7 +258,24 @@ void SetPiecePresentation::NotifyKickerCommitted(bool isShot) {
   }
 }
 
+void SetPiecePresentation::UpdateRemotePenaltyAim() {
+  // Thin client: HumanController never ticks, so feed the penalty reticle here from the local
+  // device. Only the taking side aims; the defending side has no reticle.
+  if (!match->IsRemotePresentation() || !localDevice) return;
+  if (type != e_SetPiece_Penalty || !taker) return;
+  if (!TeamHasLocalHuman(taker->GetTeam())) return;
+
+  Vector3 stick = localDevice->GetDirection();
+  bool hasInput = stick.GetLength() >= analogStickDeadzone;
+  bool shotHeld = localDevice->GetButton(e_ButtonFunction_Shot);
+  bool shotPressed = shotHeld && !remoteShotHeld;
+  remoteShotHeld = shotHeld;
+  UpdatePenaltyAim(stick.coords[0], stick.coords[1], hasInput, shotPressed, 0.0f, match->GetActualTime_ms());
+}
+
 void SetPiecePresentation::UpdateCamera() {
+  UpdateRemotePenaltyAim();
+
   // Scorer cam wins unconditionally (spec §4); kickoff, which shares the scorer moment, has no
   // set-piece camera anyway.
   if (camActive && match->IsGoalScored()) { ReleaseCamera(); return; }
@@ -331,14 +351,13 @@ void SetPiecePresentation::EndPenaltyAim() {
 }
 
 void SetPiecePresentation::DrawPenaltyReticle() {
-  // Drawing is separate from the state above and gated on the role: only a locally controlled
-  // Kicker gets the reticle (spec §2.6).
-  SetPieceHudState hud = GetHudState(taker);
-  if (hud.role != e_SetPieceRole_Kicker || !IsPenalty()) {
+  // Only the local taking side draws the reticle. Team-based (not the specific taker): on a thin
+  // client only the selected player carries a remote owner id, so the taker can read as AI there.
+  if (!IsPenalty() || !taker || !TeamHasLocalHuman(taker->GetTeam())) {
     HidePenaltyMarker();
     return;
   }
-  SetYellowDebugPilon(hud.aimPoint);
+  SetYellowDebugPilon(PenaltyAimWorldPoint());
 }
 
 void SetPiecePresentation::HidePenaltyMarker() {

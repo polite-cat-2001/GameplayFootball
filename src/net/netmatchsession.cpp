@@ -14,6 +14,7 @@
 #include "managers/environmentmanager.hpp"
 
 #include "onthepitch/match.hpp"
+#include "onthepitch/setpiece/setpiecepresentation.hpp"
 #include "onthepitch/team.hpp"
 
 #include "utils/animation.hpp"
@@ -314,6 +315,9 @@ void NetMatchSession::ProcessClient(Match *match) {
   // to the host, so every peer's input reaches the simulation at the same moment
   // after the button press. maxRtt mirrors the host's value.
   IHIDevice *localDevice = FindLocalDevice(GetLocalDeviceType(client));
+  // The thin client never ticks HumanController, so the set-piece presentation drives its own
+  // reticle from this device (see SetPiecePresentation::UpdateRemotePenaltyAim).
+  match->GetSetPiecePresentation()->SetLocalHIDDevice(localDevice);
   if (localDevice) {
     NetInputFrame frame;
     frame.buttons = 0;
