@@ -2672,3 +2672,17 @@ set-piece-камеру `_default_SetPiece_CamHold_ms` (1.5 с, смотрит п
   («вроде норм»).
 - Хеш `5a477078` (сдвинут host-форсом designated, #29), `nettest` 59, `lanmatchtest` 42 зелёные;
   эталоны — за #40.
+
+## [2026-09-30] feat | #29: клиентский designated из снапшота + подавление Switch на стандарте
+
+Доделан остаток #29 после host-форса designated:
+
+- `Match::ApplyRemoteSnapshot`: при `e_SetPiece != None` со снапшотным тэйкером (team+slot v15)
+  `designatedPossessionPlayer` и designated своей команды ставятся в этого тэйкера, а не по
+  близости (`match.cpp`). HUD и камера клиента теперь смотрят на фактического бьющего.
+- `Team::Process`: ручное переключение по `Switch` загейчено `!IsInSetPiece()` — на стандарте
+  кнопка занята chip-комбо и не ворует бьющего.
+- Вратаря-бьющего (от ворот) не трогали — гейт `designatedTeamPossessionPlayer != GetGoalie()`
+  остаётся, это «игра за вратаря» (#31). Закрываем #29 с этой оговоркой.
+- Хеш `5a477078` без изменений (правки клиентские/человеческие, headless-фикстура их не трогает);
+  `nettest` 59, `lanmatchtest` 42. Эталоны — за #40.

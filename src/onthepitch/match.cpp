@@ -1710,6 +1710,14 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     if (closestByTeam[t]) teams[t]->SetDesignatedTeamPossessionPlayer(closestByTeam[t]);
   }
 
+  // On a set piece, point the designated players at the snapshot taker (team+slot, v15) instead of
+  // by proximity (spec §3, #29), so the client's HUD and camera follow the actual taker.
+  Player *remoteTaker = setPiecePresentation->GetTaker();
+  if (setPiecePresentation->IsSetPiece() && remoteTaker) {
+    designatedPossessionPlayer = remoteTaker;
+    teams[remoteTaker->GetTeamID()]->SetDesignatedTeamPossessionPlayer(remoteTaker);
+  }
+
   // A local role owner builds the set-piece camera itself (spec §4); it is stored separately and fed
   // to the display in PreparePutBuffers, so the host-camera copy below still runs (non-owners keep
   // the normal host camera).
