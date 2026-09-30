@@ -1273,12 +1273,14 @@ void Match::Process() {
     if (debugCorner) UserEventManager::GetInstance().SetKeyboardState(SDLK_Y, false);
 
     if ((debugPenalty || debugFreeKick || debugCorner) && IsInPlay() && !IsInSetPiece()) {
+      // The pressing peer's own team, not just "some team with a human": in a network
+      // match both teams are human, so IsHumanControlled alone would always pick team 0.
       int humanTeamID = -1;
       for (int t = 0; t < 2 && humanTeamID == -1; t++) {
         std::vector<Player*> players;
         teams[t]->GetActivePlayers(players);
         for (unsigned int i = 0; i < players.size(); i++) {
-          if (teams[t]->IsHumanControlled(players.at(i)->GetID())) { humanTeamID = t; break; }
+          if (teams[t]->GetControllingPeerId(players.at(i)->GetID()) == GetLocalPeerId()) { humanTeamID = t; break; }
         }
       }
       if (humanTeamID != -1) {
