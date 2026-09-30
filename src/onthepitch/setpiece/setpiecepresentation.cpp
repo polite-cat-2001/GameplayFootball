@@ -158,10 +158,14 @@ Player *SetPiecePresentation::CameraTaker() const {
 bool SetPiecePresentation::LocalRoleOwnsCamera(e_SetPiece camTypeNow, Player *camTaker) const {
   if (!camTaker) return false;
   if (IsLocalPlayer(camTaker)) return true; // Kicker
-  // Keeper only exists on a penalty, and gets the same camera as behind the taker (spec §4).
+  // On a penalty the defending human follows the taker automatically, without having to select the
+  // keeper: they see the same camera behind the kicker (spec §4). Picking the keeper for control is
+  // a separate effort, so it must not gate the camera.
   if (camTypeNow == e_SetPiece_Penalty) {
-    Player *goalie = match->GetTeam(abs(camTaker->GetTeamID() - 1))->GetGoalie();
-    if (goalie && IsLocalPlayer(goalie)) return true;
+    const std::vector<Player*> &defenders = match->GetTeam(abs(camTaker->GetTeamID() - 1))->GetAllPlayers();
+    for (unsigned int i = 0; i < defenders.size(); i++) {
+      if (IsLocalPlayer(defenders.at(i))) return true;
+    }
   }
   return false;
 }
