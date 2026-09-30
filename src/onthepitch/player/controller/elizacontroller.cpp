@@ -140,6 +140,9 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
     if (team->GetController()->GetSetPieceType() == e_SetPiece_Penalty) {
 
+      // temporary diagnostic (#25 remote penalty aim)
+      Log(e_Notice, "PenaltyDebug", "shot", std::string("AI id=") + int_to_str(player->GetID()));
+
       actionCommand.desiredFunctionType = e_FunctionType_Shot;
       actionCommand.useDesiredMovement = false;
       actionCommand.useDesiredLookAt = false;

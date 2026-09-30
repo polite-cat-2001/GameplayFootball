@@ -213,6 +213,18 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
           setpiecelogic::ApplyShotPlan(command.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), CastPlayer()->GetTeam()->GetSide(), command.touchInfo.desiredDirection, command.touchInfo.desiredPower, pendingShotType));
         }
 
+        // temporary diagnostic (#25 remote penalty aim)
+        if (match->GetSetPiecePresentation()->GetType() == e_SetPiece_Penalty) {
+          Player *dbgTaker = match->GetSetPiecePresentation()->GetTaker();
+          Log(e_Notice, "PenaltyDebug", "shot",
+              std::string("human castID=") + int_to_str(CastPlayer()->GetID()) +
+              " takerID=" + int_to_str(dbgTaker ? dbgTaker->GetID() : -1) +
+              " isTaker=" + std::string(_IsPenaltyTaker() ? "1" : "0") +
+              " useAim=" + std::string(command.touchInfo.useAimTarget ? "1" : "0") +
+              " aimLateral=" + int_to_str((int)match->GetSetPiecePresentation()->GetPenaltyAim().lateral) +
+              " aimHeight=" + int_to_str((int)match->GetSetPiecePresentation()->GetPenaltyAim().height));
+        }
+
         commandQueue.push_back(command);
 
       }

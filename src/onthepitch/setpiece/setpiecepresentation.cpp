@@ -39,9 +39,11 @@ void SetPiecePresentation::Process() {
   taker = 0;
   if (type != e_SetPiece_None) taker = match->GetRefereeBuffer().taker;
 
-  // The reticle is presentation for the local penalty taker only: drop it as soon as the penalty
-  // is over, or the taker is no longer a local human, even if no controller ticked it this frame.
-  if (!IsPenalty() || GetRole(taker) != e_SetPieceRole_Kicker) EndPenaltyAim();
+  // Reset the aim only when the penalty is over. Do NOT gate this on the local Kicker role: on the
+  // host the taker can be the remote client's player, and GetRole() is local-only, so it would
+  // return None and reset penaltyAim every tick — the host would then plan every remote penalty
+  // shot from the centre. Drawing is gated separately (DrawPenaltyReticle is team-based).
+  if (!IsPenalty()) EndPenaltyAim();
 }
 
 void SetPiecePresentation::SetRemoteIdentity(e_SetPiece newType, int takerTeam, int takerSlot) {
