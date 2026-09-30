@@ -96,6 +96,27 @@ const float _default_Pen_SpreadMaxR = 1.6f;      // spread disc radius at full c
 const float _default_Pen_PowerMinSpeed = 24.0f;  // ball launch speed at zero charge (m/s)
 const float _default_Pen_PowerMaxSpeed = 44.0f;  // ball launch speed at full charge (m/s)
 
+// Set-piece cameras (spec 2026-09-29 §4). A presentation-only camera behind the taker for the
+// penalty, free kick, corner and goal kick; throw-ins and kickoffs keep the normal camera. Pose is
+// eye = spot - heading*BACK + (0,0,HEIGHT), look = spot + heading*AHEAD + (0,0,LOOK_Y). Tune by playing.
+const float _default_SetPiece_CamAhead = 4.0f;       // look-at lead along the heading (m)
+const float _default_SetPiece_CamFov = 45.0f;        // set-piece camera field of view (deg)
+const float _default_SetPiece_CamNear = 1.0f;        // near clip plane (m)
+const float _default_SetPiece_CamFar = 220.0f;       // far clip plane (m)
+const int _default_SetPiece_CamHold_ms = 1500;       // hold after a strike before releasing (ms)
+const float _default_SetPiece_CamPenaltyBack = 9.0f; // penalty: distance behind the ball (m)
+const float _default_SetPiece_CamPenaltyHeight = 4.0f;
+const float _default_SetPiece_CamPenaltyLookY = 1.2f;
+const float _default_SetPiece_CamFreeKickBack = 8.0f; // free kick
+const float _default_SetPiece_CamFreeKickHeight = 3.5f;
+const float _default_SetPiece_CamFreeKickLookY = 1.4f;
+const float _default_SetPiece_CamCornerBack = 8.0f;   // corner
+const float _default_SetPiece_CamCornerHeight = 4.0f;
+const float _default_SetPiece_CamCornerLookY = 2.0f;
+const float _default_SetPiece_CamGoalKickBack = 8.0f; // goal kick
+const float _default_SetPiece_CamGoalKickHeight = 3.5f;
+const float _default_SetPiece_CamGoalKickLookY = 1.4f;
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;

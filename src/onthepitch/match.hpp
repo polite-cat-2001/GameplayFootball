@@ -283,6 +283,11 @@ class Match {
     void FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, Vector3 &position, float &FOV, const Vector3 &targetPosition, float zoom);
     void SetReplayCamera(int camType, const Vector3 &target, float modifierValue);
 
+    // Set-piece camera override (spec §4), same pattern as the film-referee camera: turns the auto
+    // camera off and writes the six live fields from eye/lookAt (yaw -> cameraNodeOrientation,
+    // pitch -> cameraOrientation, position -> cameraNodePosition). FollowCamera is untouched.
+    void SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt, float fov, float nearCap, float farCap);
+
     void SetAutoUpdateIngameCamera(bool autoUpdate = true) { if (autoUpdate != autoUpdateIngameCamera) { camPos.clear(); autoUpdateIngameCamera = autoUpdate; } }
 
     // Thin client: use this peer's own camera params instead of the host camera

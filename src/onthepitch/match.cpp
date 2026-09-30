@@ -28,6 +28,8 @@
 #include "menu/pagefactory.hpp"
 #include "menu/startmatch/loadingmatch.hpp"
 
+#include <cmath>
+
 #include "../net/matchsnapshot.hpp"
 #include "../net/netclient.hpp"
 #include "../net/netmessages.hpp"
@@ -1495,6 +1497,10 @@ void Match::Process() {
 
   } // end if !pause
 
+  // Set-piece camera (spec §4) overrides the auto camera while a local role owns it; it runs after
+  // the film-referee camera so it can take over at prepareTime.
+  setPiecePresentation->UpdateCamera();
+
   if (autoUpdateIngameCamera) UpdateIngameCamera();
 
   if (!pause) UpdateIngameCameraStartEffect();
@@ -1685,6 +1691,10 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   for (int t = 0; t < 2; t++) {
     if (closestByTeam[t]) teams[t]->SetDesignatedTeamPossessionPlayer(closestByTeam[t]);
   }
+
+  // A local role owner builds the set-piece camera itself (spec §4); it turns the auto camera off,
+  // so the host-camera copy below is skipped while it is active.
+  setPiecePresentation->UpdateCamera();
 
   // The camera is computed on the host and shipped in the snapshot, so every
   // peer shows the exact same view (following the ball). A client that changed
@@ -2631,6 +2641,19 @@ void Match::FollowCamera(Quaternion &orientation, Quaternion &nodeOrientation, V
   nodeOrientation.SetAngleAxis(targetPosition.GetAngle2D() + 1.5 * pi, Vector3(0, 0, 1));
   position = targetPosition - targetPosition.Get2D().GetNormalized(Vector3(0, -1, 0)) * 10 * (1.0f / zoom) + Vector3(0, 0, 3);
   FOV = 60.0f;
+}
+
+void Match::SetSetPieceCamera(const Vector3 &eye, const Vector3 &lookAt, float fov, float nearCap, float farCap) {
+  SetAutoUpdateIngameCamera(false);
+  cameraNodePosition = eye;
+  Vector3 dir = lookAt - eye;
+  float horiz = std::max(dir.Get2D().GetLength(), 0.001f);
+  float pitch = 0.5f * pi + std::atan2(dir.coords[2], horiz);
+  cameraOrientation.SetAngleAxis(pitch, Vector3(1, 0, 0));
+  cameraNodeOrientation.SetAngleAxis(dir.GetAngle2D() + 1.5f * pi, Vector3(0, 0, 1));
+  cameraFOV = fov;
+  cameraNearCap = nearCap;
+  cameraFarCap = farCap;
 }
 
 void Match::SetReplayCamera(int camType, const Vector3 &target, float modifierValue) {

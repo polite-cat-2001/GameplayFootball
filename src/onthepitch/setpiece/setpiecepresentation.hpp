@@ -71,6 +71,14 @@ class SetPiecePresentation {
     const setpiecelogic::PenaltyAim &GetPenaltyAim() const { return penaltyAim; }
     void UpdatePenaltyAim(float stickLateral, float stickHeight, bool hasInput, bool shotPressed, float chargeRatio, unsigned long now);
 
+    // Set-piece camera (spec §4). Presentation-only: while a local human owns the Kicker (or the
+    // defending Keeper on a penalty) role, the camera sits behind the taker and turns the auto
+    // camera off. `UpdateCamera()` is called every tick; the kicker's controller calls
+    // `NotifyKickerCommitted()` the moment its action button commits, which freezes the view and
+    // schedules the release.
+    void UpdateCamera();
+    void NotifyKickerCommitted(bool isShot);
+
   protected:
     bool IsPenalty() const { return type == e_SetPiece_Penalty; }
     bool IsLocalPlayer(Player *player) const;
@@ -79,6 +87,17 @@ class SetPiecePresentation {
     void EndPenaltyAim();
     void DrawPenaltyReticle();
     void HidePenaltyMarker();
+
+    // Camera helpers (spec §4). Pose is derived from a frozen spot + horizontal heading so the
+    // set-piece camera never follows the ball. The type set that gets a camera is fixed: penalty,
+    // free kick, corner and goal kick (throw-in and kickoff keep the normal camera).
+    static bool HasSetPieceCamera(e_SetPiece type);
+    Player *CameraTaker() const;
+    bool LocalRoleOwnsCamera(e_SetPiece type, Player *taker) const;
+    Vector3 CameraSpot() const;
+    Vector3 CameraBaseForward(const Vector3 &spot, float side) const;
+    void ApplyCamera();
+    void ReleaseCamera();
 
     Match *match;
     e_SetPiece type;
@@ -89,6 +108,14 @@ class SetPiecePresentation {
     setpiecelogic::PenaltyAim penaltyAim;
     float chargeRatio;
     unsigned long lastPenaltyAimTime_ms;
+
+    bool camActive;
+    bool camFrozen;              // pose fixed at the kick, watching the flight
+    e_SetPiece camType;
+    Vector3 camSpot;            // ball spot at activation (z = 0), frozen
+    Vector3 camForward;         // horizontal unit heading toward the target
+    float camSide;              // side of the taker's team at activation
+    unsigned long camReleaseTime_ms; // when to hand the camera back after a commit
 };
 
 #endif

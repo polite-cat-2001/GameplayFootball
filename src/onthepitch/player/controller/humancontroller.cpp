@@ -107,6 +107,11 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
       // action button released!
 
+      // The set-piece camera watches by action type from this point (spec §4).
+      if (team->GetController()->GetPieceTaker() == player) {
+        match->GetSetPiecePresentation()->NotifyKickerCommitted(actionButton == e_ButtonFunction_Shot);
+      }
+
       // force set piece methods
       if (match->IsInSetPiece() && team->GetController()->GetPieceTaker() == player && team->GetController()->GetSetPieceType() == e_SetPiece_KickOff) {
 
