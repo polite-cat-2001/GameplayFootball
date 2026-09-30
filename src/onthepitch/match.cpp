@@ -1367,7 +1367,14 @@ void Match::Process() {
     teams[1]->UpdatePossessionStats();
     CalculateBestPossessionTeamID();
 
-    if (GetBallRetainer() == 0) {
+    if (IsInSetPiece() && GetRefereeBuffer().taker) {
+      // On a set piece the taker is the designated player of the taking team (spec §3, #29); the
+      // proximity block below is skipped, otherwise it can keep control off the taker and the AI
+      // ends up taking the kick (and, on a penalty, ignoring the human's aim).
+      Player *taker = GetRefereeBuffer().taker;
+      designatedPossessionPlayer = taker;
+      teams[taker->GetTeamID()]->SetDesignatedTeamPossessionPlayer(taker);
+    } else if (GetBallRetainer() == 0) {
       signed int bestTeamID = GetBestPossessionTeamID();
       if (bestTeamID != -1) {
         Player *candidate = teams[GetBestPossessionTeamID()]->GetDesignatedTeamPossessionPlayer();
