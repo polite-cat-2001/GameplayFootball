@@ -541,14 +541,17 @@ void HumanController::Reset() {
 }
 
 bool HumanController::_IsPenaltyTaker() {
+  // Compare against the taker directly, not via GetRole(): the role requires a *locally* controlled
+  // player, but on the host the taker may be the remote client's player (a HumanController bound to
+  // its NetHIDDevice). The aim and the planned shot must work for any human taker.
   SetPiecePresentation *presentation = match->GetSetPiecePresentation();
   return presentation->GetType() == e_SetPiece_Penalty &&
-         presentation->GetRole(CastPlayer()) == e_SetPieceRole_Kicker;
+         presentation->GetTaker() == CastPlayer();
 }
 
 void HumanController::_UpdatePenaltyAim() {
-  // Only the local penalty kicker drives (and draws) the reticle; cleanup for a lost/changed taker
-  // is done once per tick by SetPiecePresentation::Process(), so non-takers must not clear it here.
+  // The human taker drives the aim; drawing is separate (local side only) and cleanup for a
+  // lost/changed taker is done once per tick by SetPiecePresentation::Process().
   if (!_IsPenaltyTaker()) return;
 
   SetPiecePresentation *presentation = match->GetSetPiecePresentation();
