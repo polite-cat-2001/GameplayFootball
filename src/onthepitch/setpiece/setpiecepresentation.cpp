@@ -27,6 +27,7 @@ SetPiecePresentation::SetPiecePresentation(Match *match) : match(match) {
   camForward = Vector3(0, -1, 0);
   camSide = 1.0f;
   camReleaseTime_ms = 0;
+  cameraNormalUntil_ms = 0;
 }
 
 void SetPiecePresentation::Process() {
@@ -133,6 +134,12 @@ void SetPiecePresentation::UpdatePenaltyAim(float stickLateral, float stickHeigh
   this->chargeRatio = chargeRatio;
 
   DrawPenaltyReticle();
+}
+
+bool SetPiecePresentation::UseLocalNormalCamera() const {
+  if (!match->IsRemotePresentation()) return false;
+  if (HasSetPieceCamera(type)) return true;
+  return cameraNormalUntil_ms != 0 && match->GetActualTime_ms() < cameraNormalUntil_ms;
 }
 
 bool SetPiecePresentation::HasSetPieceCamera(e_SetPiece type) {
@@ -269,6 +276,12 @@ void SetPiecePresentation::UpdateCamera() {
                      ? buffer.desiredSetPiece : match->GetSetPieceType();
   }
   Player *camTaker = CameraTaker();
+
+  // Thin client: remember that a camera-type set piece is (or was just) live, so a non-owner keeps
+  // its own normal camera through the owner's post-kick hold instead of copying the host's.
+  if (match->IsRemotePresentation() && HasSetPieceCamera(camTypeNow)) {
+    cameraNormalUntil_ms = match->GetActualTime_ms() + _default_SetPiece_CamHold_ms;
+  }
 
   if (camActive) {
     unsigned long now = match->GetActualTime_ms();

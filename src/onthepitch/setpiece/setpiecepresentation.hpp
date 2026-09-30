@@ -58,9 +58,12 @@ class SetPiecePresentation {
     e_SetPiece GetType() const { return type; }
     Player *GetTaker() const { return taker; }
     bool IsSetPiece() const { return type != e_SetPiece_None; }
-    // True for the four set pieces that own a camera (spec §4). The thin client uses it to avoid
-    // inheriting the host's set-piece camera when this peer is not the owner.
-    bool IsCameraTypeSetPiece() const { return HasSetPieceCamera(type); }
+
+    // Thin client only: true while it should compute its own normal camera instead of copying the
+    // host's. Set-piece cameras are local to the owner, so a non-owner must not inherit the host's,
+    // and it must keep its own during the owner's post-kick hold (the snapshot type drops to None on
+    // the touch while the host is still watching the flight).
+    bool UseLocalNormalCamera() const;
 
     // Phase derived from RefereeBuffer.active + IsInSetPiece() + stopTime/prepareTime/startTime.
     // On a thin client only the type is synced, so a non-None phase is Active.
@@ -122,6 +125,7 @@ class SetPiecePresentation {
     Vector3 camForward;         // horizontal unit heading toward the target
     float camSide;              // side of the taker's team at activation
     unsigned long camReleaseTime_ms; // when to hand the camera back after a commit
+    unsigned long cameraNormalUntil_ms; // thin client: keep the local normal camera until this time
 };
 
 #endif
