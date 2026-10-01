@@ -55,6 +55,10 @@ class Referee {
 
     const RefereeBuffer &GetBuffer() { return buffer; };
 
+    // Change the actual taker of the live set piece (#30); the referee only reads it for the end
+    // condition (taker->TouchAnim()), so the menu can hand the set piece to another player.
+    void SetTaker(Player *taker) { buffer.taker = taker; }
+
     void AlterSetPiecePrepareTime(unsigned long newTime_ms);
 
     void BallTouched();

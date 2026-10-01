@@ -258,6 +258,33 @@ void NetMatchSession::ProcessHost(Match *match) {
   std::vector<boost::shared_ptr<NetHIDDevice> > netDevices = server->GetHIDevices();
   for (unsigned int i = 0; i < netDevices.size(); i++) netDevices.at(i)->Process();
 
+  // Set-piece taker menu (#30): a client's chosen taker slot arrives in its input frame. Apply it to
+  // the live set piece only when that client actually controls the current taker (a second human on
+  // the same team must not move the taker).
+  if (match->IsInSetPiece()) {
+    Player *taker = match->GetRefereeBuffer().taker;
+    if (taker) {
+      const NetLobbyState lobby = server->GetLobbyState();
+      for (unsigned int i = 0; i < netDevices.size(); i++) {
+        int slot = netDevices.at(i)->ConsumeSetPieceTakerSlot();
+        if (slot < 0) continue;
+        uint32_t ownerId = netDevices.at(i)->GetOwnerId();
+        int teamID = -1;
+        for (unsigned int p = 0; p < lobby.players.size(); p++) {
+          if (lobby.players.at(p).id != ownerId) continue;
+          if (lobby.players.at(p).side == e_NetSide_Home) teamID = 0;
+          else if (lobby.players.at(p).side == e_NetSide_Away) teamID = 1;
+          break;
+        }
+        if (teamID != taker->GetTeamID()) continue;
+        if (match->GetTeam(teamID)->GetControllingPeerId(taker->GetID()) != (int)ownerId) continue;
+        const std::vector<Player*> &all = match->GetTeam(teamID)->GetAllPlayers();
+        if (slot >= (int)all.size()) continue;
+        match->SetSetPieceTaker(all.at(slot));
+      }
+    }
+  }
+
   // Pause is peer-equal: apply any client request and rebroadcast.
   bool requestPaused = false;
   if (server->ConsumePauseRequest(requestPaused)) match->Pause(requestPaused);
@@ -317,14 +344,32 @@ void NetMatchSession::ProcessClient(Match *match) {
   IHIDevice *localDevice = FindLocalDevice(GetLocalDeviceType(client));
   // The thin client never ticks HumanController, so the set-piece presentation drives its own
   // reticle from this device (see SetPiecePresentation::UpdateRemotePenaltyAim).
-  match->GetSetPiecePresentation()->SetLocalHIDDevice(localDevice);
+  SetPiecePresentation *presentation = match->GetSetPiecePresentation();
+  presentation->SetLocalHIDDevice(localDevice);
+
+  // Set-piece taker menu (#30): no HumanController ticks on a thin client, so detect the Select
+  // press here, for the peer whose human controls the snapshot taker and without an action held.
+  if (localDevice && presentation->IsLocalTaker() && !match->IsSetPieceTakerMenuOpen() &&
+      SetPiecePresentation::IsTakerMenuSelect(localDevice)) {
+    match->RequestSetPieceTakerMenu();
+  }
+
   if (localDevice) {
     NetInputFrame frame;
     frame.buttons = 0;
-    for (int b = 0; b < e_ButtonFunction_Size; b++) {
-      if (localDevice->GetButton((e_ButtonFunction)b)) frame.buttons |= (1u << b);
+    // While the taker menu is up the device drives the menu, not the pitch: send neutral input so
+    // the host's HumanController for this player does not act on the navigation keys.
+    const bool menuOpen = match->IsSetPieceTakerMenuOpen();
+    if (!menuOpen) {
+      for (int b = 0; b < e_ButtonFunction_Size; b++) {
+        if (localDevice->GetButton((e_ButtonFunction)b)) frame.buttons |= (1u << b);
+      }
     }
-    frame.direction = localDevice->GetDirection();
+    frame.direction = menuOpen ? Vector3(0) : localDevice->GetDirection();
+    // The taker-menu choice rides the input channel while the set piece lasts, so a lost datagram
+    // cannot drop it. Cleared once the set piece is over.
+    frame.takerSlot = match->GetRemoteSetPieceTakerSlot();
+    if (!match->IsInSetPiece()) match->ClearRemoteSetPieceTakerSlot();
     clientInputQueue.push_back(frame);
 
     int rtt_ms = client->GetRtt_ms();

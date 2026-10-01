@@ -68,6 +68,13 @@ class SetPiecePresentation {
     e_SetPieceRole GetRole(Player *player) const;
     SetPieceHudState GetHudState(Player *player) const;
 
+    // True when this peer's human controls the actual taker (#30): only then may the taker menu
+    // open. On a thin client the selected player carries the remote owner id (set in #29).
+    bool IsLocalTaker() const;
+    // Select edge with no action button held: the taker-menu open trigger (#30). Shared by the host
+    // HumanController path and the thin-client NetMatchSession path.
+    static bool IsTakerMenuSelect(IHIDevice *device);
+
     // Penalty reticle, owned here so the HUD state can expose it (spec §2.6). The local kicker's
     // controller feeds the raw stick input; the carrier stores, advances and draws the aim.
     const setpiecelogic::PenaltyAim &GetPenaltyAim() const { return penaltyAim; }

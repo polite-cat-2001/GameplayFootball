@@ -100,6 +100,10 @@ class Team {
 
     void SelectPlayer(Player *player);
     void DeselectPlayer(Player *player);
+    // Taker menu (#30): hand control of `newTaker` to whichever human gamer was controlling
+    // `oldTaker`, so the peer that opened the menu keeps playing. Falls back to the normal switch
+    // priority when no gamer held the old taker.
+    void SelectPlayerForTakerChange(Player *oldTaker, Player *newTaker);
 
     void RelaxFatigue(float howMuch);
 

@@ -26,7 +26,9 @@
 //      NetLobbyState, NetMatchSetup and NetMatchEnvironment.
 // v15: snapshot carries the set-piece identity (e_SetPiece type + actual taker
 //      team/slot) instead of the inSetPiece bool, which is now derived.
-const int net_protocolVersion = 15;
+// v16: input frame carries the set-piece taker-menu choice (squad slot, -1 none)
+//      so a thin client's taker change reaches the host over the input channel.
+const int net_protocolVersion = 16;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
@@ -79,10 +81,13 @@ enum e_NetConnectionState {
 };
 
 struct NetInputFrame {
-  NetInputFrame() : buttons(0) {}
+  NetInputFrame() : buttons(0), takerSlot(-1) {}
 
   uint32_t buttons;
   blunted::Vector3 direction;
+  // Set-piece taker menu (#30): squad slot within the sender's team, or -1 for none. Persists while
+  // the set piece lasts so a lost datagram cannot drop the choice.
+  int takerSlot;
 };
 
 // A snapshot datagram as received by the client: raw payload bytes plus the

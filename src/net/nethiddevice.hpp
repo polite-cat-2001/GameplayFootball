@@ -33,15 +33,23 @@ class NetHIDDevice : public IHIDevice {
     void SetInput(const NetInputFrame &frame); // safe from the network thread
     void Clear();
 
+    // Set-piece taker menu (#30): returns the squad slot the client chose (-1 none) and only once
+    // per distinct value, so a slot held across frames is applied a single time and a later change
+    // by anyone else is not snapped back.
+    int ConsumeSetPieceTakerSlot();
+
   private:
     unsigned int ownerId;
     bool current[e_ButtonFunction_Size];
     bool previous[e_ButtonFunction_Size];
     Vector3 direction;
+    int takerSlot;
+    int consumedTakerSlot;
 
     bool pending;
     bool pendingButtons[e_ButtonFunction_Size];
     Vector3 pendingDirection;
+    int pendingTakerSlot;
     unsigned long lastInputTime_ms;
 };
 

@@ -298,6 +298,7 @@ add_library(menulib STATIC
         src/menu/ingame/radar.cpp
         src/menu/ingame/tacticsdebug.cpp
         src/menu/ingame/gamepage.cpp
+        src/menu/ingame/setpiecetaker.cpp
         src/menu/ingame/replaymenu.cpp
         src/menu/ingame/gameover.cpp
         src/menu/ingame/phasemenu.cpp

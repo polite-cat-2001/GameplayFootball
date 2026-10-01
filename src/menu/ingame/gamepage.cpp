@@ -13,6 +13,7 @@
 #include "gameover.hpp"
 
 #include "../../onthepitch/match.hpp"
+#include "../../onthepitch/setpiece/setpiecepresentation.hpp"
 
 #include "../../managers/usereventmanager.hpp"
 #include "../../hid/gamepad.hpp"
@@ -86,6 +87,14 @@ void GamePage::Process() {
     Properties properties;
     properties.Set("teamID", 0);
     CreatePage((int)e_PageID_Ingame, properties);
+    return;
+  }
+
+  // Set-piece taker menu (#30): raised by the local human who takes the set piece. Open the overlay
+  // (which stops the taker's own input) for as long as the set piece lasts.
+  if (match && match->GetSetPieceTakerMenuRequested() && match->GetSetPiecePresentation()->GetTaker()) {
+    match->SetSetPieceTakerMenuOpen(true);
+    CreatePage((int)e_PageID_SetPieceTaker);
     return;
   }
 

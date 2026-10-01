@@ -164,7 +164,7 @@ typedef std::list<int> DataSet;
 typedef std::deque<int> DataSet;
 #endif
 
-const SDL_Keycode defaultKeyIDs[18] = { SDLK_UP, SDLK_RIGHT, SDLK_DOWN, SDLK_LEFT, SDLK_W, SDLK_A, SDLK_S, SDLK_D, SDLK_W, SDLK_A, SDLK_S, SDLK_D, SDLK_Q, SDLK_Z, SDLK_E, SDLK_C, SDLK_F1, SDLK_RETURN };
+const SDL_Keycode defaultKeyIDs[18] = { SDLK_UP, SDLK_RIGHT, SDLK_DOWN, SDLK_LEFT, SDLK_W, SDLK_A, SDLK_S, SDLK_D, SDLK_W, SDLK_A, SDLK_S, SDLK_D, SDLK_Q, SDLK_Z, SDLK_E, SDLK_C, SDLK_TAB, SDLK_RETURN };
 
 class Player;
 

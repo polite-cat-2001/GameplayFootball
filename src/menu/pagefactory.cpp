@@ -14,6 +14,7 @@
 #include "startmatch/loadingmatch.hpp"
 #include "ingame/gamepage.hpp"
 #include "ingame/phasemenu.hpp"
+#include "ingame/setpiecetaker.hpp"
 #include "ingame/gameover.hpp"
 #include "ingame/ingame.hpp"
 #include "ingame/replaymenu.hpp"
@@ -106,6 +107,10 @@ Gui2Page *PageFactory::CreatePage(const Gui2PageData &pageData) {
 
     case e_PageID_GamePlan:
       page = new GamePlanPage(windowManager, pageData);
+      break;
+
+    case e_PageID_SetPieceTaker:
+      page = new SetPieceTakerPage(windowManager, pageData);
       break;
 
     case e_PageID_VisualOptions:

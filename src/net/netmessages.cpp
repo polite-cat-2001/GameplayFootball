@@ -214,12 +214,14 @@ std::vector<std::string> ReadAnimationTable(NetBuffer &buffer) {
 void WriteInputFrame(NetBuffer &buffer, const NetInputFrame &frame) {
   buffer.PutU32(frame.buttons);
   buffer.PutVector3(frame.direction);
+  buffer.PutU32((uint32_t)frame.takerSlot);
 }
 
 NetInputFrame ReadInputFrame(NetBuffer &buffer) {
   NetInputFrame frame;
   frame.buttons = buffer.GetU32();
   frame.direction = buffer.GetVector3();
+  frame.takerSlot = (int)buffer.GetU32();
   return frame;
 }
 

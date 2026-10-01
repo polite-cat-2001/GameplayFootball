@@ -26,6 +26,7 @@ enum e_PageID {
   e_PageID_Ingame,
   e_PageID_PreQuit,
   e_PageID_GamePlan,
+  e_PageID_SetPieceTaker,
   e_PageID_VisualOptions,
   e_PageID_Replay,
   e_PageID_Camera,

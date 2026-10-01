@@ -124,6 +124,21 @@ e_SetPieceRole SetPiecePresentation::GetRole(Player *player) const {
   return e_SetPieceRole_None;
 }
 
+bool SetPiecePresentation::IsLocalTaker() const {
+  return IsSetPiece() && taker && IsLocalPlayer(taker);
+}
+
+bool SetPiecePresentation::IsTakerMenuSelect(IHIDevice *device) {
+  if (!device) return false;
+  // Not mid-action: the kick buttons take priority over opening the menu.
+  if (device->GetButton(e_ButtonFunction_Shot) ||
+      device->GetButton(e_ButtonFunction_ShortPass) ||
+      device->GetButton(e_ButtonFunction_LongPass) ||
+      device->GetButton(e_ButtonFunction_HighPass)) return false;
+  return device->GetButton(e_ButtonFunction_Select) &&
+         !device->GetPreviousButtonState(e_ButtonFunction_Select);
+}
+
 SetPieceHudState SetPiecePresentation::GetHudState(Player *player) const {
   SetPieceHudState state;
   state.role = GetRole(player);

@@ -402,6 +402,20 @@ void Team::SelectPlayer(Player *player) {
   designatedTeamPossessionPlayer = player;
 }
 
+void Team::SelectPlayerForTakerChange(Player *oldTaker, Player *newTaker) {
+  if (!newTaker) return;
+  if (oldTaker) {
+    for (unsigned int i = 0; i < humanGamers.size(); i++) {
+      if (humanGamers.at(i)->GetSelectedPlayerID() == oldTaker->GetID()) {
+        humanGamers.at(i)->SetSelectedPlayerID(newTaker->GetID());
+        designatedTeamPossessionPlayer = newTaker;
+        return;
+      }
+    }
+  }
+  SelectPlayer(newTaker);
+}
+
 void Team::DeselectPlayer(Player *player) {
   for (unsigned int i = 0; i < humanGamers.size(); i++) {
     int selectedPlayerID = humanGamers.at(i)->GetSelectedPlayerID();

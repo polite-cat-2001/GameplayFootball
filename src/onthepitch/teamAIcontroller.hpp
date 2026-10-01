@@ -47,6 +47,8 @@ class TeamAIController {
     void ApplyOffsideTrap(Vector3 &position) const;
     float GetOffsideTrapX() const { return offsideTrapX; }
     void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1);
+    // Taker menu (#30): swap the live set-piece taker and walk the new one to the ball spot.
+    void SetPieceTaker(Player *newTaker);
     Player *GetPieceTaker() { return taker; }
     e_SetPiece GetSetPieceType() { return setPieceType; }
     void ApplyAttackingRun(Player *manualPlayer = 0);
@@ -71,6 +73,9 @@ class TeamAIController {
     void Reset();
 
   protected:
+
+    // Walks `taker` to its start position for the current set-piece type (throw-in retains).
+    void PositionSetPieceTaker();
 
     Match *match;
     Team *team;

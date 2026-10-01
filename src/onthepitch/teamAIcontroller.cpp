@@ -916,19 +916,7 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
     }
     if (!taker) taker = AI_GetClosestPlayer(team, match->GetBall()->Predict(0).Get2D(), false);
 
-    if (setPiece == e_SetPiece_ThrowIn || setPiece == e_SetPiece_KickOff) {
-      taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + match->GetBall()->Predict(0).Get2D().GetNormalized(Vector3(0, -team->GetSide(), 0)) * 0.3f, match->GetBall()->Predict(0).Get2D());
-    } else if (setPiece == e_SetPiece_FreeKick) {
-      taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + Vector3(team->GetSide(), 0, 0) * 2.3f, match->GetBall()->Predict(0).Get2D());
-    } else {
-      taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + match->GetBall()->Predict(0).Get2D().GetNormalized(Vector3(0, -team->GetSide(), 0)) * 2.3f, match->GetBall()->Predict(0).Get2D());
-    }
-    if (setPiece == e_SetPiece_ThrowIn) {
-      taker->SelectRetainAnim();
-    }
-    if (setPiece == e_SetPiece_Penalty) {
-      taker->ResetPosition(match->GetBall()->Predict(0).Get2D() + Vector3(team->GetSide(), 0, 0) * 3.0, match->GetBall()->Predict(0).Get2D());
-    }
+    PositionSetPieceTaker();
 
   } else taker = 0;
 
@@ -943,6 +931,28 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
     }
   }
 
+}
+
+void TeamAIController::PositionSetPieceTaker() {
+  if (!taker) return;
+  Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
+  if (setPieceType == e_SetPiece_ThrowIn || setPieceType == e_SetPiece_KickOff) {
+    taker->ResetPosition(ballPos + ballPos.GetNormalized(Vector3(0, -team->GetSide(), 0)) * 0.3f, ballPos);
+  } else if (setPieceType == e_SetPiece_FreeKick) {
+    taker->ResetPosition(ballPos + Vector3(team->GetSide(), 0, 0) * 2.3f, ballPos);
+  } else {
+    taker->ResetPosition(ballPos + ballPos.GetNormalized(Vector3(0, -team->GetSide(), 0)) * 2.3f, ballPos);
+  }
+  if (setPieceType == e_SetPiece_ThrowIn) taker->SelectRetainAnim();
+  if (setPieceType == e_SetPiece_Penalty) {
+    taker->ResetPosition(ballPos + Vector3(team->GetSide(), 0, 0) * 3.0f, ballPos);
+  }
+}
+
+void TeamAIController::SetPieceTaker(Player *newTaker) {
+  if (!newTaker) return;
+  taker = newTaker;
+  PositionSetPieceTaker();
 }
 
 void TeamAIController::ApplyAttackingRun(Player *manualPlayer) {

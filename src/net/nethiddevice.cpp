@@ -5,6 +5,9 @@ NetHIDDevice::NetHIDDevice(const std::string &identifier, e_HIDeviceType type, u
   this->identifier = identifier;
   direction = Vector3(0);
   pendingDirection = Vector3(0);
+  takerSlot = -1;
+  consumedTakerSlot = -1;
+  pendingTakerSlot = -1;
   lastInputTime_ms = 0;
   for (int i = 0; i < e_ButtonFunction_Size; i++) {
     current[i] = false;
@@ -24,6 +27,7 @@ void NetHIDDevice::Process() {
   if (pending) {
     for (int i = 0; i < e_ButtonFunction_Size; i++) current[i] = pendingButtons[i];
     direction = pendingDirection;
+    takerSlot = pendingTakerSlot;
     pending = false;
     lastInputTime_ms = 0;
   } else {
@@ -33,6 +37,7 @@ void NetHIDDevice::Process() {
     if (lastInputTime_ms > 20) {
       for (int i = 0; i < e_ButtonFunction_Size; i++) current[i] = false;
       direction = Vector3(0);
+      takerSlot = -1;
     }
   }
 }
@@ -68,13 +73,24 @@ void NetHIDDevice::SetInput(const NetInputFrame &frame) {
     pendingButtons[i] = (frame.buttons & (1u << i)) != 0;
   }
   pendingDirection = frame.direction;
+  pendingTakerSlot = frame.takerSlot;
   pending = true;
+}
+
+int NetHIDDevice::ConsumeSetPieceTakerSlot() {
+  boost::mutex::scoped_lock lock(mutex);
+  if (takerSlot == consumedTakerSlot) return -1;
+  consumedTakerSlot = takerSlot;
+  return takerSlot;
 }
 
 void NetHIDDevice::Clear() {
   boost::mutex::scoped_lock lock(mutex);
   pending = false;
   direction = Vector3(0);
+  takerSlot = -1;
+  consumedTakerSlot = -1;
+  pendingTakerSlot = -1;
   for (int i = 0; i < e_ButtonFunction_Size; i++) {
     current[i] = false;
     previous[i] = false;

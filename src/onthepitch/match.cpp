@@ -61,6 +61,10 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   remotePresentation = false;
   remoteAnimTableReady = false;
   pauseMenuRequested = false;
+  setPieceTakerMenuRequested = false;
+  setPieceTakerMenuOpen = false;
+  pendingSetPieceTaker = 0;
+  remoteSetPieceTakerSlot = -1;
   extendedReplayFired = false;
   remoteCameraOverride = false;
   localPeerId = 0;
@@ -558,6 +562,23 @@ void Match::Pause(bool doPause) {
     server->ResetResumeVotes();
     server->BroadcastPause(doPause);
   }
+}
+
+void Match::SetSetPieceTaker(Player *newTaker) {
+  // Change the actual taker of the current set piece (#30). Host-authoritative: the same human gamer
+  // that controlled the old taker keeps control, now of the new one. Designated players are re-pointed
+  // and the new taker is walked to the ball spot by the team controller.
+  if (!IsInSetPiece()) return;
+  Player *oldTaker = referee->GetBuffer().taker;
+  if (!oldTaker || !newTaker || newTaker == oldTaker) return;
+  if (!newTaker->IsActive() || newTaker->GetTeamID() != oldTaker->GetTeamID()) return;
+
+  Team *team = teams[newTaker->GetTeamID()];
+  referee->SetTaker(newTaker);
+  // SetPieceTaker walks the new taker to the spot (and hands a throw-in retain over).
+  team->GetController()->SetPieceTaker(newTaker);
+  team->SelectPlayerForTakerChange(oldTaker, newTaker);
+  designatedPossessionPlayer = newTaker;
 }
 
 bool Match::ConsumeReplayStop() {
@@ -1326,6 +1347,13 @@ void Match::Process() {
 
 
     // HIJ IS EEN HONDELUUUL
+
+    // Set-piece taker change requested from the local menu (#30): apply it before the referee and
+    // the presentation refresh so both read the new taker this tick.
+    if (pendingSetPieceTaker) {
+      SetSetPieceTaker(pendingSetPieceTaker);
+      pendingSetPieceTaker = 0;
+    }
 
     referee->Process();
 

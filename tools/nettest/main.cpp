@@ -389,12 +389,15 @@ static void TestUdpRealtime(uint16_t port) {
   NetInputFrame frame;
   frame.buttons = (1u << e_ButtonFunction_ShortPass);
   frame.direction = Vector3(1.0f, 0.0f, 0.0f);
+  // Set-piece taker menu choice (#30) travels in the same frame.
+  frame.takerSlot = 5;
   pair.client.SendInputFrame(frame);
   bool gotInput = WaitFor([&]() {
     if (device) device->Process();
     return device && device->GetButton(e_ButtonFunction_ShortPass);
   }, 3000, 20);
   CHECK(gotInput, "udp: client input not applied on host");
+  CHECK(device && device->ConsumeSetPieceTakerSlot() == 5, "udp: taker slot not applied on host");
 }
 
 static void TestMatchOptions(uint16_t port) {

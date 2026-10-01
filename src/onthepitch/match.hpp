@@ -202,6 +202,24 @@ class Match {
     // or peer-requested pause; not set by automatic goal replays).
     bool GetPauseMenuRequested() const { return pauseMenuRequested; }
 
+    // Set-piece taker menu (#30). `...Requested` is a one-shot the menu layer consumes to open the
+    // overlay; `...Open` makes HumanController suppress the taker's own input while it is up. Raised
+    // locally by the peer whose human controls the taker (host via HumanController, thin client via
+    // the snapshot-driven presentation).
+    bool GetSetPieceTakerMenuRequested() const { return setPieceTakerMenuRequested; }
+    void RequestSetPieceTakerMenu() { if (!setPieceTakerMenuOpen) setPieceTakerMenuRequested = true; }
+    bool IsSetPieceTakerMenuOpen() const { return setPieceTakerMenuOpen; }
+    void SetSetPieceTakerMenuOpen(bool open) { setPieceTakerMenuOpen = open; if (!open) setPieceTakerMenuRequested = false; }
+
+    // Actual set-piece taker change (#30), host-authoritative. The local menu queues it and Process
+    // applies it, so the switch lands inside the simulation phase; a thin client instead ships the
+    // chosen squad slot over the input channel (see the remote slot below).
+    void RequestSetPieceTaker(Player *player) { pendingSetPieceTaker = player; }
+    void SetSetPieceTaker(Player *newTaker);
+    void RequestRemoteSetPieceTaker(int slot) { remoteSetPieceTakerSlot = slot; }
+    int GetRemoteSetPieceTakerSlot() const { return remoteSetPieceTakerSlot; }
+    void ClearRemoteSetPieceTakerSlot() { remoteSetPieceTakerSlot = -1; }
+
     // Replay skip sync (host broadcasts; clients route through the host).
     bool ConsumeReplayStop();
     void BroadcastReplayStop();
@@ -216,7 +234,12 @@ class Match {
     // (type != None) and is never serialized on its own. Taker identity stays in
     // the RefereeBuffer on the host and arrives via the snapshot on a thin client.
     void StartSetPiece(e_SetPiece setPiece) { setPieceType = setPiece; }
-    void StopSetPiece() { setPieceType = e_SetPiece_None; }
+    void StopSetPiece() {
+      setPieceType = e_SetPiece_None;
+      // The taker menu is only valid for the live set piece (#30).
+      setPieceTakerMenuRequested = false;
+      setPieceTakerMenuOpen = false;
+    }
     bool IsInSetPiece() const { return setPieceType != e_SetPiece_None; }
     e_SetPiece GetSetPieceType() const { return setPieceType; }
     Referee *GetReferee() { return referee; }
@@ -511,6 +534,12 @@ class Match {
     //std::vector<MissingAnim> missingAnims;
 
     float matchDifficulty;
+
+    // set-piece taker menu (#30)
+    bool setPieceTakerMenuRequested;
+    bool setPieceTakerMenuOpen;
+    Player *pendingSetPieceTaker;
+    int remoteSetPieceTakerSlot; // thin client: chosen taker squad slot, sent via the input channel
 
     // remote presentation
     bool remotePresentation;
