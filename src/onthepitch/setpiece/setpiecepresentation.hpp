@@ -73,6 +73,14 @@ class SetPiecePresentation {
     const setpiecelogic::PenaltyAim &GetPenaltyAim() const { return penaltyAim; }
     void UpdatePenaltyAim(float stickLateral, float stickHeight, bool hasInput, bool shotPressed, float chargeRatio, unsigned long now);
 
+    // Set-piece kick aiming (spec §6), owned here for the same reason as the penalty reticle: the
+    // intent is local to the human taker (on a thin client the host applies it from the input
+    // channel). Stick-X turns the heading before the kick is charged; while charging it feeds the
+    // curl accumulator instead, from the press until the ball is struck.
+    void UpdateSetPieceAim(float stickX, bool hasInput, bool charging, unsigned long now);
+    // Plans the kick from the current aim/curl. Returns false if this set piece has no aim model.
+    bool PlanSetPieceKick(e_FunctionType functionType, float charge, float stickY, setpiecelogic::SetPieceKickPlan &plan) const;
+
     // Set-piece camera (spec §4). Presentation-only: while a local human owns the Kicker (or the
     // defending Keeper on a penalty) role, the camera sits behind the taker and turns the auto
     // camera off. `UpdateCamera()` is called every tick; the kicker's controller calls
@@ -104,6 +112,7 @@ class SetPiecePresentation {
     bool LocalRoleOwnsCamera(e_SetPiece type, Player *taker) const;
     Vector3 CameraSpot() const;
     Vector3 CameraBaseForward(const Vector3 &spot, float side) const;
+    Vector3 CameraForwardForType(e_SetPiece type, const Vector3 &spot, float side) const;
     void ApplyCamera();
     void ReleaseCamera();
 
@@ -116,6 +125,14 @@ class SetPiecePresentation {
     setpiecelogic::PenaltyAim penaltyAim;
     float chargeRatio;
     unsigned long lastPenaltyAimTime_ms;
+
+    // Set-piece kick aiming (spec §6).
+    e_SetPiece setPieceAimType;
+    setpiecelogic::SetPieceAim setPieceAim;
+    bool setPieceAimInitialized;
+    float setPieceCurl;
+    unsigned long lastSetPieceAimTime_ms;
+    void ResetSetPieceAim();
 
     IHIDevice *localDevice; // thin client only: drives the reticle locally
     bool remoteShotHeld;

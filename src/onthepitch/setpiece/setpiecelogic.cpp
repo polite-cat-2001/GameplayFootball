@@ -70,6 +70,82 @@ void ApplyShotPlan(TouchInfo &touchInfo, const ShotPlan &plan) {
   touchInfo.curl = plan.curl;
 }
 
+bool SetPieceAimingUsed(e_SetPiece type) {
+  return type == e_SetPiece_FreeKick || type == e_SetPiece_Corner || type == e_SetPiece_GoalKick;
+}
+
+float SetPieceAimArc(e_SetPiece type) {
+  switch (type) {
+    case e_SetPiece_FreeKick: return _default_SetPiece_FreeKickAimArc;
+    case e_SetPiece_Corner:   return _default_SetPiece_CornerAimArc;
+    case e_SetPiece_GoalKick: return _default_SetPiece_GoalKickAimArc;
+    default: return 0.0f;
+  }
+}
+
+Vector3 SetPieceBaseHeading(e_SetPiece type, const Vector3 &spot, int side) {
+  Vector3 forward(-side, 0, 0); // straight up the pitch, toward the attacked goal
+  Vector3 target;
+  switch (type) {
+    case e_SetPiece_FreeKick: target = Vector3(-side * pitchHalfW, 0, 0); break;      // goal centre
+    case e_SetPiece_Corner:   target = Vector3(-side * (pitchHalfW - 11.0f), 0, 0); break; // penalty spot
+    case e_SetPiece_GoalKick: return forward;
+    default: return forward;
+  }
+  Vector3 dir = (target - spot);
+  return dir.Get2D().GetNormalized(forward);
+}
+
+SetPieceAim RotateSetPieceAim(const SetPieceAim &aim, float stickX, float dt, e_SetPiece type) {
+  // Turning right on screen (positive stick-X) rotates the heading clockwise from above, which is
+  // a negative world angle in GF's x-y plane; the base heading already carries the team's side.
+  float angle = aim.angle - stickX * _default_SetPiece_AimSpeed * dt;
+  SetPieceAim result;
+  result.angle = clamp(angle, -SetPieceAimArc(type), SetPieceAimArc(type));
+  return result;
+}
+
+Vector3 SetPieceAimHeading(const Vector3 &base, const SetPieceAim &aim) {
+  return base.GetRotated2D(aim.angle).GetNormalized(base);
+}
+
+float SetPiecePassHeight(e_FunctionType functionType, float stickY) {
+  // A cross (high pass) is lofted even at the neutral stick; a short/long pass is driven along the
+  // ground until the player pushes the stick up.
+  float neutral = (functionType == e_FunctionType_HighPass) ? _default_SetPiece_PassHeightNeutral : 0.0f;
+  float fraction = neutral + clamp(stickY, -1.0f, 1.0f) * _default_SetPiece_PassHeightSpan;
+  return clamp(fraction, 0.0f, 1.0f) * _default_SetPiece_PassHeightMax;
+}
+
+SetPieceKickPlan PlanSetPieceKick(e_SetPiece type, const Vector3 &heading, const Vector3 &spot,
+                                  int side, e_FunctionType functionType, float charge,
+                                  float stickY, float curlAccum) {
+  SetPieceKickPlan plan;
+  float hold = clamp(charge, 0.0f, 1.0f);
+  plan.desiredDirection = heading;
+  plan.desiredPower = hold;
+  plan.aimHeight = 0.0f;
+  plan.useAimHeight = false;
+  plan.useLaunch = false;
+  plan.launch = Vector3(0);
+  plan.curl = clamp(curlAccum * _default_SetPiece_CurlScale, -_default_SetPiece_CurlMax, _default_SetPiece_CurlMax);
+
+  if (functionType == e_FunctionType_Shot && type == e_SetPiece_FreeKick) {
+    // The charge drives two axes at once: launch speed and elevation.
+    Vector3 toGoal = (Vector3(-side * pitchHalfW, 0, 0) - spot).Get2D().GetNormalized(heading.Get2D());
+    Vector3 dir = (heading.Get2D() * (1.0f - _default_SetPiece_GoalMagnet) + toGoal * _default_SetPiece_GoalMagnet).GetNormalized(heading.Get2D());
+    float speed = _default_SetPiece_FreeKickShotSpeedMin + (_default_SetPiece_FreeKickShotSpeedMax - _default_SetPiece_FreeKickShotSpeedMin) * hold;
+    float elevation = _default_SetPiece_FreeKickShotElevMin + (_default_SetPiece_FreeKickShotElevMax - _default_SetPiece_FreeKickShotElevMin) * hold;
+    plan.desiredDirection = dir;
+    plan.launch = dir * (speed * std::cos(elevation)) + Vector3(0.0f, 0.0f, speed * std::sin(elevation));
+    plan.useLaunch = true;
+  } else {
+    plan.aimHeight = SetPiecePassHeight(functionType, stickY);
+    plan.useAimHeight = true;
+  }
+  return plan;
+}
+
 PenaltyAim DefaultPenaltyAim() {
   return PenaltyAim{ 0.0f, _default_Pen_ReticleStartY };
 }

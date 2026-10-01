@@ -470,38 +470,45 @@ void Humanoid::Process() {
         Vector3 inputDirection = currentAnim->originatingCommand.touchInfo.inputDirection;
         if (CastPlayer()->GetExternalController()) inputDirection = CastPlayer()->GetExternalController()->GetDirection();
 
+        // A set-piece pass/cross (spec §6) is aimed by the taker: keep the planned direction and
+        // power instead of the auto-assist refinement. In this pass branch only a set-piece pass
+        // sets `useAimHeight` (a shot's plan never reaches a pass animation).
+        bool setPiecePass = currentAnim->originatingCommand.touchInfo.useAimHeight;
+
 
         // refine/change target, if new target is close enough to old target
 
-        //targetPlayer = 0;//currentAnim->originatingCommand.touchInfo.targetPlayer;
-        Vector3 tmpBallDirection = ballDirection;
-        float tmpBallPower = ballPower;
-        Player *tmpTargetPlayer = 0;
-        Player *forcedTargetPlayer = 0;
-        AI_GetPass(CastPlayer(), currentAnim->originatingCommand.desiredFunctionType, inputDirection, currentAnim->originatingCommand.touchInfo.inputPower, currentAnim->originatingCommand.touchInfo.autoDirectionBias, currentAnim->originatingCommand.touchInfo.autoPowerBias, tmpBallDirection, tmpBallPower, tmpTargetPlayer, currentAnim->originatingCommand.touchInfo.forcedTargetPlayer);
-        float maxDeviationAngle = 0.15f * pi;
-        radian angleDiff = tmpBallDirection.Get2D().GetAngle2D(ballDirection.Get2D());
-        if (fabs(angleDiff) <= maxDeviationAngle) {
-          ballDirection = tmpBallDirection;
-          ballPower = tmpBallPower;
-          targetPlayer = tmpTargetPlayer;
-        } else if (fabs(angleDiff) < 2.0f * maxDeviationAngle) {
-          // get as close as possible
-          float clampedAngleDiff = clamp(angleDiff, -maxDeviationAngle, maxDeviationAngle);
-          //SetYellowDebugPilon(GetTouchPos() + ballDirection * 3);
-          ballDirection = ballDirection.GetRotated2D(clampedAngleDiff);
-          //SetGreenDebugPilon(GetTouchPos() + ballDirection * 3);
-
-          if (tmpTargetPlayer != targetPlayer) {
-            // if we can't make it to our refined target at all, just stick with original ballpower (think about refined target at ~180 deg, would be weird to pass forward with the power of that (unreachable) target)
-            float refinedBias = NormalizedClamp(fabs(clampedAngleDiff), 0.0f, fabs(angleDiff));
-            ballPower = ballPower * (1.0f - refinedBias) + tmpBallPower * refinedBias;
-            targetPlayer = tmpTargetPlayer; // new, and removed line below
-          } else {
+        if (!setPiecePass) {
+          //targetPlayer = 0;//currentAnim->originatingCommand.touchInfo.targetPlayer;
+          Vector3 tmpBallDirection = ballDirection;
+          float tmpBallPower = ballPower;
+          Player *tmpTargetPlayer = 0;
+          Player *forcedTargetPlayer = 0;
+          AI_GetPass(CastPlayer(), currentAnim->originatingCommand.desiredFunctionType, inputDirection, currentAnim->originatingCommand.touchInfo.inputPower, currentAnim->originatingCommand.touchInfo.autoDirectionBias, currentAnim->originatingCommand.touchInfo.autoPowerBias, tmpBallDirection, tmpBallPower, tmpTargetPlayer, currentAnim->originatingCommand.touchInfo.forcedTargetPlayer);
+          float maxDeviationAngle = 0.15f * pi;
+          radian angleDiff = tmpBallDirection.Get2D().GetAngle2D(ballDirection.Get2D());
+          if (fabs(angleDiff) <= maxDeviationAngle) {
+            ballDirection = tmpBallDirection;
             ballPower = tmpBallPower;
-          }
+            targetPlayer = tmpTargetPlayer;
+          } else if (fabs(angleDiff) < 2.0f * maxDeviationAngle) {
+            // get as close as possible
+            float clampedAngleDiff = clamp(angleDiff, -maxDeviationAngle, maxDeviationAngle);
+            //SetYellowDebugPilon(GetTouchPos() + ballDirection * 3);
+            ballDirection = ballDirection.GetRotated2D(clampedAngleDiff);
+            //SetGreenDebugPilon(GetTouchPos() + ballDirection * 3);
 
-        } // else: just stick to original
+            if (tmpTargetPlayer != targetPlayer) {
+              // if we can't make it to our refined target at all, just stick with original ballpower (think about refined target at ~180 deg, would be weird to pass forward with the power of that (unreachable) target)
+              float refinedBias = NormalizedClamp(fabs(clampedAngleDiff), 0.0f, fabs(angleDiff));
+              ballPower = ballPower * (1.0f - refinedBias) + tmpBallPower * refinedBias;
+              targetPlayer = tmpTargetPlayer; // new, and removed line below
+            } else {
+              ballPower = tmpBallPower;
+            }
+
+          } // else: just stick to original
+        }
 
 
         if (targetPlayer) team->SelectPlayer(targetPlayer);
@@ -526,6 +533,15 @@ void Humanoid::Process() {
           zcurve = amount * -340;//-600;
 
           //SetRedDebugPilon(match->GetBall()->Predict(0).Get2D() + touchVec.Get2D() * 0.4f);
+        }
+
+        // set-piece pass/cross (spec §6): stick-Y planned a peak height (vertical launch from the
+        // ballistics), and the accumulated stick curl bends the ball
+        if (setPiecePass && currentAnim->originatingCommand.touchInfo.aimHeight > 0.0f) {
+          touchVec.coords[2] += std::sqrt(2.0f * _default_Shot_Gravity * currentAnim->originatingCommand.touchInfo.aimHeight);
+        }
+        if (currentAnim->originatingCommand.touchInfo.curl != 0.0f) {
+          zcurve = -currentAnim->originatingCommand.touchInfo.curl * _default_SetPiece_CurlSpin;
         }
 
         touchVec = touchVec * (1.0f - bumpyRideBias) + currentBallVec * bumpyRideBias;

@@ -131,6 +131,13 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
         commandQueue.push_back(command);
 
 
+      } else if (_IsSetPieceKicker()) {
+
+        // free kick / corner / goal kick: the aimed heading, planned height and accumulated curl
+        // replace the movement-stick input and the auto-assist (spec §6)
+        _SetPieceKickCommand(commandQueue);
+
+
       } else if (actionButton == e_ButtonFunction_ShortPass) {
 
         PlayerCommand command;
@@ -461,6 +468,16 @@ void HumanController::Process() {
         allowShot = false;
       }
 
+      // Set-piece kick types (spec §6): a free kick offers all four, a corner and a goal kick only
+      // the two passes.
+      if (_IsSetPieceKicker()) {
+        e_SetPiece setPiece = team->GetController()->GetSetPieceType();
+        if (setPiece == e_SetPiece_Corner || setPiece == e_SetPiece_GoalKick) {
+          allowLongPass = false;
+          allowShot = false;
+        }
+      }
+
       if (hid->GetButton(e_ButtonFunction_ShortPass) && !hid->GetPreviousButtonState(e_ButtonFunction_ShortPass) && allowShortPass) {
         actionMode = 2;
         actionButton = e_ButtonFunction_ShortPass;
@@ -479,7 +496,8 @@ void HumanController::Process() {
       if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot) && allowShot) {
         actionMode = 2;
         actionButton = e_ButtonFunction_Shot;
-        pendingShotType = _SampleShotType();
+        // chip is not used on a set piece (spec §6): the kick is always a plain shot
+        pendingShotType = _IsSetPieceKicker() ? e_ShotType_Normal : _SampleShotType();
       }
 
     }
@@ -500,6 +518,7 @@ void HumanController::Process() {
   if (hid->GetButton(e_ButtonFunction_Special) && hasPossession) team->GetController()->ApplyAttackingRun();
 
   _UpdatePenaltyAim();
+  _UpdateSetPieceAim();
 
 }
 
@@ -559,6 +578,73 @@ void HumanController::_UpdatePenaltyAim() {
   bool hasInput = stick.GetLength() >= analogStickDeadzone;
   bool shotPressed = (actionMode == 2 && actionButton == e_ButtonFunction_Shot);
   presentation->UpdatePenaltyAim(stick.coords[0], stick.coords[1], hasInput, shotPressed, GetChargeRatio(), match->GetActualTime_ms());
+}
+
+bool HumanController::_IsSetPieceKicker() {
+  // Free kick, corner or goal kick, and this player is the actual taker. Compare against the taker
+  // directly (not the local role): on the host the taker may be the remote client's player.
+  if (!match->IsInSetPiece()) return false;
+  return team->GetController()->GetPieceTaker() == player &&
+         setpiecelogic::SetPieceAimingUsed(team->GetController()->GetSetPieceType());
+}
+
+void HumanController::_UpdateSetPieceAim() {
+  if (!_IsSetPieceKicker()) return;
+
+  // Raw stick axis (GetDirection is normalized and already deadzoned): the aim turns on its own
+  // 0.15 deadzone (spec §6), so small stick drift below it neither turns nor is fed as input.
+  float rawX = hid->GetButtonValue(e_ButtonFunction_Right) - hid->GetButtonValue(e_ButtonFunction_Left);
+  bool hasInput = fabs(rawX) >= _default_SetPiece_AimDeadzone;
+  bool charging = (actionMode == 2);
+  match->GetSetPiecePresentation()->UpdateSetPieceAim(rawX, hasInput, charging, match->GetActualTime_ms());
+}
+
+void HumanController::_SetPieceKickCommand(PlayerCommandQueue &commandQueue) {
+  SetPiecePresentation *presentation = match->GetSetPiecePresentation();
+
+  e_FunctionType functionType;
+  switch (actionButton) {
+    case e_ButtonFunction_ShortPass: functionType = e_FunctionType_ShortPass; break;
+    case e_ButtonFunction_LongPass:  functionType = e_FunctionType_LongPass; break;
+    case e_ButtonFunction_HighPass:  functionType = e_FunctionType_HighPass; break;
+    case e_ButtonFunction_Shot:      functionType = e_FunctionType_Shot; break;
+    default: return;
+  }
+
+  float rawY = hid->GetButtonValue(e_ButtonFunction_Up) - hid->GetButtonValue(e_ButtonFunction_Down);
+  setpiecelogic::SetPieceKickPlan plan;
+  if (!presentation->PlanSetPieceKick(functionType, GetChargeRatio(), rawY, plan)) return;
+
+  PlayerCommand command;
+  command.desiredFunctionType = functionType;
+  command.useDesiredMovement = false;
+  command.useDesiredLookAt = false;
+
+  if (functionType == e_FunctionType_Shot) {
+    command.touchInfo.desiredDirection = plan.desiredDirection;
+    command.touchInfo.desiredPower = plan.desiredPower;
+    command.touchInfo.shotType = e_ShotType_Normal; // chip is not used on a set piece
+    command.touchInfo.curl = plan.curl;
+    command.touchInfo.useSetPieceLaunch = plan.useLaunch;
+    command.touchInfo.setPieceLaunch = plan.launch;
+  } else {
+    // The aimed heading and the hold are authoritative; plan height (stick-Y) and curl feed the
+    // touch. AI_GetPass still picks the teammate for the control handoff.
+    command.touchInfo.inputDirection = plan.desiredDirection;
+    command.touchInfo.inputPower = plan.desiredPower;
+    command.touchInfo.desiredDirection = plan.desiredDirection;
+    command.touchInfo.desiredPower = plan.desiredPower;
+    command.touchInfo.autoDirectionBias = 0.0f;
+    command.touchInfo.autoPowerBias = 0.0f;
+    command.touchInfo.aimHeight = plan.aimHeight;
+    command.touchInfo.useAimHeight = plan.useAimHeight;
+    command.touchInfo.curl = plan.curl;
+    Vector3 ignoredDirection;
+    float ignoredPower;
+    AI_GetPass(CastPlayer(), functionType, plan.desiredDirection, plan.desiredPower, 0.0f, 0.0f, ignoredDirection, ignoredPower, command.touchInfo.targetPlayer);
+  }
+
+  commandQueue.push_back(command);
 }
 
 float HumanController::GetChargeRatio() const {

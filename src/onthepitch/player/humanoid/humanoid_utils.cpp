@@ -464,9 +464,11 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   float charge = clamp(currentAnim->originatingCommand.touchInfo.desiredPower, 0.0f, 1.0f);
   e_ShotType shotType = currentAnim->originatingCommand.touchInfo.shotType;
   bool useAimTarget = currentAnim->originatingCommand.touchInfo.useAimTarget;
+  bool useSetPieceLaunch = currentAnim->originatingCommand.touchInfo.useSetPieceLaunch;
   // a chip always arcs, so it is never treated as a driven ground shot; a penalty aims at the
-  // reticle height regardless of charge, so it is never ground-driven either
-  bool groundShot = !useAimTarget && setpiecelogic::IsGroundShot(charge) && shotType != e_ShotType_Chip;
+  // reticle height regardless of charge, so it is never ground-driven either; a set-piece shot
+  // launched by the planner carries its own velocity.
+  bool groundShot = !useAimTarget && !useSetPieceLaunch && setpiecelogic::IsGroundShot(charge) && shotType != e_ShotType_Chip;
 
   float aimHeight = currentAnim->originatingCommand.touchInfo.useAimHeight
                         ? currentAnim->originatingCommand.touchInfo.aimHeight
@@ -483,7 +485,11 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
   // a penalty launches at the reticle's planned speed, with its ballistic vertical uncapped
   float launchSpeed = useAimTarget ? std::max(currentAnim->originatingCommand.touchInfo.aimSpeed, 0.001f) : power;
   float maxLift = useAimTarget ? std::numeric_limits<float>::max() : _default_Shot_MaxLift;
-  Vector3 desiredShot = setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, launchSpeed, groundShot, maxLift);
+  // a set-piece free-kick shot already carries its planned launch (speed and elevation from the
+  // charge); otherwise launch ballistically toward the aim point on the goal line
+  Vector3 desiredShot = useSetPieceLaunch
+                            ? currentAnim->originatingCommand.touchInfo.setPieceLaunch
+                            : setpiecelogic::CalculateShotVelocity(from, aim, desiredDirection2D, launchSpeed, groundShot, maxLift);
   if (Verbose()) {
     desiredShot.Print();
     printf("^ shot: desired\n");
@@ -550,11 +556,12 @@ Vector3 GetShotVector(Match *match, Player *player, const Vector3 &nextStartPos,
 
   // shot variants: curl bends the ball with planned lateral spin, chip launches at a fixed
   // steep angle with charge scaling the whole kick
-  if (shotType == e_ShotType_Curl && currentAnim->originatingCommand.touchInfo.curl != 0.0f) {
-    // curl is planned input from TouchInfo: aim further outside the far corner, then spin back in
-    float curlSign = currentAnim->originatingCommand.touchInfo.curl;
-    shot.Rotate2D(curlSign * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
-    zRot = -curlSign * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
+  float plannedCurl = currentAnim->originatingCommand.touchInfo.curl;
+  if (plannedCurl != 0.0f) {
+    // planned curl from TouchInfo: a curled shot is the full +-1, a set-piece kick scales it by
+    // the accumulated stick amount. Aim further outside, then spin back in.
+    shot.Rotate2D(plannedCurl * GetConfiguration()->GetReal("gameplay_shot_curlaimout", _default_Shot_Curl_AimOut));
+    zRot = -plannedCurl * GetConfiguration()->GetReal("gameplay_shot_curlspin", _default_Shot_Curl_ZRot);
   } else if (shotType == e_ShotType_Chip) {
     // Chip: fixed steep launch angle, charge (through the shot power) scales the whole kick.
     // A tap still lofts over a rushing keeper but stays short; a full charge sails it over the

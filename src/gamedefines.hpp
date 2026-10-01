@@ -117,6 +117,27 @@ const float _default_SetPiece_CamGoalKickBack = 8.0f; // goal kick
 const float _default_SetPiece_CamGoalKickHeight = 3.5f;
 const float _default_SetPiece_CamGoalKickLookY = 1.4f;
 
+// Set-piece kick aiming and types (spec 2026-09-29 §6). Stick-X turns the world heading of the
+// kick around the ball (a full turn on a free kick, a forward sector on a corner/goal kick) and
+// also feeds the curl accumulator; stick-Y sets the launch height of a pass/cross, while a
+// free-kick shot derives both speed and elevation from the charge. Tune by playing.
+const float _default_SetPiece_AimSpeed = 1.6f;               // heading turn rate (rad/s)
+const float _default_SetPiece_AimDeadzone = 0.15f;           // aim stick deadzone
+const float _default_SetPiece_FreeKickAimArc = pi;           // free kick: full turn (rad)
+const float _default_SetPiece_CornerAimArc = 1.4f;           // corner: forward sector half-angle (CORNER_AIM_ARC, rad)
+const float _default_SetPiece_GoalKickAimArc = 1.2f;         // goal kick: forward sector half-angle (GK_AIM_ARC, rad)
+const float _default_SetPiece_GoalMagnet = 0.18f;            // free-kick shot pull toward the goal centre (goal_magnet)
+const float _default_SetPiece_FreeKickShotSpeedMin = 36.0f;  // free-kick shot launch speed at zero charge (m/s)
+const float _default_SetPiece_FreeKickShotSpeedMax = 46.0f;  // free-kick shot launch speed at full charge (m/s)
+const float _default_SetPiece_FreeKickShotElevMin = 4.0f * pi / 180.0f;  // free-kick shot elevation at zero charge (rad)
+const float _default_SetPiece_FreeKickShotElevMax = 22.0f * pi / 180.0f; // free-kick shot elevation at full charge (rad)
+const float _default_SetPiece_PassHeightMax = 5.0f;          // stick-Y full up peak height on a pass/cross (m)
+const float _default_SetPiece_PassHeightNeutral = 0.3f;      // stick-Y centred peak height, fraction of max
+const float _default_SetPiece_PassHeightSpan = 0.7f;         // stick-Y full travel, fraction of max
+const float _default_SetPiece_CurlScale = 1.0f;              // stick-X accumulation to curl gain
+const float _default_SetPiece_CurlMax = 1.0f;                // |curl| cap
+const float _default_SetPiece_CurlSpin = 60.0f;              // lateral spin (rad/s) a full curl puts on a pass/cross
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;
@@ -230,6 +251,8 @@ struct TouchInfo {
     aimHeight = 0;
     useAimHeight = false;
     curl = 0;
+    useSetPieceLaunch = false;
+    setPieceLaunch = Vector3(0);
     useAimTarget = false;
     aimLateral = 0;
     aimSpeed = 0;
@@ -253,9 +276,16 @@ struct TouchInfo {
   float           aimHeight;
   bool            useAimHeight;
 
-  // Planned curl: out-direction sign (-1/+1) so a curled shot bends back toward the goal;
-  // 0 means no curl. The spin/aim-out magnitudes come from the gameplay config.
+  // Planned curl: a signed amount in -1..+1 (0 = no curl). A set-piece kick accumulates it from
+  // the lateral stick; a curled shot uses the full +-1. The spin/aim-out magnitudes come from the
+  // gameplay config.
   float           curl;
+
+  // Set-piece free-kick shot (spec 2026-09-29 §6): the planner already derived the 3D launch
+  // velocity from the charge (speed and elevation), so GetShotVector uses it as the best case
+  // instead of the goal-line ballistic. The accumulated curl still travels in `curl`.
+  bool            useSetPieceLaunch;
+  Vector3         setPieceLaunch;
 
   // Penalty reticle (spec 2026-09-29 §7): when set, the shot is launched ballistically at
   // (aimLateral, aimHeight) on the attacker's goal plane at aimSpeed, ignoring the

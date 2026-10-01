@@ -22,6 +22,12 @@ SetPiecePresentation::SetPiecePresentation(Match *match) : match(match) {
   localDevice = 0;
   remoteShotHeld = false;
 
+  setPieceAimType = e_SetPiece_None;
+  setPieceAim.angle = 0.0f;
+  setPieceAimInitialized = false;
+  setPieceCurl = 0.0f;
+  lastSetPieceAimTime_ms = 0;
+
   camActive = false;
   camFrozen = false;
   camSuppressed = false;
@@ -44,6 +50,14 @@ void SetPiecePresentation::Process() {
   // return None and reset penaltyAim every tick — the host would then plan every remote penalty
   // shot from the centre. Drawing is gated separately (DrawPenaltyReticle is team-based).
   if (!IsPenalty()) EndPenaltyAim();
+
+  // The kick aim lives for one set piece: a new type (or leaving the set piece) starts it over.
+  if (!setpiecelogic::SetPieceAimingUsed(type)) {
+    if (setPieceAimType != e_SetPiece_None) ResetSetPieceAim();
+  } else if (type != setPieceAimType) {
+    ResetSetPieceAim();
+    setPieceAimType = type;
+  }
 }
 
 void SetPiecePresentation::SetRemoteIdentity(e_SetPiece newType, int takerTeam, int takerSlot) {
@@ -140,6 +154,49 @@ void SetPiecePresentation::UpdatePenaltyAim(float stickLateral, float stickHeigh
   DrawPenaltyReticle();
 }
 
+void SetPiecePresentation::UpdateSetPieceAim(float stickX, bool hasInput, bool charging, unsigned long now) {
+  if (!setpiecelogic::SetPieceAimingUsed(type) || !CameraTaker()) return;
+
+  if (!setPieceAimInitialized) {
+    setPieceAim.angle = 0.0f;
+    setPieceCurl = 0.0f;
+    setPieceAimInitialized = true;
+    lastSetPieceAimTime_ms = now;
+  }
+
+  float dt = (now - lastSetPieceAimTime_ms) / 1000.0f;
+  lastSetPieceAimTime_ms = now;
+  if (dt <= 0.0f || dt > 0.2f) dt = 0.01f;
+
+  if (charging) {
+    // The kick button locks the heading; from the press to the strike the lateral stick curls the
+    // ball instead of turning the aim.
+    setPieceCurl = clamp(setPieceCurl + stickX * dt, -_default_SetPiece_CurlMax, _default_SetPiece_CurlMax);
+  } else if (hasInput) {
+    setPieceAim = setpiecelogic::RotateSetPieceAim(setPieceAim, stickX, dt, type);
+  }
+}
+
+bool SetPiecePresentation::PlanSetPieceKick(e_FunctionType functionType, float charge, float stickY, setpiecelogic::SetPieceKickPlan &plan) const {
+  if (!setpiecelogic::SetPieceAimingUsed(type)) return false;
+  Player *kickTaker = match->IsRemotePresentation() ? taker : match->GetRefereeBuffer().taker;
+  if (!kickTaker) return false;
+  int side = kickTaker->GetTeam()->GetSide();
+  Vector3 spot = CameraSpot();
+  Vector3 base = setpiecelogic::SetPieceBaseHeading(type, spot, side);
+  Vector3 heading = setpiecelogic::SetPieceAimHeading(base, setPieceAim);
+  plan = setpiecelogic::PlanSetPieceKick(type, heading, spot, side, functionType, charge, stickY, setPieceCurl);
+  return true;
+}
+
+void SetPiecePresentation::ResetSetPieceAim() {
+  setPieceAimType = e_SetPiece_None;
+  setPieceAim.angle = 0.0f;
+  setPieceAimInitialized = false;
+  setPieceCurl = 0.0f;
+  lastSetPieceAimTime_ms = 0;
+}
+
 bool SetPiecePresentation::HasSetPieceCamera(e_SetPiece type) {
   // Only these four get a camera; throw-in and kickoff keep the normal camera (spec §4).
   switch (type) {
@@ -200,6 +257,17 @@ Vector3 SetPiecePresentation::CameraBaseForward(const Vector3 &spot, float side)
   if (forward.GetLength() < 0.001f) forward = Vector3(-side, 0, 0);
   else forward.Normalize();
   return forward;
+}
+
+Vector3 SetPiecePresentation::CameraForwardForType(e_SetPiece type, const Vector3 &spot, float side) const {
+  // The view turns with the aim for the aiming set pieces (spec §4/§6) and shares its base heading
+  // with the kick, so the camera looks exactly where the ball will go; the penalty keeps its fixed
+  // look at the goal centre (ApplyCamera overrides the look regardless).
+  if (type != e_SetPiece_Penalty && setpiecelogic::SetPieceAimingUsed(type)) {
+    Vector3 base = setpiecelogic::SetPieceBaseHeading(type, spot, side);
+    return setpiecelogic::SetPieceAimHeading(base, setPieceAim);
+  }
+  return CameraBaseForward(spot, side);
 }
 
 void SetPiecePresentation::ApplyCamera() {
@@ -313,7 +381,7 @@ void SetPiecePresentation::UpdateCamera() {
       // after a debug-forced set piece teleports the ball); freezing it there would leave the camera
       // at the old ball spot. Once committed (or on the host, where the spot is fixed) this is a no-op.
       camSpot = CameraSpot();
-      camForward = CameraBaseForward(camSpot, camSide);
+      camForward = CameraForwardForType(camType, camSpot, camSide);
     }
     ApplyCamera();
     return;
@@ -338,7 +406,7 @@ void SetPiecePresentation::UpdateCamera() {
   camType = camTypeNow;
   camSpot = CameraSpot();
   camSide = camTaker->GetTeam()->GetSide();
-  camForward = CameraBaseForward(camSpot, camSide);
+  camForward = CameraForwardForType(camTypeNow, camSpot, camSide);
   camReleaseTime_ms = 0;
   ApplyCamera();
 }

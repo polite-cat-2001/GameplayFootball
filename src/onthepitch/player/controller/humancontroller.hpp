@@ -48,6 +48,12 @@ class HumanController : public PlayerController {
     bool _IsPenaltyTaker();
     void _UpdatePenaltyAim();
 
+    // set-piece kick aiming (spec 2026-09-29 §6): the taker turns/curls the kick through the
+    // presentation carrier, which builds the plan when a pass/cross/shot button is released
+    bool _IsSetPieceKicker();
+    void _UpdateSetPieceAim();
+    void _SetPieceKickCommand(PlayerCommandQueue &commandQueue);
+
     IHIDevice *hid;
 
     // set when a contextual button (example: pass/defend button) is pressed
