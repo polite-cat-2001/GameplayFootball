@@ -22,6 +22,8 @@ SetPiecePresentation::SetPiecePresentation(Match *match) : match(match) {
   lastPenaltyAimTime_ms = 0;
   localDevice = 0;
   remoteShotHeld = false;
+  remoteKickHeld = false;
+  remoteKickWasShot = false;
 
   setPieceAimType = e_SetPiece_None;
   setPieceAim.angle = 0.0f;
@@ -346,6 +348,9 @@ void SetPiecePresentation::UpdateRemotePenaltyAim() {
   bool hasInput = stick.GetLength() >= analogStickDeadzone;
   bool shotHeld = localDevice->GetButton(e_ButtonFunction_Shot);
   bool shotPressed = shotHeld && !remoteShotHeld;
+  // the client's HumanController never calls NotifyKickerCommitted, so freeze the view here on the
+  // shot release (same commit the host sees), otherwise the camera would keep following the aim
+  if (!shotHeld && remoteShotHeld) NotifyKickerCommitted(true);
   remoteShotHeld = shotHeld;
   UpdatePenaltyAim(stick.coords[0], stick.coords[1], hasInput, shotPressed, 0.0f, match->GetActualTime_ms());
 }
@@ -358,10 +363,17 @@ void SetPiecePresentation::UpdateRemoteSetPieceAim() {
   if (!TeamHasLocalHuman(taker->GetTeam())) return;
 
   float rawX = localDevice->GetButtonValue(e_ButtonFunction_Right) - localDevice->GetButtonValue(e_ButtonFunction_Left);
-  bool charging = localDevice->GetButton(e_ButtonFunction_ShortPass) ||
+  bool shotHeld = localDevice->GetButton(e_ButtonFunction_Shot);
+  bool charging = shotHeld ||
+                  localDevice->GetButton(e_ButtonFunction_ShortPass) ||
                   localDevice->GetButton(e_ButtonFunction_LongPass) ||
-                  localDevice->GetButton(e_ButtonFunction_HighPass) ||
-                  localDevice->GetButton(e_ButtonFunction_Shot);
+                  localDevice->GetButton(e_ButtonFunction_HighPass);
+  // The client's HumanController never calls NotifyKickerCommitted: detect the kick commit here on
+  // release, otherwise the aim would keep turning the camera after the ball was struck.
+  if (remoteKickHeld && !charging) NotifyKickerCommitted(remoteKickWasShot);
+  remoteKickHeld = charging;
+  remoteKickWasShot = charging && shotHeld;
+
   bool hasInput = fabs(rawX) >= _default_SetPiece_AimDeadzone;
   UpdateSetPieceAim(rawX, hasInput, charging, match->GetActualTime_ms());
 }

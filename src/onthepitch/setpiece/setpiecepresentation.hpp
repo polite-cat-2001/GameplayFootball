@@ -140,6 +140,8 @@ class SetPiecePresentation {
 
     IHIDevice *localDevice; // thin client only: drives the reticle locally
     bool remoteShotHeld;
+    bool remoteKickHeld;    // thin client: a set-piece kick button was down last tick
+    bool remoteKickWasShot; // ...and it was the shot button
 
     bool camActive;
     bool camFrozen;              // pose fixed at the kick, watching the flight
