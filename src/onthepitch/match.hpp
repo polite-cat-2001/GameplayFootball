@@ -355,6 +355,7 @@ class Match {
 
   protected:
     void UpdateIngameCameraStartEffect();
+    void UpdateSetPieceTakerHint();
     void GetReplaySpatials(std::list < boost::intrusive_ptr<Spatial> > &spatials);
     void CaptureReplayFrame(unsigned long replayTime_ms);
     bool CheckForGoal(signed int side);
@@ -410,6 +411,11 @@ class Match {
     Gui2TacticsDebug *tacticsDebug;
     Gui2Caption *messageCaption;
     unsigned long messageCaptionRemoveTime_ms;
+    // Set-piece taker menu prompt (#30): a plain-text hint over the pitch while a local human takes
+    // a set piece and has not started the kick yet.
+    Gui2Caption *setPieceTakerHintCaption;
+    bool setPieceTakerHintVisible;
+    std::string setPieceTakerHintText;
     static const int substitutionCaptionCount = 6;
     Gui2Caption *substitutionCaptions[substitutionCaptionCount];
     unsigned long substitutionCaptionRemoveTime_ms;

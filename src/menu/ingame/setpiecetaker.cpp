@@ -72,6 +72,14 @@ void SetPieceTakerPage::Process() {
   SetPiecePresentation *presentation = match ? match->GetSetPiecePresentation() : 0;
   if (!match || !presentation || !presentation->IsLocalTaker()) {
     CloseMenu();
+    return;
+  }
+
+  // Pressing a kick button (pass / through / cross / shot) closes the menu. Ball play is frozen
+  // while it is open, so the press never strikes the ball. On keyboard those are W/A/S/D, which is
+  // why the menu is navigated with the arrows instead.
+  if (SetPiecePresentation::IsKickButtonPressed(presentation->LocalKickerDevice())) {
+    CloseMenu();
   }
 }
 
@@ -87,13 +95,6 @@ void SetPieceTakerPage::ProcessWindowingEvent(WindowingEvent *event) {
     return;
   }
   Gui2Page::ProcessWindowingEvent(event);
-}
-
-void SetPieceTakerPage::ProcessKeyboardEvent(KeyboardEvent *event) {
-  // Arrows arrive as windowing events (Gui2Task); WASD is not mapped there, so move here.
-  if (event->GetKeyRepeated(SDLK_W)) { MoveSelection(-1); event->Accept(); return; }
-  if (event->GetKeyRepeated(SDLK_S)) { MoveSelection(1); event->Accept(); return; }
-  Gui2Page::ProcessKeyboardEvent(event);
 }
 
 void SetPieceTakerPage::MoveSelection(int delta) {

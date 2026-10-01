@@ -71,6 +71,12 @@ class SetPiecePresentation {
     // True when this peer's human controls the actual taker (#30): only then may the taker menu
     // open. On a thin client the selected player carries the remote owner id (set in #29).
     bool IsLocalTaker() const;
+    // Device of the local human who controls the taker (host: the taker's own controller; thin
+    // client: its local HID device), or null. Drives the taker-menu open/cancel/hint (#30).
+    IHIDevice *LocalKickerDevice() const;
+    // Any of the four kick buttons (pass / through / cross / shot) is held. On keyboard these are the
+    // W/A/S/D keys, so a keyboard taker menu is navigated with the arrows and closed with these.
+    static bool IsKickButtonPressed(IHIDevice *device);
     // Select edge with no action button held: the taker-menu open trigger (#30). Shared by the host
     // HumanController path and the thin-client NetMatchSession path.
     static bool IsTakerMenuSelect(IHIDevice *device);

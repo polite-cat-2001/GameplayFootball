@@ -128,13 +128,26 @@ bool SetPiecePresentation::IsLocalTaker() const {
   return IsSetPiece() && taker && IsLocalPlayer(taker);
 }
 
-bool SetPiecePresentation::IsTakerMenuSelect(IHIDevice *device) {
+IHIDevice *SetPiecePresentation::LocalKickerDevice() const {
+  if (match->IsRemotePresentation()) return localDevice;
+  if (!taker) return 0;
+  // Host: the taker's HumanGamer owns its input device (a remote taker's gamer holds a
+  // NetHIDDevice; IsLocalTaker() already filtered those out before this is used).
+  HumanGamer *gamer = taker->GetTeam()->GetHumanGamerControllingPlayer(taker);
+  return gamer ? gamer->GetHIDevice() : 0;
+}
+
+bool SetPiecePresentation::IsKickButtonPressed(IHIDevice *device) {
   if (!device) return false;
+  return device->GetButton(e_ButtonFunction_Shot) ||
+         device->GetButton(e_ButtonFunction_ShortPass) ||
+         device->GetButton(e_ButtonFunction_LongPass) ||
+         device->GetButton(e_ButtonFunction_HighPass);
+}
+
+bool SetPiecePresentation::IsTakerMenuSelect(IHIDevice *device) {
   // Not mid-action: the kick buttons take priority over opening the menu.
-  if (device->GetButton(e_ButtonFunction_Shot) ||
-      device->GetButton(e_ButtonFunction_ShortPass) ||
-      device->GetButton(e_ButtonFunction_LongPass) ||
-      device->GetButton(e_ButtonFunction_HighPass)) return false;
+  if (!device || IsKickButtonPressed(device)) return false;
   return device->GetButton(e_ButtonFunction_Select) &&
          !device->GetPreviousButtonState(e_ButtonFunction_Select);
 }

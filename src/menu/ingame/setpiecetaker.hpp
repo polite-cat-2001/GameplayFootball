@@ -30,7 +30,6 @@ class SetPieceTakerPage : public Gui2Page {
     virtual void Exit();
     virtual void Process();
     virtual void ProcessWindowingEvent(WindowingEvent *event);
-    virtual void ProcessKeyboardEvent(KeyboardEvent *event);
 
   protected:
     void MoveSelection(int delta);

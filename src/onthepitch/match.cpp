@@ -377,6 +377,13 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   root->AddView(messageCaption);
   messageCaptionRemoveTime_ms = actualTime_ms + 5000;
 
+  setPieceTakerHintCaption = new Gui2Caption(menuTask->GetWindowManager(), "game_setpiece_taker_hint", 0, 48, 20, 4, "");
+  setPieceTakerHintCaption->SetTransparency(0.3f);
+  root->AddView(setPieceTakerHintCaption);
+  setPieceTakerHintCaption->Hide();
+  setPieceTakerHintVisible = false;
+  setPieceTakerHintText = "";
+
   for (int i = 0; i < substitutionCaptionCount; i++) {
     substitutionCaptions[i] = new Gui2Caption(menuTask->GetWindowManager(), "game_substitution_" + int_to_str(i),
                                               2, 8 + i * 4.2f, 44, 3.8f, "");
@@ -488,6 +495,7 @@ void Match::Exit() {
   fullbodyNode.reset();
 
   messageCaption->Hide();
+  setPieceTakerHintCaption->Hide();
   for (int i = 0; i < substitutionCaptionCount; i++) substitutionCaptions[i]->Hide();
 
   // remove, don't delete, because main.cpp is owner
@@ -770,6 +778,32 @@ void Match::UpdateControllerSetup() {
       }
       if (device) teams[teamID]->AddHumanGamer(device, (e_PlayerColor)i); // todo: proper color
     }
+  }
+}
+
+void Match::UpdateSetPieceTakerHint() {
+  // Plain-text prompt while a local human takes a set piece and has not started the kick (#30).
+  bool visible = false;
+  std::string text;
+  if (!pause && setPiecePresentation->IsLocalTaker() && !setPieceTakerMenuOpen) {
+    IHIDevice *device = setPiecePresentation->LocalKickerDevice();
+    if (device && !SetPiecePresentation::IsKickButtonPressed(device)) {
+      visible = true;
+      text = (device->GetDeviceType() == e_HIDeviceType_Keyboard) ? "Tab: change taker"
+                                                                  : "Share: change taker";
+    }
+  }
+  if (visible == setPieceTakerHintVisible && (!visible || text == setPieceTakerHintText)) return;
+
+  setPieceTakerHintVisible = visible;
+  setPieceTakerHintText = text;
+  if (visible) {
+    setPieceTakerHintCaption->SetCaption(text);
+    float w = setPieceTakerHintCaption->GetTextWidthPercent();
+    setPieceTakerHintCaption->SetPosition(98 - w, 48);
+    setPieceTakerHintCaption->Show();
+  } else {
+    setPieceTakerHintCaption->Hide();
   }
 }
 
@@ -1969,6 +2003,8 @@ void Match::Put() {
     teams[0]->Hide2D();
     teams[1]->Hide2D();
   }
+
+  UpdateSetPieceTakerHint();
 
 }
 
