@@ -119,8 +119,9 @@ const float _default_SetPiece_CamGoalKickLookY = 1.4f;
 
 // Set-piece kick aiming and types (spec 2026-09-29 §6). Stick-X turns the world heading of the
 // kick around the ball (a full turn on a free kick, a forward sector on a corner/goal kick) and
-// also feeds the curl accumulator; stick-Y sets the launch height of a pass/cross, while a
-// free-kick shot derives both speed and elevation from the charge. Tune by playing.
+// also feeds the curl accumulator; stick-Y sets the launch height of a pass/cross (stick down
+// scoops the ball up, stick up drives it lower), while a free-kick shot derives both speed and
+// elevation from the charge. Tune by playing.
 const float _default_SetPiece_AimSpeed = 1.6f;               // heading turn rate (rad/s)
 const float _default_SetPiece_AimDeadzone = 0.15f;           // aim stick deadzone
 const float _default_SetPiece_FreeKickAimArc = pi;           // free kick: full turn (rad)
@@ -131,12 +132,11 @@ const float _default_SetPiece_FreeKickShotSpeedMin = 36.0f;  // free-kick shot l
 const float _default_SetPiece_FreeKickShotSpeedMax = 46.0f;  // free-kick shot launch speed at full charge (m/s)
 const float _default_SetPiece_FreeKickShotElevMin = 4.0f * pi / 180.0f;  // free-kick shot elevation at zero charge (rad)
 const float _default_SetPiece_FreeKickShotElevMax = 22.0f * pi / 180.0f; // free-kick shot elevation at full charge (rad)
-const float _default_SetPiece_PassHeightMax = 5.0f;          // stick-Y full up peak height on a pass/cross (m)
-const float _default_SetPiece_PassHeightNeutral = 0.3f;      // stick-Y centred peak height, fraction of max
-const float _default_SetPiece_PassHeightSpan = 0.7f;         // stick-Y full travel, fraction of max
+const float _default_SetPiece_PassHeightMax = 5.0f;          // stick-down full loft peak height on a pass/cross (m)
+const float _default_SetPiece_PassHeightMin = 1.0f;          // a cross never drops below the waist (m)
 const float _default_SetPiece_CurlScale = 1.0f;              // stick-X accumulation to curl gain
 const float _default_SetPiece_CurlMax = 1.0f;                // |curl| cap
-const float _default_SetPiece_CurlSpin = 60.0f;              // lateral spin (rad/s) a full curl puts on a pass/cross
+const float _default_SetPiece_CurlSpin = 220.0f;             // lateral spin (rad/s) a full curl puts on a pass/cross
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 

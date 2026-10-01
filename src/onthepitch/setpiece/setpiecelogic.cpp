@@ -110,11 +110,15 @@ Vector3 SetPieceAimHeading(const Vector3 &base, const SetPieceAim &aim) {
 }
 
 float SetPiecePassHeight(e_FunctionType functionType, float stickY) {
-  // A cross (high pass) is lofted even at the neutral stick; a short/long pass is driven along the
-  // ground until the player pushes the stick up.
-  float neutral = (functionType == e_FunctionType_HighPass) ? _default_SetPiece_PassHeightNeutral : 0.0f;
-  float fraction = neutral + clamp(stickY, -1.0f, 1.0f) * _default_SetPiece_PassHeightSpan;
-  return clamp(fraction, 0.0f, 1.0f) * _default_SetPiece_PassHeightMax;
+  // Stick down lifts the ball (scooping under it), stick up drives it lower.
+  float lift = -clamp(stickY, -1.0f, 1.0f); // -1 = stick up (low), +1 = stick down (high)
+  if (functionType == e_FunctionType_HighPass) {
+    // A cross is always airborne: even the lowest one stays around the waist.
+    return _default_SetPiece_PassHeightMin +
+           (lift + 1.0f) * 0.5f * (_default_SetPiece_PassHeightMax - _default_SetPiece_PassHeightMin);
+  }
+  // A short/long pass sits on the ground until the player pulls the stick down.
+  return clamp(lift, 0.0f, 1.0f) * _default_SetPiece_PassHeightMax;
 }
 
 SetPieceKickPlan PlanSetPieceKick(e_SetPiece type, const Vector3 &heading, const Vector3 &spot,

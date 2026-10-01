@@ -71,8 +71,9 @@ SetPieceAim RotateSetPieceAim(const SetPieceAim &aim, float stickX, float dt, e_
 // World-space unit heading for the current aim.
 Vector3 SetPieceAimHeading(const Vector3 &base, const SetPieceAim &aim);
 
-// Peak height (m) a set-piece pass/cross is lofted to from the vertical stick (-1..1). A high pass
-// (cross) starts lofted at the neutral stick, a short/long pass starts on the ground.
+// Peak height (m) a set-piece pass/cross is lofted to from the vertical stick (-1..1). Stick down
+// lifts the ball, stick up drives it lower; a cross is always airborne (never below the waist),
+// a short/long pass sits on the ground until the stick is pulled down.
 float SetPiecePassHeight(e_FunctionType functionType, float stickY);
 
 // The planned set-piece kick, ready to be copied into the command's TouchInfo.
