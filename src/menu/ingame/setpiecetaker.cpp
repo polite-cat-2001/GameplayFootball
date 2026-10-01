@@ -10,9 +10,32 @@
 
 using namespace blunted;
 
+// A held analog stick sends a direction event every tick; without a delay a short tilt would skip
+// several players at once (the d-pad does not, it only edges in). Menu UI, not game logic.
+static const unsigned long takerMenuMoveDelay_ms = 220;
+
 SetPieceTakerPage::SetPieceTakerPage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
   match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
   selectedIndex = 0;
+  lastMoveTime_ms = 0;
+  ownerDevice = 0;
+  savedActiveJoystick = GetMenuTask()->GetActiveJoystickID();
+  savedKeyboardActive = GetMenuTask()->IsKeyboardActive();
+
+  // Only the taker's own device may drive the menu (#30): a second local player's keyboard or
+  // gamepad must not scroll or confirm it. Restrict the GUI input sources for the overlay's
+  // lifetime (the match is stopped, so this cannot affect gameplay).
+  SetPiecePresentation *ownerPresentation = match ? match->GetSetPiecePresentation() : 0;
+  if (ownerPresentation) ownerDevice = ownerPresentation->LocalKickerDevice();
+  if (ownerDevice) {
+    if (ownerDevice->GetDeviceType() == e_HIDeviceType_Keyboard) {
+      GetMenuTask()->EnableKeyboard();
+      GetMenuTask()->SetActiveJoystickID(-1);
+    } else {
+      GetMenuTask()->DisableKeyboard();
+      GetMenuTask()->SetActiveJoystickID(ownerDevice->GetGamepadID());
+    }
+  }
 
   Gui2Caption *title = new Gui2Caption(windowManager, "caption_taker_title", 0, 7, 0, 3, "set-piece taker");
   float titleWidth = title->GetTextWidthPercent();
@@ -59,8 +82,10 @@ SetPieceTakerPage::~SetPieceTakerPage() {
 
 void SetPieceTakerPage::Exit() {
   // Clear the gameplay-freeze flag however the page is torn down (Escape, auto-close, or another
-  // overlay replacing it), not only through CloseMenu.
+  // overlay replacing it), not only through CloseMenu. Also restores the GUI input sources.
   if (match) match->SetSetPieceTakerMenuOpen(false);
+  GetMenuTask()->SetActiveJoystickID(savedActiveJoystick);
+  if (savedKeyboardActive) GetMenuTask()->EnableKeyboard(); else GetMenuTask()->DisableKeyboard();
   Gui2Page::Exit();
 }
 
@@ -99,6 +124,9 @@ void SetPieceTakerPage::ProcessWindowingEvent(WindowingEvent *event) {
 
 void SetPieceTakerPage::MoveSelection(int delta) {
   if (buttons.empty()) return;
+  unsigned long now = match ? match->GetActualTime_ms() : 0;
+  if (lastMoveTime_ms != 0 && now - lastMoveTime_ms < takerMenuMoveDelay_ms) return;
+  lastMoveTime_ms = now;
   int count = (int)buttons.size();
   selectedIndex = (selectedIndex + delta) % count;
   if (selectedIndex < 0) selectedIndex += count;

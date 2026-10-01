@@ -63,6 +63,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   pauseMenuRequested = false;
   setPieceTakerMenuRequested = false;
   setPieceTakerMenuOpen = false;
+  setPieceTakerMenuSwallow = false;
   pendingSetPieceTaker = 0;
   remoteSetPieceTakerSlot = -1;
   extendedReplayFired = false;
@@ -377,7 +378,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   root->AddView(messageCaption);
   messageCaptionRemoveTime_ms = actualTime_ms + 5000;
 
-  setPieceTakerHintCaption = new Gui2Caption(menuTask->GetWindowManager(), "game_setpiece_taker_hint", 0, 48, 20, 4, "");
+  setPieceTakerHintCaption = new Gui2Caption(menuTask->GetWindowManager(), "game_setpiece_taker_hint", 0, 50, 20, 2.6f, "");
   setPieceTakerHintCaption->SetTransparency(0.3f);
   root->AddView(setPieceTakerHintCaption);
   setPieceTakerHintCaption->Hide();
@@ -781,11 +782,22 @@ void Match::UpdateControllerSetup() {
   }
 }
 
+void Match::UpdateSetPieceTakerMenuRelease() {
+  if (!setPieceTakerMenuSwallow) return;
+  IHIDevice *device = setPiecePresentation->LocalKickerDevice();
+  if (!device) { setPieceTakerMenuSwallow = false; return; }
+  if (!SetPiecePresentation::IsKickButtonPressed(device) &&
+      !device->GetButton(e_ButtonFunction_Select) &&
+      !device->GetButton(e_ButtonFunction_Start)) {
+    setPieceTakerMenuSwallow = false;
+  }
+}
+
 void Match::UpdateSetPieceTakerHint() {
   // Plain-text prompt while a local human takes a set piece and has not started the kick (#30).
   bool visible = false;
   std::string text;
-  if (!pause && setPiecePresentation->IsLocalTaker() && !setPieceTakerMenuOpen) {
+  if (!pause && setPiecePresentation->IsLocalTaker() && !IsSetPieceTakerMenuInputBlocked()) {
     IHIDevice *device = setPiecePresentation->LocalKickerDevice();
     if (device && !SetPiecePresentation::IsKickButtonPressed(device)) {
       visible = true;
@@ -800,7 +812,7 @@ void Match::UpdateSetPieceTakerHint() {
   if (visible) {
     setPieceTakerHintCaption->SetCaption(text);
     float w = setPieceTakerHintCaption->GetTextWidthPercent();
-    setPieceTakerHintCaption->SetPosition(98 - w, 48);
+    setPieceTakerHintCaption->SetPosition(100 - w, 50); // pinned to the right edge, vertically centred
     setPieceTakerHintCaption->Show();
   } else {
     setPieceTakerHintCaption->Hide();
@@ -1381,6 +1393,10 @@ void Match::Process() {
 
 
     // HIJ IS EEN HONDELUUUL
+
+    // Release the taker-menu input latch once the closing button is up (#30), before any controller
+    // reads input this tick.
+    UpdateSetPieceTakerMenuRelease();
 
     // Set-piece taker change requested from the local menu (#30): apply it before the referee and
     // the presentation refresh so both read the new taker this tick.

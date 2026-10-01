@@ -346,10 +346,12 @@ void NetMatchSession::ProcessClient(Match *match) {
   // reticle from this device (see SetPiecePresentation::UpdateRemotePenaltyAim).
   SetPiecePresentation *presentation = match->GetSetPiecePresentation();
   presentation->SetLocalHIDDevice(localDevice);
+  // Release the taker-menu input latch once the closing button is up (#30).
+  match->UpdateSetPieceTakerMenuRelease();
 
   // Set-piece taker menu (#30): no HumanController ticks on a thin client, so detect the Select
   // press here, for the peer whose human controls the snapshot taker and without an action held.
-  if (localDevice && presentation->IsLocalTaker() && !match->IsSetPieceTakerMenuOpen() &&
+  if (localDevice && presentation->IsLocalTaker() && !match->IsSetPieceTakerMenuInputBlocked() &&
       SetPiecePresentation::IsTakerMenuSelect(localDevice)) {
     match->RequestSetPieceTakerMenu();
   }
@@ -357,9 +359,9 @@ void NetMatchSession::ProcessClient(Match *match) {
   if (localDevice) {
     NetInputFrame frame;
     frame.buttons = 0;
-    // While the taker menu is up the device drives the menu, not the pitch: send neutral input so
-    // the host's HumanController for this player does not act on the navigation keys.
-    const bool menuOpen = match->IsSetPieceTakerMenuOpen();
+    // While the taker menu is up (or its closing button is still held) the device drives the menu,
+    // not the pitch: send neutral input so the host's HumanController for this player does not act.
+    const bool menuOpen = match->IsSetPieceTakerMenuInputBlocked();
     if (!menuOpen) {
       for (int b = 0; b < e_ButtonFunction_Size; b++) {
         if (localDevice->GetButton((e_ButtonFunction)b)) frame.buttons |= (1u << b);

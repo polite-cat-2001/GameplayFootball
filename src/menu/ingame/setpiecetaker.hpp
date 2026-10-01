@@ -37,6 +37,10 @@ class SetPieceTakerPage : public Gui2Page {
     void CloseMenu();
 
     Match *match;
+    IHIDevice *ownerDevice; // the taker's own device: only it may navigate (#30)
+    int savedActiveJoystick;
+    bool savedKeyboardActive;
+    unsigned long lastMoveTime_ms; // debounce gamepad stick repeat
     std::vector<Gui2Button*> buttons;
     int selectedIndex;
 

@@ -76,6 +76,9 @@ class IHIDevice {
     // Peer that owns this input (0 = local host, sessionId for network clients).
     virtual unsigned int GetOwnerId() const { return 0; }
 
+    // Joystick slot this device drives (menu navigation), or -1 for a keyboard. Wrappers delegate.
+    virtual int GetGamepadID() const { return -1; }
+
   protected:
     e_HIDeviceType deviceType;
     std::string identifier;

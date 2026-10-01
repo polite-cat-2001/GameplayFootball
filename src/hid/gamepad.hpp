@@ -35,7 +35,7 @@ class HIDGamepad : public IHIDevice {
     signed int GetControllerMapping(e_ControllerButton controllerButton) { boost::mutex::scoped_lock blah(mutex); return controllerMapping[controllerButton]; }
     void SetControllerMapping(e_ControllerButton controllerButton, signed int id) { boost::mutex::scoped_lock blah(mutex); controllerMapping[controllerButton] = id; }
 
-    int GetGamepadID() { return gamepadID; }
+    virtual int GetGamepadID() const { return gamepadID; }
 
     SDL_JoystickID GetJoystickID() const { return joystickID; }
 

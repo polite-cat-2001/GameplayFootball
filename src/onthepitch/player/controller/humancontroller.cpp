@@ -367,9 +367,9 @@ void HumanController::Process() {
 
   PlayerController::Process();
 
-  // Set-piece taker menu (#30) is up: the taker's own device drives the menu, so freeze the
-  // gameplay side (no charge, no aim turn) until the overlay closes.
-  if (match->IsSetPieceTakerMenuOpen()) {
+  // Set-piece taker menu (#30) is up (or just closed and its button not yet released): the taker's
+  // own device drives the menu, so freeze the gameplay side (no charge, no aim turn).
+  if (match->IsSetPieceTakerMenuInputBlocked()) {
     actionMode = 0;
     gauge_ms = 0;
     actionBufferTime_ms = 0;
@@ -412,7 +412,7 @@ void HumanController::Process() {
   // Set-piece taker menu (#30): the local human actually taking the set piece opens it with Select
   // (gamepad Share / keyboard Tab). Only this peer's own device: a remote client's taker is a
   // NetHIDDevice here and opens its own menu. Not mid-action (charge/queued kick).
-  if (!match->IsSetPieceTakerMenuOpen() &&
+  if (!match->IsSetPieceTakerMenuInputBlocked() &&
       hid->GetOwnerId() == (unsigned int)match->GetLocalPeerId() &&
       match->IsInSetPiece() && team->GetController()->GetPieceTaker() == player &&
       actionMode != 2 && SetPiecePresentation::IsTakerMenuSelect(hid)) {

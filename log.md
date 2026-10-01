@@ -2760,3 +2760,24 @@ set-piece-камеру `_default_SetPiece_CamHold_ms` (1.5 с, смотрит п
   даёт `SetPiecePresentation::LocalKickerDevice()` (`Team::GetHumanGamerControllingPlayer`).
 - Presentation-only: хеш `5a477078` не сдвинулся; `nettest` 60, `lanmatchtest` 42. Обновлены
   [[матч]] и [[открытые-вопросы]].
+
+## [2026-10-01] fix | #30: правки меню бьющего по полевому отчёту
+
+Четыре замечания владельца после проверки в игре:
+
+1. Подсказка прижата к правому краю (`SetPosition(100 - w, 50)`) и текст мельче (высота caption
+   ~2.6 %; размер глифов в `Gui2Caption` масштабируется по высоте вью).
+2. Аналоговый стик пролистывал пачку игроков за короткий наклон: дебаунс `MoveSelection` 220 мс
+   (`lastMoveTime_ms`); крестовина и раньше давала один эдж.
+3. Второй локальный игрок со своего устройства мог листать/подтверждать чужое меню: пока
+   `SetPieceTakerPage` открыт, GUI ограничен устройством бьющего — клавиатура
+   `Enable/DisableKeyboard`, `SetActiveJoystickID` (новый `IHIDevice::GetGamepadID`,
+   делегируется `DelayedHIDDevice`), с восстановлением в `Exit()`.
+4. **Критичное:** A (подтвердить) и B (назад) — те же пас/навес, поэтому после закрытия меню
+   удержанная кнопка тут же разыгрывала мяч. Добавлен латч ввода
+   `Match::IsSetPieceTakerMenuInputBlocked()`/`setPieceTakerMenuSwallow`: `HumanController` (и
+   нейтральный ввод клиента) заморожены, пока устройство бьющего не отпустит кнопку
+   (`UpdateSetPieceTakerMenuRelease` зовётся в `Match::Process`/`ProcessClient`); сбрасывается в
+   `StopSetPiece`.
+
+Хеш `5a477078` не сдвинулся; `nettest` 60, `lanmatchtest` 42. Вики: [[матч]].

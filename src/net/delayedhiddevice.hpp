@@ -36,6 +36,7 @@ class DelayedHIDDevice : public IHIDevice {
     virtual Vector3 GetDirection();
 
     virtual unsigned int GetOwnerId() const { return source->GetOwnerId(); }
+    virtual int GetGamepadID() const { return source->GetGamepadID(); }
 
   private:
     struct Sample {

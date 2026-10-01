@@ -207,9 +207,17 @@ class Match {
     // locally by the peer whose human controls the taker (host via HumanController, thin client via
     // the snapshot-driven presentation).
     bool GetSetPieceTakerMenuRequested() const { return setPieceTakerMenuRequested; }
-    void RequestSetPieceTakerMenu() { if (!setPieceTakerMenuOpen) setPieceTakerMenuRequested = true; }
+    void RequestSetPieceTakerMenu() { if (!IsSetPieceTakerMenuInputBlocked()) setPieceTakerMenuRequested = true; }
     bool IsSetPieceTakerMenuOpen() const { return setPieceTakerMenuOpen; }
-    void SetSetPieceTakerMenuOpen(bool open) { setPieceTakerMenuOpen = open; if (!open) setPieceTakerMenuRequested = false; }
+    // Gameplay input for the taker is frozen while the overlay is up and until the button that
+    // closed it (confirm / back / kick) is released, so that same press cannot leak into a kick.
+    bool IsSetPieceTakerMenuInputBlocked() const { return setPieceTakerMenuOpen || setPieceTakerMenuSwallow; }
+    void SetSetPieceTakerMenuOpen(bool open) {
+      setPieceTakerMenuOpen = open;
+      if (!open) { setPieceTakerMenuRequested = false; setPieceTakerMenuSwallow = true; }
+    }
+    // Clears the post-close input latch once the local taker's device has released its buttons.
+    void UpdateSetPieceTakerMenuRelease();
 
     // Actual set-piece taker change (#30), host-authoritative. The local menu queues it and Process
     // applies it, so the switch lands inside the simulation phase; a thin client instead ships the
@@ -239,6 +247,7 @@ class Match {
       // The taker menu is only valid for the live set piece (#30).
       setPieceTakerMenuRequested = false;
       setPieceTakerMenuOpen = false;
+      setPieceTakerMenuSwallow = false;
     }
     bool IsInSetPiece() const { return setPieceType != e_SetPiece_None; }
     e_SetPiece GetSetPieceType() const { return setPieceType; }
@@ -544,6 +553,7 @@ class Match {
     // set-piece taker menu (#30)
     bool setPieceTakerMenuRequested;
     bool setPieceTakerMenuOpen;
+    bool setPieceTakerMenuSwallow; // input latch: ignore the button that closed the menu until released
     Player *pendingSetPieceTaker;
     int remoteSetPieceTakerSlot; // thin client: chosen taker squad slot, sent via the input channel
 
