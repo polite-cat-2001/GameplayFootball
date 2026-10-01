@@ -583,6 +583,10 @@ void Match::SetSetPieceTaker(Player *newTaker) {
   if (!newTaker->IsActive() || newTaker->GetTeamID() != oldTaker->GetTeamID()) return;
 
   Team *team = teams[newTaker->GetTeamID()];
+  // Playing as the keeper is #31 (the menu filters it too); a misbehaving client must not hand the
+  // human the goalie either. A goal kick / throw-in already has the keeper as taker, so it never
+  // reaches here as a change.
+  if (newTaker == team->GetGoalie()) return;
   referee->SetTaker(newTaker);
   // Recompute the taking team's set-piece layout with the chosen taker: the new taker walks to the
   // ball, the old one returns to its slot (otherwise every change left another body behind the ball).
