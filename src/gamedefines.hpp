@@ -122,7 +122,7 @@ const float _default_SetPiece_CamGoalKickLookY = 1.4f;
 // also feeds the curl accumulator; stick-Y sets the launch height of a pass/cross (stick down
 // scoops the ball up, stick up drives it lower), while a free-kick shot derives both speed and
 // elevation from the charge. Tune by playing.
-const float _default_SetPiece_AimSpeed = 1.6f;               // heading turn rate (rad/s)
+const float _default_SetPiece_AimSpeed = 1.0f;               // heading turn rate (rad/s)
 const float _default_SetPiece_AimDeadzone = 0.15f;           // aim stick deadzone
 const float _default_SetPiece_FreeKickAimArc = pi;           // free kick: full turn (rad)
 const float _default_SetPiece_CornerAimArc = 1.4f;           // corner: forward sector half-angle (CORNER_AIM_ARC, rad)
