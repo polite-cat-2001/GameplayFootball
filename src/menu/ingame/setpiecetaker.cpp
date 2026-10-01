@@ -52,9 +52,6 @@ SetPieceTakerPage::SetPieceTakerPage(Gui2WindowManager *windowManager, const Gui
     float y = 15.0f;
     for (unsigned int i = 0; i < activePlayers.size(); i++) {
       Player *player = activePlayers.at(i);
-      // Human keeper control is a separate effort (#31) and the unfinished path crashes: only keep
-      // the keeper when it already is the taker (goal kick / throw-in), where it is a no-op.
-      if (player->GetFormationEntry().role == e_PlayerRole_GK && player != currentTaker) continue;
       std::string caption = player->GetPlayerData()->GetLastName();
       if (player->GetFormationEntry().role == e_PlayerRole_GK) caption += " (GK)";
       if (player == currentTaker) caption += " *";
