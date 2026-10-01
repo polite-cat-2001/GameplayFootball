@@ -107,6 +107,10 @@ class SetPiecePresentation {
     // free kick, corner and goal kick (throw-in and kickoff keep the normal camera).
     static bool HasSetPieceCamera(e_SetPiece type);
     void UpdateRemotePenaltyAim();
+    void UpdateRemoteSetPieceAim();
+    // One set piece's kick aim: a new type (or leaving the set piece) restarts it. Shared by the
+    // host tick (Process) and the thin client (SetRemoteIdentity).
+    void RefreshSetPieceAimIdentity();
     Player *CameraTaker() const;
     bool TeamHasLocalHuman(Team *team) const;
     bool LocalRoleOwnsCamera(e_SetPiece type, Player *taker) const;

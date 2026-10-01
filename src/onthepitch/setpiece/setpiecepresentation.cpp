@@ -7,6 +7,7 @@
 #include "../../main.hpp" // SetYellowDebugPilon
 #include "../../hid/ihidevice.hpp"
 
+#include <cmath>
 #include <vector>
 
 using namespace blunted;
@@ -52,12 +53,7 @@ void SetPiecePresentation::Process() {
   if (!IsPenalty()) EndPenaltyAim();
 
   // The kick aim lives for one set piece: a new type (or leaving the set piece) starts it over.
-  if (!setpiecelogic::SetPieceAimingUsed(type)) {
-    if (setPieceAimType != e_SetPiece_None) ResetSetPieceAim();
-  } else if (type != setPieceAimType) {
-    ResetSetPieceAim();
-    setPieceAimType = type;
-  }
+  RefreshSetPieceAimIdentity();
 }
 
 void SetPiecePresentation::SetRemoteIdentity(e_SetPiece newType, int takerTeam, int takerSlot) {
@@ -69,6 +65,17 @@ void SetPiecePresentation::SetRemoteIdentity(e_SetPiece newType, int takerTeam, 
   }
   // Role-based cleanup is host-only (it needs the live ownership); the client only knows the type.
   if (!IsPenalty()) EndPenaltyAim();
+  // The client gets a fresh kick aim per set piece too (Process never runs on a thin client).
+  RefreshSetPieceAimIdentity();
+}
+
+void SetPiecePresentation::RefreshSetPieceAimIdentity() {
+  if (!setpiecelogic::SetPieceAimingUsed(type)) {
+    if (setPieceAimType != e_SetPiece_None) ResetSetPieceAim();
+  } else if (type != setPieceAimType) {
+    ResetSetPieceAim();
+    setPieceAimType = type;
+  }
 }
 
 e_SetPiecePhase SetPiecePresentation::GetPhase() const {
@@ -343,8 +350,25 @@ void SetPiecePresentation::UpdateRemotePenaltyAim() {
   UpdatePenaltyAim(stick.coords[0], stick.coords[1], hasInput, shotPressed, 0.0f, match->GetActualTime_ms());
 }
 
+void SetPiecePresentation::UpdateRemoteSetPieceAim() {
+  // Thin client: HumanController never ticks, so drive the kick aim here from the local device,
+  // like the penalty reticle. Only the taking side aims.
+  if (!match->IsRemotePresentation() || !localDevice) return;
+  if (!setpiecelogic::SetPieceAimingUsed(type) || !taker) return;
+  if (!TeamHasLocalHuman(taker->GetTeam())) return;
+
+  float rawX = localDevice->GetButtonValue(e_ButtonFunction_Right) - localDevice->GetButtonValue(e_ButtonFunction_Left);
+  bool charging = localDevice->GetButton(e_ButtonFunction_ShortPass) ||
+                  localDevice->GetButton(e_ButtonFunction_LongPass) ||
+                  localDevice->GetButton(e_ButtonFunction_HighPass) ||
+                  localDevice->GetButton(e_ButtonFunction_Shot);
+  bool hasInput = fabs(rawX) >= _default_SetPiece_AimDeadzone;
+  UpdateSetPieceAim(rawX, hasInput, charging, match->GetActualTime_ms());
+}
+
 void SetPiecePresentation::UpdateCamera() {
   UpdateRemotePenaltyAim();
+  UpdateRemoteSetPieceAim();
 
   // Scorer cam wins unconditionally (spec §4); kickoff, which shares the scorer moment, has no
   // set-piece camera anyway.
