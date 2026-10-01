@@ -46,9 +46,9 @@ class TeamAIController {
     void CalculateManMarking();
     void ApplyOffsideTrap(Vector3 &position) const;
     float GetOffsideTrapX() const { return offsideTrapX; }
-    void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1);
-    // Taker menu (#30): swap the live set-piece taker and walk the new one to the ball spot.
-    void SetPieceTaker(Player *newTaker);
+    // `forcedTaker` (taker menu #30) overrides the role/closest selection so the layout can be
+    // recomputed around a chosen taker: the new one goes to the ball, the old one back to its slot.
+    void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1, Player *forcedTaker = 0);
     Player *GetPieceTaker() { return taker; }
     e_SetPiece GetSetPieceType() { return setPieceType; }
     void ApplyAttackingRun(Player *manualPlayer = 0);

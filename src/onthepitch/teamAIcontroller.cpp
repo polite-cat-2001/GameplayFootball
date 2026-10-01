@@ -669,7 +669,7 @@ void TeamAIController::ApplyOffsideTrap(Vector3 &position) const {
 
 }
 
-void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
+void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID, Player *forcedTaker) {
   setPieceType = setPiece;
 
   if (takerTeamID == -1) assert(setPieceType == e_SetPiece_None);
@@ -895,6 +895,10 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
     // Designated taker (set in the game plan) if still on the pitch; otherwise
     // GetRolePlayer falls back to the best-suited active player. Corner side is
     // from the taker's view of the goal: left corner == negative y on the pitch.
+    // A forced taker (taker menu #30) skips this selection.
+    if (forcedTaker) {
+      taker = forcedTaker;
+    } else {
     taker = 0;
     if (setPiece == e_SetPiece_Penalty) {
       taker = team->GetRolePlayer(e_TeamRole_PenaltyTaker);
@@ -915,6 +919,7 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID) {
       taker = team->GetRolePlayer(left ? e_TeamRole_CornerTakerLeft : e_TeamRole_CornerTakerRight);
     }
     if (!taker) taker = AI_GetClosestPlayer(team, match->GetBall()->Predict(0).Get2D(), false);
+    }
 
     PositionSetPieceTaker();
 
@@ -947,12 +952,6 @@ void TeamAIController::PositionSetPieceTaker() {
   if (setPieceType == e_SetPiece_Penalty) {
     taker->ResetPosition(ballPos + Vector3(team->GetSide(), 0, 0) * 3.0f, ballPos);
   }
-}
-
-void TeamAIController::SetPieceTaker(Player *newTaker) {
-  if (!newTaker) return;
-  taker = newTaker;
-  PositionSetPieceTaker();
 }
 
 void TeamAIController::ApplyAttackingRun(Player *manualPlayer) {

@@ -584,8 +584,9 @@ void Match::SetSetPieceTaker(Player *newTaker) {
 
   Team *team = teams[newTaker->GetTeamID()];
   referee->SetTaker(newTaker);
-  // SetPieceTaker walks the new taker to the spot (and hands a throw-in retain over).
-  team->GetController()->SetPieceTaker(newTaker);
+  // Recompute the taking team's set-piece layout with the chosen taker: the new taker walks to the
+  // ball, the old one returns to its slot (otherwise every change left another body behind the ball).
+  team->GetController()->PrepareSetPiece(team->GetController()->GetSetPieceType(), newTaker->GetTeamID(), newTaker);
   team->SelectPlayerForTakerChange(oldTaker, newTaker);
   designatedPossessionPlayer = newTaker;
 }
