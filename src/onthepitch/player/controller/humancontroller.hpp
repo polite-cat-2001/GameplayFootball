@@ -54,6 +54,13 @@ class HumanController : public PlayerController {
     void _UpdateSetPieceAim();
     void _SetPieceKickCommand(PlayerCommandQueue &commandQueue);
 
+    // keeper distribution (spec 2026-09-29 §8, #32): true while this player is the keeper holding
+    // the ball (Hands). The hand throw is a throw-clip pass command; the foot actions launch the
+    // ball directly through Match. The charge is clamped to keeperDistChargeMax_ms.
+    bool _IsKeeperHands();
+    void _KeeperDistributionCommand(PlayerCommandQueue &commandQueue);
+    float _KeeperChargeRatio() const;
+
     IHIDevice *hid;
 
     // set when a contextual button (example: pass/defend button) is pressed

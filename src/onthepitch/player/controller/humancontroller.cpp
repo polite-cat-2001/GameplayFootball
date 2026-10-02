@@ -4,7 +4,11 @@
 
 #include "humancontroller.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include "../../AIsupport/AIfunctions.hpp"
+#include "../../keeper/keeperlogic.hpp"
 #include "../../setpiece/setpiecelogic.hpp"
 #include "../../setpiece/setpiecepresentation.hpp"
 
@@ -104,6 +108,17 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
       // shots charge over KICK_CHARGE_MAX_TIME; other actions keep the 1 s gauge
       float gaugeFactor = GetChargeRatio();
+
+      // Keeper distribution (spec §8, #32): the hand throw (ShortPass) plays the existing throw
+      // clip; the directed clear (HighPass) launches the ball directly. Both commit on release.
+      if (_IsKeeperHands() &&
+          (actionButton == e_ButtonFunction_ShortPass || actionButton == e_ButtonFunction_HighPass)) {
+        _KeeperDistributionCommand(commandQueue);
+        actionMode = 0;
+        gauge_ms = 0;
+        actionBufferTime_ms = 0;
+        return;
+      }
 
       // action button released!
 
@@ -475,6 +490,28 @@ void HumanController::Process() {
         actionButton = e_ButtonFunction_KeeperRush;
       }
 
+    } else if (_IsKeeperHands()) {
+
+      // Keeper distribution (spec §8, #32): the hand throw and the directed clear charge like
+      // normal passes; the centre clear (Shot) and "to feet" (LongPass) launch immediately.
+      if (hid->GetButton(e_ButtonFunction_ShortPass) && !hid->GetPreviousButtonState(e_ButtonFunction_ShortPass)) {
+        actionMode = 2;
+        actionButton = e_ButtonFunction_ShortPass;
+      }
+
+      if (hid->GetButton(e_ButtonFunction_HighPass) && !hid->GetPreviousButtonState(e_ButtonFunction_HighPass)) {
+        actionMode = 2;
+        actionButton = e_ButtonFunction_HighPass;
+      }
+
+      if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot)) {
+        match->KeeperClearCenter(team->GetID());
+      }
+
+      if (hid->GetButton(e_ButtonFunction_LongPass) && !hid->GetPreviousButtonState(e_ButtonFunction_LongPass)) {
+        match->KeeperDropToFeet(team->GetID());
+      }
+
     } else {
 
       bool allowShortPass = true;
@@ -666,6 +703,91 @@ void HumanController::_SetPieceKickCommand(PlayerCommandQueue &commandQueue) {
   commandQueue.push_back(command);
 }
 
+bool HumanController::_IsKeeperHands() {
+  return CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK &&
+         match->GetKeeperState(team->GetID()) == e_KeeperState_Hands &&
+         match->GetBallRetainer() == CastPlayer();
+}
+
+float HumanController::_KeeperChargeRatio() const {
+  return clamp((float)gauge_ms / (float)keeperDistChargeMax_ms, 0.0f, 1.0f);
+}
+
+void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueue) {
+  float chargeRatio = _KeeperChargeRatio();
+
+  // Outfield teammates in front of the keeper, scored by direction x distance band (spec §8.8).
+  std::vector<Vector3> candidates;
+  std::vector<Player*> candidatePlayers;
+  std::vector<Player*> players;
+  team->GetActivePlayers(players);
+  for (unsigned int i = 0; i < players.size(); i++) {
+    Player *mate = players.at(i);
+    if (mate == CastPlayer() || mate->GetFormationEntry().role == e_PlayerRole_GK) continue;
+    candidates.push_back(mate->GetPosition());
+    candidatePlayers.push_back(mate);
+  }
+
+  Vector3 aim = inputDirection.Get2D().GetNormalized(CastPlayer()->GetDirectionVec().Get2D());
+  int idx = keeperlogic::SelectDistributionTarget(candidates, CastPlayer()->GetPosition(), aim,
+                                                  keeperHandRollDist, keeperHandThrowDist, chargeRatio);
+  Player *target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
+
+  if (actionButton == e_ButtonFunction_HighPass) {
+    // Directed foot clear (spec §8.4, #32): stick direction, charge = distance, hand off to the
+    // aimed addressee when there is one (spec §8.7).
+    match->KeeperClearDirected(team->GetID(), aim, chargeRatio, target);
+    return;
+  }
+
+  // Hand throw (ShortPass): tap = low roll to the nearest, hold = overhand throw to the furthest.
+  // Uses the existing throw clip.
+  bool isThrow = gauge_ms >= keeperHandThrowCharge_ms;
+
+  PlayerCommand command;
+  command.desiredFunctionType = e_FunctionType_ShortPass;
+  command.useDesiredMovement = false;
+  command.useDesiredLookAt = false;
+  command.touchInfo.targetPlayer = target;
+  command.touchInfo.forcedTargetPlayer = target;
+  command.touchInfo.autoDirectionBias = 0.0f;
+  command.touchInfo.autoPowerBias = 0.0f;
+
+  float band = isThrow ? keeperHandThrowDist : keeperHandRollDist;
+  Vector3 direction = aim;
+  float distance = clamp(0.3f + chargeRatio * 0.7f, 0.2f, 1.0f) * band;
+  if (target) {
+    Vector3 toTarget = (target->GetPosition() - CastPlayer()->GetPosition()).Get2D();
+    distance = toTarget.GetLength();
+    direction = toTarget.GetNormalized(aim);
+  }
+  command.touchInfo.inputDirection = direction;
+  command.touchInfo.desiredDirection = direction;
+
+  if (isThrow) {
+    // Overhand: ballistic arc peaking at keeperHandThrowPeak; horizontal speed lands the ball on
+    // the target within the flight time (the pass touch scales it as |v| = 36 * (power + 0.3)).
+    float vz = std::sqrt(2.0f * _default_Shot_Gravity * keeperHandThrowPeak);
+    float flightTime = 2.0f * vz / _default_Shot_Gravity;
+    float horizontalSpeed = distance / std::max(flightTime, 0.1f);
+    float power = clamp(horizontalSpeed / 36.0f - 0.3f, 0.05f, 1.0f);
+    command.touchInfo.inputPower = power;
+    command.touchInfo.desiredPower = power;
+    command.touchInfo.useAimHeight = true;
+    command.touchInfo.aimHeight = keeperHandThrowPeak;
+  } else {
+    // Low roll: the ground pass auto-assist (AI_GetPass on the forced target) sets the pace.
+    float power = clamp(distance / keeperHandRollDist, 0.1f, 1.0f);
+    command.touchInfo.inputPower = power;
+    command.touchInfo.desiredPower = power;
+  }
+
+  commandQueue.push_back(command);
+
+  // Hand off control to the addressee immediately (spec §8.7, #32).
+  if (target) team->SelectPlayer(target);
+}
+
 float HumanController::GetChargeRatio() const {
   if (actionMode != 2) return 0.0f;
   int baseTime_ms = 60; // substract a little because we can't really press a button shorter than this
@@ -695,6 +817,9 @@ void HumanController::_GetHidInput(Vector3 &rawInputDirection, float &rawInputVe
     assert(rawInputDirection.GetLength() > 0.001f);
     rawInputDirection.Normalize(); // hid should do this, but still
   }
+
+  // Holding the ball, the keeper runs at a fixed share of the top speed (spec §8.4, #32).
+  if (_IsKeeperHands()) rawInputVelocityFloat = std::min(rawInputVelocityFloat, keeperHandsVelocityFloat * sprintVelocity);
 
   if (GetLastSwitchBias() > 0.0f) {
     float switchInfluence = 0.5f;

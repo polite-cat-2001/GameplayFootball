@@ -286,6 +286,14 @@ class Match {
       return state == e_KeeperState_Hands || state == e_KeeperState_Outfield;
     }
 
+    // Keeper distribution (spec 2026-09-29 §8, #32). Host-side: release the retained ball and hand
+    // control off. The hand throw itself is a normal ShortPass command from the controller (so the
+    // existing throw clip plays); these cover the foot actions and the 6-second forced clearance.
+    void KeeperClearCenter(int teamID);
+    void KeeperClearDirected(int teamID, const Vector3 &aimDirection, float chargeRatio,
+                             Player *addressee = 0);
+    void KeeperDropToFeet(int teamID);
+
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
     unsigned long GetIterations() const { return iterations.GetData(); }
@@ -383,6 +391,11 @@ class Match {
     void CalculateBestPossessionTeamID();
     // Advance the per-team keeper state machine (open play only); called once per Process tick.
     void UpdateKeeperState();
+    // Launch the retained ball with `velocity`, drop the retain and hand control to `addressee`;
+    // when there is none, to the teammate nearest the predicted landing point (spec §8.6-8.7, #32).
+    void KeeperReleaseBall(int teamID, const Vector3 &velocity, Player *addressee = 0);
+    // Nearest active outfield teammate (keeper excluded) to a position; null when there is none.
+    Player *GetNearestOutfieldPlayer(int teamID, const Vector3 &position);
     // Collapse queued substitution chains (X->Z + Z->W == X->W, X<->Z cancels).
     void NormalizePendingSubstitutions();
     void CheckHumanoidCollisions();
@@ -471,6 +484,8 @@ class Match {
     Player *designatedPossessionPlayer;
     Player *ballRetainer;
     e_KeeperState keeperStates[2];
+    // Time the keeper caught the ball (start of the Hands state) for the 6-second rule.
+    unsigned long keeperHandsStart_ms[2];
 
     std::vector<Substitution> pendingSubstitutions;
     std::vector<SubstitutionNotice> substitutionNotices;

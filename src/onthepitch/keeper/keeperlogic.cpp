@@ -37,10 +37,11 @@ Vector3 PredictLandingPoint(const Vector3 &ballPos, const Vector3 &ballVelocity,
 }
 
 int SelectDistributionTarget(const std::vector<Vector3> &candidates, const Vector3 &origin,
-                             const Vector3 &aimDirection, float minDist, float maxDist) {
+                             const Vector3 &aimDirection, float nearDist, float farDist,
+                             float charge) {
   const Vector3 aim = aimDirection.Get2D().GetNormalized(Vector3(0, -1, 0));
-  const float midDist = (minDist + maxDist) * 0.5f;
-  const float halfBand = std::max((maxDist - minDist) * 0.5f, 0.001f);
+  const float wantDist = nearDist + (farDist - nearDist) * clamp(charge, 0.0f, 1.0f);
+  const float halfBand = std::max((farDist - nearDist) * 0.5f, 0.01f);
 
   int best = -1;
   float bestScore = -1.0f;
@@ -48,12 +49,12 @@ int SelectDistributionTarget(const std::vector<Vector3> &candidates, const Vecto
     Vector3 to = candidates.at(i) - origin;
     to.coords[2] = 0.0f;
     const float dist = to.GetLength();
-    if (dist < minDist || dist > maxDist) continue;
+    if (dist < std::max(wantDist - halfBand, 0.0f) || dist > wantDist + halfBand) continue;
 
     const float directionFit = to.GetNormalized(aim).GetDotProduct(aim); // 1 == straight ahead
     if (directionFit <= 0.0f) continue; // behind the keeper: never a distribution target
-    const float distanceFit = 1.0f - std::fabs(dist - midDist) / halfBand;
-    const float score = directionFit * distanceFit;
+    const float distanceFit = 1.0f - std::fabs(dist - wantDist) / halfBand;
+    const float score = directionFit * distanceFit; // spec §8.8: direction x distance band
 
     if (score > bestScore) {
       bestScore = score;

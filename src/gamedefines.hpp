@@ -147,6 +147,23 @@ const float keeperBoxHalfWidth = 20.05f;
 // Tolerance (m) for box-boundary tests and for skipping a negligible clamp correction.
 const float keeperBoxEpsilon = 0.01f;
 
+// Keeper distribution (spec 2026-09-29 §8, #32): the four Hands actions, the 6-second rule and
+// the hand throw / foot clear ballistics. The hand roll and throw target bands, the tap/hold
+// threshold and the charge window live here; the centre clear speed/lift define the forced kick.
+const int keeperSixSecond_ms = 6000;           // catch -> forced centre clear timeout
+const int keeperDistChargeMax_ms = 700;        // full charge of a keeper distribution
+const int keeperHandThrowCharge_ms = 200;      // hold >= this = overhand throw, below = low roll
+const float keeperHandRollDist = 12.0f;        // low roll target distance band (m)
+const float keeperHandThrowDist = 30.0f;       // overhand throw target distance band (m)
+const float keeperHandThrowPeak = 2.5f;        // overhand throw arc peak height (m)
+const float keeperHandsVelocityFloat = 0.85f;  // movement speed while holding, as a share of sprint
+const float keeperClearSpeed = 26.0f;          // forced centre clear horizontal speed (m/s)
+const float keeperClearLift = 10.0f;           // forced centre clear vertical launch (m/s)
+const float keeperClearSpeedMinFactor = 0.6f;  // directed clear speed = min..max * keeperClearSpeed
+const float keeperClearSpeedMaxFactor = 1.4f;
+const float keeperDropFeetOffset = 0.5f;       // "to feet" ball offset in front of the keeper (m)
+const float keeperDropFeetHeight = 0.11f;      // "to feet" ball height, resting on the turf (m)
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;

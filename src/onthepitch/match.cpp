@@ -145,6 +145,8 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   keeperStates[0] = e_KeeperState_None;
   keeperStates[1] = e_KeeperState_None;
+  keeperHandsStart_ms[0] = 0;
+  keeperHandsStart_ms[1] = 0;
 
 
   // teams
@@ -1051,6 +1053,8 @@ void Match::ResetSituation(const Vector3 &focusPos) {
   SetBallRetainer(0);
   keeperStates[0] = e_KeeperState_None;
   keeperStates[1] = e_KeeperState_None;
+  keeperHandsStart_ms[0] = 0;
+  keeperHandsStart_ms[1] = 0;
   SetGoalScored(false);
   for (unsigned int i = 0; i < mentalImages.size(); i++) {
     delete mentalImages[i];
@@ -1318,8 +1322,9 @@ void Match::ProcessState(EnvState *state) {
 
   state->process(autoUpdateIngameCamera);
 
-  // Keeper layer state (spec §8, #31): part of the deterministic simulation.
+  // Keeper layer state (spec §8, #31/#32): part of the deterministic simulation.
   for (int t = 0; t < 2; t++) state->process(keeperStates[t]);
+  for (int t = 0; t < 2; t++) state->process(keeperHandsStart_ms[t]);
 }
 
 void Match::Process() {
@@ -2214,18 +2219,32 @@ void Match::UpdateKeeperState() {
         // Caught it (Hands), or has the ball at his feet (Outfield). The backpass that put the ball
         // at his feet is what hands the keeper to the human in the first place: the pass touch calls
         // Team::SelectPlayer(receiver) (humanoid.cpp), which has no keeper exclusion.
-        if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands;
-        else if (goalie->HasPossession()) keeperStates[t] = e_KeeperState_Outfield;
+        if (GetBallRetainer() == goalie) {
+          keeperStates[t] = e_KeeperState_Hands;
+          keeperHandsStart_ms[t] = actualTime_ms;
+        } else if (goalie->HasPossession()) {
+          keeperStates[t] = e_KeeperState_Outfield;
+        }
         break;
 
       case e_KeeperState_Hands:
-        // Lost the ball (or released it): field mode / return to goal, control flows away normally.
-        if (GetBallRetainer() != goalie) keeperStates[t] = e_KeeperState_Returning;
+        if (GetBallRetainer() != goalie) {
+          // Lost the ball (or released it): field mode / return to goal, control flows away.
+          keeperStates[t] = e_KeeperState_Returning;
+        } else if (actualTime_ms - keeperHandsStart_ms[t] >= (unsigned long)keeperSixSecond_ms) {
+          // Six-second rule: the host forces a clearance to the centre and hands control to the
+          // teammate nearest the landing point (spec §8.6, #32).
+          KeeperClearCenter(t);
+        }
         break;
 
       case e_KeeperState_Outfield:
-        if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands; // collected it
-        else if (!goalie->HasPossession()) keeperStates[t] = e_KeeperState_Returning;
+        if (GetBallRetainer() == goalie) { // collected it
+          keeperStates[t] = e_KeeperState_Hands;
+          keeperHandsStart_ms[t] = actualTime_ms;
+        } else if (!goalie->HasPossession()) {
+          keeperStates[t] = e_KeeperState_Returning;
+        }
         break;
 
       case e_KeeperState_Returning:
@@ -2239,6 +2258,74 @@ void Match::UpdateKeeperState() {
         break;
     }
   }
+}
+
+Player *Match::GetNearestOutfieldPlayer(int teamID, const Vector3 &position) {
+  Player *best = 0;
+  float bestDistance = 1e9f;
+  std::vector<Player*> players;
+  teams[teamID]->GetActivePlayers(players);
+  for (unsigned int i = 0; i < players.size(); i++) {
+    if (players.at(i)->GetFormationEntry().role == e_PlayerRole_GK) continue;
+    float distance = (players.at(i)->GetPosition().Get2D() - position.Get2D()).GetLength();
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = players.at(i);
+    }
+  }
+  return best;
+}
+
+void Match::KeeperReleaseBall(int teamID, const Vector3 &velocity, Player *addressee) {
+  Player *goalie = teams[teamID]->GetGoalie();
+  if (!goalie) return;
+
+  ball->Touch(velocity);
+  SetBallRetainer(0);
+  keeperStates[teamID] = e_KeeperState_Returning;
+
+  // Hand control to the addressee (manual distribution, spec §8.7); otherwise to the teammate
+  // nearest the predicted landing point (the 6-second auto-clear, spec §8.6).
+  if (addressee) {
+    teams[teamID]->SelectPlayer(addressee);
+  } else {
+    Vector3 landing = keeperlogic::PredictLandingPoint(ball->Predict(0), velocity, _default_Shot_Gravity);
+    Player *nearest = GetNearestOutfieldPlayer(teamID, landing);
+    if (nearest) teams[teamID]->SelectPlayer(nearest);
+  }
+}
+
+void Match::KeeperClearCenter(int teamID) {
+  signed int side = teams[teamID]->GetSide();
+  // Own goal sits at x = side * pitchHalfW, so the centre of the pitch is towards -side.
+  Vector3 direction(-side, 0, 0);
+  Vector3 velocity = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
+  KeeperReleaseBall(teamID, velocity);
+}
+
+void Match::KeeperClearDirected(int teamID, const Vector3 &aimDirection, float chargeRatio,
+                                Player *addressee) {
+  signed int side = teams[teamID]->GetSide();
+  Vector3 direction = aimDirection.Get2D().GetNormalized(Vector3(-side, 0, 0));
+  float speedFactor = keeperClearSpeedMinFactor +
+                      (keeperClearSpeedMaxFactor - keeperClearSpeedMinFactor) * clamp(chargeRatio, 0.0f, 1.0f);
+  Vector3 velocity = direction * (keeperClearSpeed * speedFactor) + Vector3(0, 0, keeperClearLift);
+  KeeperReleaseBall(teamID, velocity, addressee);
+}
+
+void Match::KeeperDropToFeet(int teamID) {
+  Player *goalie = teams[teamID]->GetGoalie();
+  if (!goalie) return;
+
+  SetBallRetainer(0);
+  // The ball is received with the feet as a field player (spec §8.5, #32): drop it low right in
+  // front of the keeper so he can carry on with the normal outfield dribble/pass/shot logic.
+  signed int side = teams[teamID]->GetSide();
+  Vector3 forward = goalie->GetDirectionVec().Get2D().GetNormalized(Vector3(-side, 0, 0));
+  Vector3 to = goalie->GetPosition() + forward * keeperDropFeetOffset;
+  to.coords[2] = keeperDropFeetHeight;
+  ball->SetPosition(to);
+  keeperStates[teamID] = e_KeeperState_Outfield;
 }
 
 void Match::CheckHumanoidCollisions() {
