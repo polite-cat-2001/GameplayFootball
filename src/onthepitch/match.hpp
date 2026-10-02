@@ -383,9 +383,6 @@ class Match {
     void CalculateBestPossessionTeamID();
     // Advance the per-team keeper state machine (open play only); called once per Process tick.
     void UpdateKeeperState();
-    // A teammate intentionally kicked the ball towards his own keeper, who is the designated
-    // possession player and in his own half; the keeper is selected in advance (spec §8.3).
-    bool IsKeeperBackpass(int teamID);
     // Collapse queued substitution chains (X->Z + Z->W == X->W, X<->Z cancels).
     void NormalizePendingSubstitutions();
     void CheckHumanoidCollisions();

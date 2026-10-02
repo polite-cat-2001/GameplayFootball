@@ -2200,21 +2200,6 @@ void Match::CalculateBestPossessionTeamID() {
   }
 }
 
-bool Match::IsKeeperBackpass(int teamID) {
-  if (!IsInPlay() || IsInSetPiece()) return false;
-  Player *goalie = teams[teamID]->GetGoalie();
-  if (!goalie) return false;
-  if (GetBallRetainer() != 0) return false; // ball is held / retained elsewhere
-  // The keeper must be his team's designated possession player (he is the one collecting it), the
-  // ball must be in his own half, and the most recent touch must be a teammate's intentional kick.
-  if (teams[teamID]->GetDesignatedTeamPossessionPlayer() != goalie) return false;
-  if (ball->Predict(0).coords[0] * teams[teamID]->GetSide() < 0.0f) return false; // ball in opponent half
-  if (GetLastTouchTeamID() != teamID) return false;
-  if (GetLastTouchTeamID(e_TouchType_Intentional_Kicked) != teamID) return false;
-  if (GetLastTouchPlayer() == goalie) return false;
-  return true;
-}
-
 void Match::UpdateKeeperState() {
   for (int t = 0; t < 2; t++) {
     Player *goalie = teams[t]->GetGoalie();
@@ -2226,8 +2211,11 @@ void Match::UpdateKeeperState() {
 
     switch (keeperStates[t]) {
       case e_KeeperState_None:
+        // Caught it (Hands), or has the ball at his feet (Outfield). The backpass that put the ball
+        // at his feet is what hands the keeper to the human in the first place: the pass touch calls
+        // Team::SelectPlayer(receiver) (humanoid.cpp), which has no keeper exclusion.
         if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands;
-        else if (IsKeeperBackpass(t)) keeperStates[t] = e_KeeperState_Outfield;
+        else if (goalie->HasPossession()) keeperStates[t] = e_KeeperState_Outfield;
         break;
 
       case e_KeeperState_Hands:
@@ -2237,7 +2225,7 @@ void Match::UpdateKeeperState() {
 
       case e_KeeperState_Outfield:
         if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands; // collected it
-        else if (!goalie->HasPossession() && !IsKeeperBackpass(t)) keeperStates[t] = e_KeeperState_Returning;
+        else if (!goalie->HasPossession()) keeperStates[t] = e_KeeperState_Returning;
         break;
 
       case e_KeeperState_Returning:
