@@ -143,6 +143,9 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   designatedPossessionPlayer = 0;
 
+  keeperStates[0] = e_KeeperState_None;
+  keeperStates[1] = e_KeeperState_None;
+
 
   // teams
 
@@ -1046,6 +1049,8 @@ void Match::UpdateLatestMentalImageBallPredictions() {
 void Match::ResetSituation(const Vector3 &focusPos) {
   camPos.clear();
   SetBallRetainer(0);
+  keeperStates[0] = e_KeeperState_None;
+  keeperStates[1] = e_KeeperState_None;
   SetGoalScored(false);
   for (unsigned int i = 0; i < mentalImages.size(); i++) {
     delete mentalImages[i];
@@ -1312,6 +1317,9 @@ void Match::ProcessState(EnvState *state) {
   state->process(ballRetainerID);
 
   state->process(autoUpdateIngameCamera);
+
+  // Keeper layer state (spec §8, #31): part of the deterministic simulation.
+  for (int t = 0; t < 2; t++) state->process(keeperStates[t]);
 }
 
 void Match::Process() {
@@ -1470,6 +1478,9 @@ void Match::Process() {
     } else {
       designatedPossessionPlayer = GetBallRetainer();
     }
+
+    // Keeper layer (spec §8, #31): advance the per-team keeper state from this tick's possession.
+    UpdateKeeperState();
 
     //if (GetDebugMode() == e_DebugMode_Tactical)
     //GetLargeDebugCircle()->SetPosition(designatedPossessionPlayer->GetPosition());
@@ -2186,6 +2197,59 @@ void Match::CalculateBestPossessionTeamID() {
     if (bestTime_ms[0] < bestTime_ms[1]) bestPossessionTeamID = 0;
     else if (bestTime_ms[0] > bestTime_ms[1]) bestPossessionTeamID = 1;
     else if (bestTime_ms[0] == bestTime_ms[1]) bestPossessionTeamID = -1;
+  }
+}
+
+bool Match::IsKeeperBackpass(int teamID) {
+  if (!IsInPlay() || IsInSetPiece()) return false;
+  Player *goalie = teams[teamID]->GetGoalie();
+  if (!goalie) return false;
+  if (GetBallRetainer() != 0) return false; // ball is held / retained elsewhere
+  // The keeper must be his team's designated possession player (he is the one collecting it), the
+  // ball must be in his own half, and the most recent touch must be a teammate's intentional kick.
+  if (teams[teamID]->GetDesignatedTeamPossessionPlayer() != goalie) return false;
+  if (ball->Predict(0).coords[0] * teams[teamID]->GetSide() < 0.0f) return false; // ball in opponent half
+  if (GetLastTouchTeamID() != teamID) return false;
+  if (GetLastTouchTeamID(e_TouchType_Intentional_Kicked) != teamID) return false;
+  if (GetLastTouchPlayer() == goalie) return false;
+  return true;
+}
+
+void Match::UpdateKeeperState() {
+  for (int t = 0; t < 2; t++) {
+    Player *goalie = teams[t]->GetGoalie();
+    if (!goalie || !IsInPlay() || IsInSetPiece()) {
+      // The keeper layer is open-play only; set pieces have their own roles (#30, #29).
+      keeperStates[t] = e_KeeperState_None;
+      continue;
+    }
+
+    switch (keeperStates[t]) {
+      case e_KeeperState_None:
+        if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands;
+        else if (IsKeeperBackpass(t)) keeperStates[t] = e_KeeperState_Outfield;
+        break;
+
+      case e_KeeperState_Hands:
+        // Lost the ball (or released it): field mode / return to goal, control flows away normally.
+        if (GetBallRetainer() != goalie) keeperStates[t] = e_KeeperState_Returning;
+        break;
+
+      case e_KeeperState_Outfield:
+        if (GetBallRetainer() == goalie) keeperStates[t] = e_KeeperState_Hands; // collected it
+        else if (!goalie->HasPossession() && !IsKeeperBackpass(t)) keeperStates[t] = e_KeeperState_Returning;
+        break;
+
+      case e_KeeperState_Returning:
+        {
+          Vector3 clamped = keeperlogic::ClampToBox(goalie->GetPosition(), teams[t]->GetSide(),
+                                                    keeperBoxDepth, keeperBoxHalfWidth);
+          // Back inside his own box and off the ball: hand him back to the AI.
+          if ((goalie->GetPosition() - clamped).GetLength() < keeperBoxEpsilon && GetBallRetainer() != goalie)
+            keeperStates[t] = e_KeeperState_None;
+        }
+        break;
+    }
   }
 }
 

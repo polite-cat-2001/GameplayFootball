@@ -37,6 +37,9 @@ class Humanoid : public HumanoidBase {
     virtual void ResetSituation(const Vector3 &focusPos);
 
   protected:
+    // Goalkeeper layer (spec §8, #31): hard-clamp the keeper to his penalty area while he holds
+    // the ball (Hands). Shifts the animation origin so the clamp persists across frames.
+    void ClampKeeperToBox();
     float GetHasteFactor(bool considerOpponentProximity = true) const;
     virtual bool SelectAnim(const PlayerCommand &command, e_InterruptAnim localInterruptAnim, bool preferPassAndShot = false); // returns false on no applicable anim found
     bool NeedTouch(int animID, const PlayerCommand &command);

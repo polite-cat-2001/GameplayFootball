@@ -246,9 +246,9 @@ void PlayerController::_KeeperDeflectCommand(PlayerCommandQueue &commandQueue, b
 
   if (match->GetBallRetainer() != 0) return;
 
-  // can't use hands outside of keeper's 16 yard box (todo: make precise, probably in humanoid.cpp's getbestcheatableanim)
-  if (fabs(match->GetBall()->Predict(160).coords[1]) > 20.05f) return;
-  if (match->GetBall()->Predict(160).coords[0] * -team->GetSide() > -pitchHalfW + 16.4) return;
+  // can't use hands outside of the keeper's penalty box (shared with the keeper layer, #31)
+  if (fabs(match->GetBall()->Predict(160).coords[1]) > keeperBoxHalfWidth) return;
+  if (match->GetBall()->Predict(160).coords[0] * -team->GetSide() > -pitchHalfW + keeperBoxDepth) return;
 
   PlayerCommand command;
   command.desiredFunctionType = e_FunctionType_Deflect;

@@ -138,6 +138,15 @@ const float _default_SetPiece_CurlScale = 1.0f;              // stick-X accumula
 const float _default_SetPiece_CurlMax = 1.0f;                // |curl| cap
 const float _default_SetPiece_CurlSpin = 220.0f;             // lateral spin (rad/s) a full curl puts on a pass/cross
 
+// Goalkeeper layer (spec 2026-09-29 §8, #31). The keeper is hard-clamped to his own penalty
+// area while he holds the ball (Hands): `keeperBoxDepth` metres from his goal line,
+// `keeperBoxHalfWidth` either side of the centre. Shared with the keeper deflect check
+// (`PlayerController::_KeeperDeflectCommand`) and the ball-retainer box nudge (`Humanoid`).
+const float keeperBoxDepth = 16.4f;
+const float keeperBoxHalfWidth = 20.05f;
+// Tolerance (m) for box-boundary tests and for skipping a negligible clamp correction.
+const float keeperBoxEpsilon = 0.01f;
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;

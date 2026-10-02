@@ -32,7 +32,7 @@ case "$b" in
   main.cpp|main.hpp|gametask.cpp|gametask.hpp|scheduler.cpp|scheduler.hpp|tasksequence.cpp|tasksequence.hpp)
     pages="архитектура" ;;
   # Симуляция матча
-  match.cpp|match.hpp|team.cpp|team.hpp|ball.cpp|ball.hpp|player.cpp|player.hpp|playerbase.cpp|playerbase.hpp|referee.cpp|referee.hpp|officials.cpp|officials.hpp|elizacontroller.cpp|elizacontroller.hpp|strategy.cpp|strategy.hpp|mentalimage.cpp|mentalimage.hpp|AIfunctions.cpp|AIfunctions.hpp|teamAIcontroller.cpp|teamAIcontroller.hpp|proceduralpitch.cpp|proceduralpitch.hpp|humangamer.cpp|humangamer.hpp|humancontroller.cpp|humancontroller.hpp)
+  match.cpp|match.hpp|team.cpp|team.hpp|ball.cpp|ball.hpp|player.cpp|player.hpp|playerbase.cpp|playerbase.hpp|referee.cpp|referee.hpp|officials.cpp|officials.hpp|elizacontroller.cpp|elizacontroller.hpp|strategy.cpp|strategy.hpp|mentalimage.cpp|mentalimage.hpp|AIfunctions.cpp|AIfunctions.hpp|teamAIcontroller.cpp|teamAIcontroller.hpp|proceduralpitch.cpp|proceduralpitch.hpp|humangamer.cpp|humangamer.hpp|humancontroller.cpp|humancontroller.hpp|keeperlogic.cpp|keeperlogic.hpp)
     pages="матч" ;;
   # Экран плана игры (замены, роли, тактические схемы)
   gameplan.cpp|gameplan.hpp|tacticschemes.cpp|tacticschemes.hpp)

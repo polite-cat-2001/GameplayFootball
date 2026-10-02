@@ -495,6 +495,8 @@ void Team::Process() {
             !humanGamers.at(i)->GetHIDevice()->GetPreviousButtonState(e_ButtonFunction_Switch) &&
             // Switch is reserved on a set piece (chip combo, taker menu #30); it must not steal the taker
             !match->IsInSetPiece() &&
+            // While the keeper holds the ball (Hands), player switching is locked (spec §8.3, #31)
+            match->GetKeeperState(GetID()) != e_KeeperState_Hands &&
             // Switch also charges a chip shot; don't steal the taker while charging
             !humanGamers.at(i)->GetHumanController()->IsChargingChip() &&
             // don't switch if we are both best AND designated possession player. unless opponent team has ball.
@@ -665,8 +667,15 @@ void Team::UpdateSwitch() {
   // team player in possession is not human selected
 
   if (match->IsInPlay() && humanGamers.size() > 0) {
-    if (!IsHumanControlled(designatedTeamPossessionPlayer->GetID()) && (designatedTeamPossessionPlayer->HasUniquePossession() || match->IsInSetPiece())) {
-      if (designatedTeamPossessionPlayer != GetGoalie()) {
+    // Normally the keeper is skipped here (he stays under AI), but on a catch (Hands) or a backpass
+    // (Outfield) he becomes selectable for the local human team (spec §8.3, #31). Outside those two
+    // cases the skip stands, so the keeper is not pulled into open play.
+    bool keeperControllable = match->IsKeeperControllable(GetID());
+    bool keeperIsDesignated = designatedTeamPossessionPlayer == GetGoalie();
+    if (!IsHumanControlled(designatedTeamPossessionPlayer->GetID()) &&
+        (designatedTeamPossessionPlayer->HasUniquePossession() || match->IsInSetPiece() ||
+         (keeperControllable && keeperIsDesignated))) {
+      if (designatedTeamPossessionPlayer != GetGoalie() || keeperControllable) {
         SelectPlayer(designatedTeamPossessionPlayer);
       }
     }

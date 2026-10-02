@@ -15,6 +15,7 @@
 #include "../data/matchdata.hpp"
 #include "player/humanoid/animcollection.hpp"
 #include "AIsupport/mentalimage.hpp"
+#include "keeper/keeperlogic.hpp"
 
 #include "../menu/menutask.hpp"
 
@@ -275,6 +276,16 @@ class Match {
     Player *GetBallRetainer() { return ballRetainer; }
     void SetBallRetainer(Player *retainer) { ballRetainer = retainer; }
 
+    // Goalkeeper layer (spec 2026-09-29 §8, #31). Host-sim state, one per team, next to
+    // ballRetainer; possession itself still flows only through SetBallRetainer.
+    e_KeeperState GetKeeperState(int teamID) const { return keeperStates[teamID]; }
+    // True while the keeper is selectable by the human: holding the ball (Hands) or playing as a
+    // field player after a backpass (Outfield). Outside these two cases he stays under AI.
+    bool IsKeeperControllable(int teamID) const {
+      e_KeeperState state = keeperStates[teamID];
+      return state == e_KeeperState_Hands || state == e_KeeperState_Outfield;
+    }
+
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
     unsigned long GetIterations() const { return iterations.GetData(); }
@@ -370,6 +381,11 @@ class Match {
     bool CheckForGoal(signed int side);
 
     void CalculateBestPossessionTeamID();
+    // Advance the per-team keeper state machine (open play only); called once per Process tick.
+    void UpdateKeeperState();
+    // A teammate intentionally kicked the ball towards his own keeper, who is the designated
+    // possession player and in his own half; the keeper is selected in advance (spec §8.3).
+    bool IsKeeperBackpass(int teamID);
     // Collapse queued substitution chains (X->Z + Z->W == X->W, X<->Z cancels).
     void NormalizePendingSubstitutions();
     void CheckHumanoidCollisions();
@@ -457,6 +473,7 @@ class Match {
     signed int bestPossessionTeamID;
     Player *designatedPossessionPlayer;
     Player *ballRetainer;
+    e_KeeperState keeperStates[2];
 
     std::vector<Substitution> pendingSubstitutions;
     std::vector<SubstitutionNotice> substitutionNotices;

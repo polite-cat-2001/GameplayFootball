@@ -119,6 +119,7 @@ void Humanoid::Process() {
 
   CalculateSpatialState();
   spatialState.positionOffsetMovement = Vector3(0);
+  ClampKeeperToBox();
 
   currentAnim->frameNum++;
   previousAnim->frameNum++;
@@ -761,14 +762,14 @@ void Humanoid::Process() {
   // ballretainer should not get out of 16 meter box
 
   if (match->GetBallRetainer() == player && CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK && (match->IsInSetPiece() == false && match->IsInPlay() == true)) {
-    if (match->GetBall()->Predict(0).coords[1] > 20.05f) {
-      OffsetPosition(Vector3(0, clamp(20.05f - match->GetBall()->Predict(0).coords[1], -0.5f, 0.5f), 0) * 0.3f);
+    if (match->GetBall()->Predict(0).coords[1] > keeperBoxHalfWidth) {
+      OffsetPosition(Vector3(0, clamp(keeperBoxHalfWidth - match->GetBall()->Predict(0).coords[1], -0.5f, 0.5f), 0) * 0.3f);
     }
-    if (match->GetBall()->Predict(0).coords[1] < -20.05f) {
-      OffsetPosition(Vector3(0, clamp(-20.05f - match->GetBall()->Predict(0).coords[1], -0.5f, 0.5f), 0) * 0.3f);
+    if (match->GetBall()->Predict(0).coords[1] < -keeperBoxHalfWidth) {
+      OffsetPosition(Vector3(0, clamp(-keeperBoxHalfWidth - match->GetBall()->Predict(0).coords[1], -0.5f, 0.5f), 0) * 0.3f);
     }
-    if (match->GetBall()->Predict(0).coords[0] * -team->GetSide() > -pitchHalfW + 16.4f) {
-      OffsetPosition(Vector3(clamp((-pitchHalfW + 16.4f) - match->GetBall()->Predict(0).coords[0] * -team->GetSide(), -0.5f, 0.5f), 0, 0) * -team->GetSide() * 0.3f);
+    if (match->GetBall()->Predict(0).coords[0] * -team->GetSide() > -pitchHalfW + keeperBoxDepth) {
+      OffsetPosition(Vector3(clamp((-pitchHalfW + keeperBoxDepth) - match->GetBall()->Predict(0).coords[0] * -team->GetSide(), -0.5f, 0.5f), 0, 0) * -team->GetSide() * 0.3f);
     }
     if (match->GetBall()->Predict(0).coords[0] * -team->GetSide() < -pitchHalfW + 0.1f) {
       OffsetPosition(Vector3(clamp((-pitchHalfW + 0.1f) - match->GetBall()->Predict(0).coords[0] * -team->GetSide(), -0.5f, 0.5f), 0, 0) * -team->GetSide() * 0.4f);
@@ -1149,6 +1150,24 @@ void Humanoid::SelectRetainAnim() {
   buf_animApplyBuffer = animApplyBuffer;
 
   match->SetBallRetainer(CastPlayer());
+}
+
+void Humanoid::ClampKeeperToBox() {
+  if (CastPlayer()->GetFormationEntry().role != e_PlayerRole_GK) return;
+  if (match->GetKeeperState(team->GetID()) != e_KeeperState_Hands) return;
+
+  Vector3 clamped = keeperlogic::ClampToBox(spatialState.position, team->GetSide(),
+                                            keeperBoxDepth, keeperBoxHalfWidth);
+  Vector3 delta = clamped - spatialState.position;
+  delta.coords[2] = 0.0f;
+  if (delta.GetLength() < keeperBoxEpsilon) return;
+
+  // Shift the animation origin (and the positions movement is measured from) so the clamp sticks
+  // across frames instead of fighting the animation or injecting a spurious movement spike.
+  startPos += delta;
+  nextStartPos += delta;
+  previousPosition2D += delta;
+  spatialState.position = clamped;
 }
 
 void Humanoid::ResetSituation(const Vector3 &focusPos) {

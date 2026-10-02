@@ -2846,3 +2846,32 @@ Share/`Tab`, host-authoritative смена фактического бьющег
 ходу игры `Q`/`L1` не даётся — так и задумано). Сборка зелёная; `nettest` 60, `lanmatchtest` 42;
 хеш `5a477078` без изменений. Полевой краш при выборе вратаря не воспроизведён — записан в
 [[открытые-вопросы]] вместе с #31. См. [[матч]], [[сеть]].
+
+## [2026-10-02] feat | #31: слой вратаря и включение управления
+
+Введён GF-native слой вратаря (`src/onthepitch/keeper/keeperlogic.{hpp,cpp}`): перечисление
+`e_KeeperState { None, Hands, Outfield, Returning }` и чистый расчёт (`ClampToBox`,
+`SelectDistributionTarget`, `PredictLandingPoint`). Состояние host-sim, по команде, владеет
+`Match` рядом с `ballRetainer`; владение по-прежнему только через `SetBallRetainer` (ловля —
+существующий `e_FunctionType_Deflect` + `onlyDeflectAnimsThatPickupBall`, приклейка мяча к кости
+не трогается).
+
+- **Управление ровно в двух случаях:** ловля (`ballRetainer` стал вратарём → `Hands`) и бэкпас
+  (вратарь designated и последний намеренный кик — партнёра → `Outfield`, выбор заранее). Снятие
+  вратарского пропуска в `Team::UpdateSwitch` — только под `IsKeeperControllable`; вне этих
+  случаев вратарь под ИИ.
+- **`Hands`:** жёсткий кламп штрафной (`keeperBoxDepth 16.4`, `keeperBoxHalfWidth 20.05`) в
+  `Humanoid::ClampKeeperToBox` (сдвигается origin анимации); `Switch` заперт (`Team::Process`
+  требует `GetKeeperState != Hands`). Потеря мяча → `Returning`, управление уходит полевому.
+- Константы — в [[константы]]; состояние добавлено в `Match::ProcessState`, поэтому хеш Windows
+  x86 сменился `7134def2…` → `b1e8e432…` (перегенерация эталонов — #40). `nettest` 60,
+  `lanmatchtest` 42 — зелёные. См. [[матч]], [[открытые-вопросы]].
+
+## [2026-10-02] session | #31 закрыт
+
+Тикет #31 «Вратарь: слой keeper и включение управления» закрыт на ветке `of_port`. Итог: каталог
+`src/onthepitch/keeper/`, стейт-машина и чистый `keeperlogic`, кламп в `Hands`, выбор вратаря на
+ловле и бэкпасе, запрет `Switch` в `Hands`; раздача и правило 6 секунд — #32, нырок — #33.
+Сборка Release зелёная; `determinism_runner run` даёт `b1e8e432…` (эталоны — за #40).
+Вручную поле не проверялось (ловит/бегает/бэкпас), тонкий клиент не покрыт — записано в
+[[открытые-вопросы]].
