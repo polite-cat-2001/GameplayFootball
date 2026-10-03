@@ -1722,21 +1722,21 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   else if (command.desiredFunctionType == e_FunctionType_BallControl) {
     if (NeedTouch(*dataSet.begin(), command)) {
       float hasteFactor = GetHasteFactor(false);
-      selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, command.touchInfo, preferPassAndShot);
+      selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
     }
   }
   else if (command.desiredFunctionType == e_FunctionType_Trap ||
            command.desiredFunctionType == e_FunctionType_Interfere ||
            command.desiredFunctionType == e_FunctionType_Deflect) {
     float hasteFactor = GetHasteFactor(false);
-    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, command.touchInfo, preferPassAndShot);
+    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
   }
   else if (command.desiredFunctionType == e_FunctionType_ShortPass ||
            command.desiredFunctionType == e_FunctionType_LongPass ||
            command.desiredFunctionType == e_FunctionType_HighPass ||
            command.desiredFunctionType == e_FunctionType_Shot) {
     float hasteFactor = GetHasteFactor(false);
-    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, command.touchInfo, preferPassAndShot);
+    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
 /*
     if (player->GetDebug()) {
       if (CastPlayer()->AllowLastDitch()) printf("  * lastditch allowed\n");
@@ -1750,7 +1750,7 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   }
   else if (command.desiredFunctionType == e_FunctionType_Sliding) {
     float hasteFactor = GetHasteFactor(false);
-    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, command.touchInfo);
+    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim);
     if (selectedAnimID == -1) {
       if (dataSet.size() > 0) {
         selectedAnimID = *dataSet.begin();
@@ -2037,7 +2037,7 @@ float Humanoid::GetBodyBallDistanceAdvantage(const Animation *anim, e_FunctionTy
   return result;
 }
 
-signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool useDesiredMovement, const Vector3 &desiredDirection, float desiredVelocityFloat, bool useDesiredBodyDirection, const Vector3 &desiredBodyDirectionRel, std::vector<Vector3> &positions_ret, int &animTouchFrame_ret, float &radiusOffset_ret, Vector3 &touchPos_ret, Vector3 &fullActionSmuggle_ret, Vector3 &actionSmuggle_ret, radian &rotationSmuggle_ret, float hasteFactor, e_InterruptAnim localInterruptAnim, const TouchInfo &touchInfo, bool preferPassAndShot) const {
+signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool useDesiredMovement, const Vector3 &desiredDirection, float desiredVelocityFloat, bool useDesiredBodyDirection, const Vector3 &desiredBodyDirectionRel, std::vector<Vector3> &positions_ret, int &animTouchFrame_ret, float &radiusOffset_ret, Vector3 &touchPos_ret, Vector3 &fullActionSmuggle_ret, Vector3 &actionSmuggle_ret, radian &rotationSmuggle_ret, float hasteFactor, e_InterruptAnim localInterruptAnim, bool preferPassAndShot, bool forceTouch) const {
 
   // never allow touchanims when someone else is holding the ball in his/her hands
   if (match->GetBallRetainer() != 0 && match->GetBallRetainer() != player) return -1;
@@ -2137,16 +2137,8 @@ signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool u
       Vector3 animTouchMovement = CalculateMovementAtFrame(origPositionCache, animTouchFrame);// already anim space so no: .GetRotated2D(-spatialState.angle);
 
       Vector3 ballPos, ballMovement;
-      if (touchInfo.useSyntheticBallTarget) {
-        // Penalty dive (spec §9, #33): the keeper's anim selection and action smuggle target the
-        // picked zone instead of the real ball; the actual touch still needs the real ball to be
-        // there, so a wrong guess simply never connects.
-        ballPos = touchInfo.syntheticBallTarget;
-        ballMovement = Vector3(0);
-      } else {
-        ballPos = currentMentalImage->GetBallPrediction(animTouchFrame * 10);
-        ballMovement = (currentMentalImage->GetBallPrediction(animTouchFrame * 10 + 10) - currentMentalImage->GetBallPrediction(animTouchFrame * 10)) * 100.0f;
-      }
+      ballPos = currentMentalImage->GetBallPrediction(animTouchFrame * 10);
+      ballMovement = (currentMentalImage->GetBallPrediction(animTouchFrame * 10 + 10) - currentMentalImage->GetBallPrediction(animTouchFrame * 10)) * 100.0f;
       ballPos = (ballPos - spatialState.position).GetRotated2D(-spatialState.angle);
       ballMovement = ballMovement.GetRotated2D(-spatialState.angle);
 
@@ -2168,7 +2160,7 @@ signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool u
 
 
       // now pick the ballPos from the previous 9ms that is closest to animBallPos. this is to emulate a continuous 'close enough?'-check instead of a 'single moment' check.
-      if (useContinuousBallCheck && !touchInfo.useSyntheticBallTarget) {
+      if (useContinuousBallCheck) {
         Line ballLine(ballPos - ballMovement * 0.006f, ballPos + ballMovement * 0.003f);
         float u = clamp(ballLine.GetClosestToPoint(animBallPos), 0.0f, 1.0f);
         ballPos = ballLine.GetVertex(0) + (ballLine.GetVertex(1) - ballLine.GetVertex(0)) * u;
@@ -2263,7 +2255,7 @@ signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool u
         float touchFramedRadiusFactor = radiusFactor * touchFrameFactor;
         float bodyBallDistanceAdvantage = GetBodyBallDistanceAdvantage(anim, functionType, animTouchMovement, touchMovement, incomingMovement, adaptedOutgoingMovement, predictedAngle, bodyPos, FFO, animBallPos.Get2D(), ballPos.Get2D(), ballMovement.Get2D(), touchFramedRadiusFactor, radiusCheatOffset, 1.0f, debug);
 
-        if (bodyBallDistanceAdvantage >= 1.0f || match->GetBallRetainer() == player || touchInfo.forceTouch) {
+        if (bodyBallDistanceAdvantage >= 1.0f || match->GetBallRetainer() == player || forceTouch) {
 
           //SetGreenDebugPilon(spatialState.position + animBallPos.GetRotated2D(spatialState.angle));
 
@@ -2284,9 +2276,7 @@ signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool u
 
   if (found) {
 
-    touchPos_ret = touchInfo.useSyntheticBallTarget
-                       ? touchInfo.syntheticBallTarget
-                       : currentMentalImage->GetBallPrediction(animTouchFrame_ret * 10);
+    touchPos_ret = currentMentalImage->GetBallPrediction(animTouchFrame_ret * 10);
 
     fullActionSmuggle_ret = bestActionSmuggleVec2D.GetRotated2D(spatialState.angle);
     actionSmuggle_ret = fullActionSmuggle_ret;

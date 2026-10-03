@@ -1338,6 +1338,7 @@ void Match::ProcessState(EnvState *state) {
     state->process(penaltyDefense[t].active);
     state->process(penaltyDefense[t].lateral);
     state->process(penaltyDefense[t].divePending);
+    state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
   }
 }
@@ -1478,6 +1479,10 @@ void Match::Process() {
     teams[0]->Process();
     teams[1]->Process();
     officials->Process();
+
+    // Penalty dive (#33): slide the diving keeper's body at the zone after the players moved.
+    DrivePenaltyDive();
+    TryPenaltyDiveSave();
 
     // debug (F2): keep the parked team off the pitch while the toggle is on
     if (debugRemoveOpponents) DebugParkOpponents(true);
@@ -2244,14 +2249,15 @@ void Match::UpdatePenaltyDefense() {
   const int takerTeam = (IsInSetPiece() && setPieceType == e_SetPiece_Penalty) ? referee->GetBuffer().teamID : -1;
   for (int t = 0; t < 2; t++) {
     PenaltyDefense &p = penaltyDefense[t];
+    // Stop driving the lunge once it has run its course.
+    if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
     if (takerTeam == -1 || t == takerTeam) {
       p.active = false;
       continue;
     }
     if (!p.active) {
-      // New penalty: forget the previous drift and any stale dive.
+      // New penalty: forget the previous drift.
       p.lateral = 0.0f;
-      p.divePending = false;
     }
     p.active = true;
     // The human's raw stick drifts the keeper along the line; an AI team stays centred. The
@@ -2300,28 +2306,63 @@ void Match::CommitPenaltyDive(int takerTeamID) {
                                             goalHeight, penaltyKeeperCenterBand, penaltyKeeperHighThreshold)
               : e_KeeperDiveZone_OffTarget;
 
-  // The deflect path reaches a point beside the keeper, so the dive target sits on his own plane.
-  // On a correct guess the lateral tracks the real crossing (clamped to the dive's reach, so a
-  // perfect corner stays unsaveable); otherwise it is the representative point of the picked zone.
-  const float reachableLateral =
-      (crossed && zone != e_KeeperDiveZone_OffTarget && zone == realZone)
-          ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral)
-          : penaltyKeeperDiveLateral;
+  // The dive target sits on the keeper's own plane. On a correct guess it is the real crossing
+  // lateral (clamped to the near post), so the body meets the ball; otherwise it is the near post
+  // of the picked side (a committed lunge into that zone).
+  const bool guessed = crossed && zone != e_KeeperDiveZone_OffTarget && zone == realZone;
+  const float lateral = guessed ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral) : penaltyKeeperDiveLateral;
   Player *goalie = teams[defTeam]->GetGoalie();
   const float targetX = goalie ? goalie->GetPosition().coords[0] : lineX;
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
-  p.diveTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, reachableLateral,
+  p.diveTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, lateral,
                                              penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
+  p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
 }
 
-bool Match::ConsumePenaltyDive(int teamID, Vector3 &target) {
+bool Match::GetPenaltyDive(int teamID, Vector3 &target) {
   if (teamID < 0 || teamID >= 2) return false;
   PenaltyDefense &p = penaltyDefense[teamID];
   if (!p.divePending) return false;
   target = p.diveTarget;
-  p.divePending = false;
   return true;
+}
+
+void Match::DrivePenaltyDive() {
+  // Applied after the players have moved this tick, so the humanoid's own position update cannot
+  // overwrite it; the keeper's body is driven at the zone until it arrives (or the lunge expires).
+  for (int t = 0; t < 2; t++) {
+    PenaltyDefense &p = penaltyDefense[t];
+    if (!p.divePending) continue;
+    Player *goalie = teams[t]->GetGoalie();
+    if (!goalie) continue;
+    Vector3 toTarget = (p.diveTarget - goalie->GetPosition()).Get2D();
+    float dist = toTarget.GetLength();
+    if (dist <= 0.01f) continue;
+    float step = penaltyKeeperDiveSpeed * 0.01f;
+    if (step > dist) step = dist;
+    goalie->OffsetPosition(toTarget.GetNormalized(Vector3(1, 0, 0)) * step);
+  }
+}
+
+void Match::TryPenaltyDiveSave() {
+  // The diving keeper's body was driven at the zone; when the ball reaches it, punch it clear.
+  // Geometry alone is unreliable for a fast penalty, so the save is resolved here.
+  for (int t = 0; t < 2; t++) {
+    PenaltyDefense &p = penaltyDefense[t];
+    if (!p.divePending) continue;
+    Player *goalie = teams[t]->GetGoalie();
+    if (!goalie) continue;
+    Vector3 ballPos = ball->Predict(0);
+    Vector3 toBall = ballPos.Get2D() - goalie->GetPosition().Get2D();
+    if (ball->GetMovement().GetLength() < 2.0f || toBall.GetLength() > penaltyKeeperSaveRadius) continue;
+    // Deflect away from the defended goal and up a little; mark it as an accidental keeper touch.
+    Vector3 away = (ballPos.Get2D() - Vector3(teams[t]->GetSide() * pitchHalfW, 0.0f, 0.0f)).GetNormalized(Vector3(-teams[t]->GetSide(), 0.0f, 0.0f));
+    Vector3 punch = away * std::max(ball->GetMovement().GetLength() * 0.5f, 8.0f) + Vector3(0.0f, 0.0f, 2.0f);
+    ball->Touch(punch);
+    goalie->GetTeam()->SetLastTouchPlayer(goalie, e_TouchType_Accidental);
+    p.divePending = false;
+  }
 }
 
 void Match::UpdateKeeperState() {

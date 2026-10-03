@@ -93,10 +93,11 @@ struct PlayerBounce {
 // to the deflect path, carrying the keeper's body into the latched zone (into empty space when the
 // guess is wrong; at the real crossing lateral when it is right).
 struct PenaltyDefense {
-  PenaltyDefense() : active(false), lateral(0.0f), divePending(false), diveTarget() {}
+  PenaltyDefense() : active(false), lateral(0.0f), divePending(false), diveUntil_ms(0), diveTarget() {}
   bool active;
   float lateral;       // world lateral offset along the goal line (m)
-  bool divePending;    // a latched dive not yet consumed by the keeper's controller
+  bool divePending;    // the committed lunge is still running
+  unsigned long diveUntil_ms; // when the lunge stops driving (host sim time)
   Vector3 diveTarget;
 };
 
@@ -314,9 +315,9 @@ class Match {
     float GetPenaltyKeeperLateral(int teamID) const {
       return (teamID >= 0 && teamID < 2) ? penaltyDefense[teamID].lateral : 0.0f;
     }
-    // Consume the dive latched for `teamID` at the touch. Returns false when none is pending;
-    // otherwise sets `target` (the synthetic deflect point) and clears it.
-    bool ConsumePenaltyDive(int teamID, Vector3 &target);
+    // The committed penalty lunge for `teamID` while it is running: returns true and sets `target`
+    // for its whole duration, so the keeper keeps driving at the zone until the ball has arrived.
+    bool GetPenaltyDive(int teamID, Vector3 &target);
 
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
@@ -419,6 +420,10 @@ class Match {
     // drift each tick; commit the latched dive when the taker touches the ball.
     void UpdatePenaltyDefense();
     void CommitPenaltyDive(int takerTeamID);
+    // After the players moved: slide the diving keeper's body at the zone (called post-Process).
+    void DrivePenaltyDive();
+    // After the slide: resolve the save when the ball reaches the diving keeper.
+    void TryPenaltyDiveSave();
     // Raw stick of the first human gamer on `teamID`, if any (false for an AI team).
     bool GetDefenderStick(int teamID, Vector3 &stick);
     // Nearest active outfield teammate (keeper excluded) to a position; null when there is none.

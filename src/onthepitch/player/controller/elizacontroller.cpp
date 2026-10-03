@@ -313,6 +313,29 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   }
 
   else if (match->IsInPlay() && !match->IsInSetPiece() && CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK) {
+    // Penalty dive (#33): the zone was latched at the touch. Drive the body at it with the normal
+    // locomotion as the only command this tick, so nothing (interfere / ball control) steals the
+    // keeper; the ball-body collision then decides the save.
+    Vector3 penaltyDiveTarget;
+    if (match->GetPenaltyDive(team->GetID(), penaltyDiveTarget)) {
+      PlayerCommand command;
+      command.desiredFunctionType = e_FunctionType_Movement;
+      command.useDesiredMovement = true;
+      Vector3 toTarget = (penaltyDiveTarget - CastPlayer()->GetPosition()).Get2D();
+      if (toTarget.GetLength() > 0.3f) {
+        command.desiredDirection = toTarget.GetNormalized(CastPlayer()->GetDirectionVec());
+        command.desiredVelocityFloat = sprintVelocity;
+      } else {
+        command.desiredDirection = CastPlayer()->GetDirectionVec();
+        command.desiredVelocityFloat = idleVelocity; // keep the lunge pose but stop driving
+      }
+      command.useDesiredLookAt = true;
+      command.desiredLookAt = CastPlayer()->GetPosition() + command.desiredDirection * 10.0f;
+      commandQueue.push_back(command);
+      _SetInput(command.desiredDirection, command.desiredVelocityFloat);
+      return;
+    }
+
     // keeper's mental image for deflections is near-instant; let's just call it premonition ;)
     const MentalImage *keeperMentalImage = _mentalImage;
     static_cast<GoalieDefaultStrategy*>(goalieStrategy)->CalculateIfBallIsBoundForGoal(keeperMentalImage);
@@ -327,11 +350,7 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
       bool onlyPickupAnims = false;
       if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
-      // Penalty dive (#33): the zone was latched at the touch; consume it once and steer the
-      // deflect path at the picked zone (or the real crossing on a correct guess).
-      Vector3 diveTarget;
-      bool penaltyDive = match->ConsumePenaltyDive(team->GetID(), diveTarget);
-      _KeeperDeflectCommand(commandQueue, onlyPickupAnims, penaltyDive, diveTarget);
+      _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
     } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
     }

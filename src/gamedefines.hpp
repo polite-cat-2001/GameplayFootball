@@ -170,11 +170,19 @@ const int keeperDropGrace_ms = 1000;
 const float penaltyKeeperStepSpeed = 3.0f;         // lateral drift along the goal line before the kick
 const float penaltyKeeperStepMargin = 0.5f;        // keep this far off either post while drifting
 const float penaltyKeeperLineDepth = 0.5f;         // drift line sits this far in front of the goal line
-const float penaltyKeeperDiveLateral = 1.6f;       // representative lateral offset of a side zone
-                                                   // (kept within the deflect path's reach; the zone's
-                                                   // real extent only matters once a guess connects)
-const float penaltyKeeperDiveLowY = 0.4f;          // representative height of a low side zone
-const float penaltyKeeperDiveHighY = 1.9f;         // representative height of a high side zone
+// The dive is a committed lunge: the body is driven at the zone by locomotion plus a direct
+// positional slide, so it is still there when the ball arrives (ball-body collision decides).
+const int penaltyKeeperDiveDuration_ms = 600;
+const float penaltyKeeperDiveSpeed = 8.0f;         // positional lunge speed toward the zone (m/s)
+const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the diving keeper is saved (m)
+// Dive-target geometry: the side zones aim at the reach of the far-dive clips
+// (`090_ground_deflect_far` / `090_high_deflect_far` in deflect/idle), which are the only deflect
+// anims whose touch frame is late enough for a struck penalty. Low dives reach wider than high.
+// The dive target is the near post of the chosen half, so a correct side guess covers the whole
+// side. Low and high differ only in the clip/pose; the body reaches the same width.
+const float penaltyKeeperDiveLateral = 3.2f;       // representative lateral offset of a side zone (m)
+const float penaltyKeeperDiveLowY = 0.11f;         // representative height of a low side zone (m)
+const float penaltyKeeperDiveHighY = 2.09f;        // representative height of a high side zone (m)
 const float penaltyKeeperHighThreshold = 1.1f;     // crossing height above which a zone reads HIGH
 const float penaltyKeeperCenterBand = 0.8f;        // |lateral| within this reads CENTER
 const float penaltyKeeperStickDeadzone = 0.15f;    // stick length below which the pick is CENTER
@@ -302,8 +310,6 @@ struct TouchInfo {
     aimLateral = 0;
     aimSpeed = 0;
     forceTouch = false;
-    useSyntheticBallTarget = false;
-    syntheticBallTarget = Vector3(0);
   }
 
   Vector3         inputDirection;
@@ -347,12 +353,6 @@ struct TouchInfo {
   // state, so the held ball cannot be glued to the animation's contact point. Never set by normal
   // outfield commands.
   bool            forceTouch;
-
-  // Penalty dive (spec 2026-09-29 §9, #33): present the deflect path with a synthetic ball
-  // prediction instead of the real one, so the chosen dive clip and its action smuggle carry the
-  // keeper's body into the picked zone even when the real ball is elsewhere. Penalty-only.
-  bool            useSyntheticBallTarget;
-  Vector3         syntheticBallTarget;
 
 };
 

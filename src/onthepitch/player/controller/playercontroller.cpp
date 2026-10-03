@@ -236,11 +236,10 @@ void PlayerController::_Preprocess() {
   _timeNeeded_ms = CastPlayer()->GetTimeNeededToGetToBall_ms(); // needed for synced version - if we would ask on the spot and compare to opp, opp may already have calculated a new one while ours has not been processed yet
 }
 
-void PlayerController::_KeeperDeflectCommand(PlayerCommandQueue &commandQueue, bool onlyPickupAnims, bool penaltyDive, const Vector3 &syntheticBallTarget) {
+void PlayerController::_KeeperDeflectCommand(PlayerCommandQueue &commandQueue, bool onlyPickupAnims) {
 
   if (CastPlayer()->GetFormationEntry().role != e_PlayerRole_GK) return;
-  if (!penaltyDive &&
-      match->GetBall()->Predict(400).GetDistance(player->GetPosition()) > ballDistanceOptimizeThreshold + 10.0f) return;
+  if (match->GetBall()->Predict(400).GetDistance(player->GetPosition()) > ballDistanceOptimizeThreshold + 10.0f) return;
 
   // can't use hands if teammate intentionally kicked ball to us
   if (match->GetLastTouchTeamID() == team->GetID() && match->GetLastTouchPlayer() != CastPlayer() && match->GetLastTouchTeamID(e_TouchType_Intentional_Kicked) == team->GetID()) return;
@@ -256,11 +255,6 @@ void PlayerController::_KeeperDeflectCommand(PlayerCommandQueue &commandQueue, b
   command.useDesiredMovement = false;
   command.useDesiredLookAt = false;
   if (onlyPickupAnims) command.onlyDeflectAnimsThatPickupBall = true;
-  // Penalty dive (spec §9, #33): steer the deflect clip at the picked zone instead of the real ball.
-  if (penaltyDive) {
-    command.touchInfo.useSyntheticBallTarget = true;
-    command.touchInfo.syntheticBallTarget = syntheticBallTarget;
-  }
   commandQueue.push_back(command);
 }
 
