@@ -579,6 +579,14 @@ void HumanController::Process() {
         allowShot = false;
       }
 
+      // A penalty offers only the aimed shot: no passes/crosses and no chip (the reticle is the
+      // only aim). Everything else is rejected, so the taker always hits the ball cleanly.
+      if (_IsPenaltyTaker()) {
+        allowShortPass = false;
+        allowLongPass = false;
+        allowHighPass = false;
+      }
+
       // Set-piece kick types (spec §6): a free kick offers all four, a corner and a goal kick only
       // the two passes.
       if (_IsSetPieceKicker()) {
@@ -607,8 +615,8 @@ void HumanController::Process() {
       if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot) && allowShot) {
         actionMode = 2;
         actionButton = e_ButtonFunction_Shot;
-        // chip is not used on a set piece (spec §6): the kick is always a plain shot
-        pendingShotType = _IsSetPieceKicker() ? e_ShotType_Normal : _SampleShotType();
+        // chip/curl are not used on a set piece or penalty: always a plain shot
+        pendingShotType = (_IsSetPieceKicker() || _IsPenaltyTaker()) ? e_ShotType_Normal : _SampleShotType();
       }
 
     }
