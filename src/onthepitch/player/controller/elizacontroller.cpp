@@ -39,8 +39,6 @@
 ElizaController::ElizaController(Match *match) : PlayerController(match) {
   lastDesiredDirection = Vector3(0);
   lastDesiredVelocity = 0;
-  keeperWasInDeflect = false;
-  keeperDeflectRecoveryUntil_ms = 0;
 }
 
 ElizaController::~ElizaController() {
@@ -299,22 +297,6 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       return;
     }
 
-    // Lying on the ground after the lunge: issue a plain movement command (nothing special), so the
-    // animator picks the stand_up_from_front get-up clip on its own; DrivePenaltyDive keeps the body
-    // at the landing point while it plays.
-    if (match->IsPenaltyKeeperDown(team->GetID())) {
-      PlayerCommand getUpCommand;
-      getUpCommand.desiredFunctionType = e_FunctionType_Movement;
-      getUpCommand.useDesiredMovement = true;
-      getUpCommand.desiredDirection = CastPlayer()->GetDirectionVec();
-      getUpCommand.desiredVelocityFloat = idleVelocity;
-      getUpCommand.useDesiredLookAt = true;
-      getUpCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
-      commandQueue.push_back(getUpCommand);
-      _SetInput(getUpCommand.desiredDirection, getUpCommand.desiredVelocityFloat);
-      return;
-    }
-
     // keeper's mental image for deflections is near-instant; let's just call it premonition ;)
     const MentalImage *keeperMentalImage = _mentalImage;
     static_cast<GoalieDefaultStrategy*>(goalieStrategy)->CalculateIfBallIsBoundForGoal(keeperMentalImage);
@@ -323,24 +305,13 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     if (CastPlayer() != match->GetDesignatedPossessionPlayer()) manualMovement = true;
     goalieStrategy->RequestInput(keeperMentalImage, manualMovementDirection, manualMovementVelocityFloat);
 
-    // Deflect recovery (open play): after a deflect anim ends, wait a moment before diving again.
-    // Without it a slow lobbed ball makes the keeper land and instantly re-dive (get up, dive, ...).
-    if (CastPlayer()->GetCurrentFunctionType() == e_FunctionType_Deflect) {
-      keeperWasInDeflect = true;
-    } else if (keeperWasInDeflect) {
-      keeperWasInDeflect = false;
-      keeperDeflectRecoveryUntil_ms = match->GetActualTime_ms() + keeperDeflectRecovery_ms;
-    }
-
     // Only a keeper already carrying the ball at his feet (Outfield) plays the ball with his feet.
     // Otherwise he must go for the catch: a slow ball rolling in from an opponent used to read as
     // "unique possession", which skipped the deflect/catch and made the AI volley it away (#32).
     if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
-      if (!keeperWasInDeflect && match->GetActualTime_ms() >= keeperDeflectRecoveryUntil_ms) {
-        bool onlyPickupAnims = false;
-        if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
-        _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
-      }
+      bool onlyPickupAnims = false;
+      if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
+      _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
     } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
     }

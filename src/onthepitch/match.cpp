@@ -1335,10 +1335,8 @@ void Match::ProcessState(EnvState *state) {
 
   // Penalty defense (spec §9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
-    state->process(penaltyDefense[t].wasDiving);
     state->process(penaltyDefense[t].divePending);
     state->process(penaltyDefense[t].diveUntil_ms);
-    state->process(penaltyDefense[t].getUpUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
     state->process(penaltyDefense[t].diveClipTarget);
   }
@@ -2248,14 +2246,9 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
 
 void Match::UpdatePenaltyDefense() {
   for (int t = 0; t < 2; t++) {
+    // Stop driving a lunge once it has run its course.
     PenaltyDefense &p = penaltyDefense[t];
-    // Stop driving the lunge once it has run its course (the body was carried to the zone); then a
-    // get-up window lets the animator play the stand_up clip before normal play resumes.
-    if (p.divePending && actualTime_ms >= p.diveUntil_ms) {
-      p.divePending = false;
-      p.getUpUntil_ms = actualTime_ms + penaltyKeeperGetUp_ms;
-    }
-    if (p.wasDiving && !p.divePending && actualTime_ms >= p.getUpUntil_ms) p.wasDiving = false;
+    if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
   }
 }
 
@@ -2309,7 +2302,6 @@ void Match::CommitPenaltyDive(int takerTeamID) {
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
-  p.wasDiving = true;
 }
 
 bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
@@ -2320,31 +2312,20 @@ bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
   return true;
 }
 
-bool Match::IsPenaltyKeeperDown(int teamID) const {
-  if (teamID < 0 || teamID >= 2) return false;
-  const PenaltyDefense &p = penaltyDefense[teamID];
-  // Down = the lunge ended (no longer driving) but the keeper has not stood back up yet.
-  return p.wasDiving && !p.divePending;
-}
-
 void Match::DrivePenaltyDive() {
   // Applied after the players have moved this tick, so the humanoid's own position update cannot
   // overwrite it; the keeper's body is driven at the zone until it arrives (or the lunge expires).
   for (int t = 0; t < 2; t++) {
     PenaltyDefense &p = penaltyDefense[t];
-    if (p.divePending) {
-      Player *goalie = teams[t]->GetGoalie();
-      if (!goalie) continue;
-      Vector3 toTarget = (p.diveTarget - goalie->GetPosition()).Get2D();
-      float dist = toTarget.GetLength();
-      if (dist > 0.01f) {
-        float step = penaltyKeeperDiveSpeed * 0.01f;
-        if (step > dist) step = dist;
-        goalie->OffsetPosition(toTarget.GetNormalized(Vector3(1, 0, 0)) * step);
-      }
-    }
-    // While getting up we deliberately do not touch the body: the stand_up clip carries it back to
-    // the feet on its own (the controller only issues a plain movement command).
+    if (!p.divePending) continue;
+    Player *goalie = teams[t]->GetGoalie();
+    if (!goalie) continue;
+    Vector3 toTarget = (p.diveTarget - goalie->GetPosition()).Get2D();
+    float dist = toTarget.GetLength();
+    if (dist <= 0.01f) continue;
+    float step = penaltyKeeperDiveSpeed * 0.01f;
+    if (step > dist) step = dist;
+    goalie->OffsetPosition(toTarget.GetNormalized(Vector3(1, 0, 0)) * step);
   }
 }
 
@@ -2364,9 +2345,7 @@ void Match::TryPenaltyDiveSave() {
     Vector3 punch = away * std::max(ball->GetMovement().GetLength() * 0.5f, 8.0f) + Vector3(0.0f, 0.0f, 2.0f);
     ball->Touch(punch);
     goalie->GetTeam()->SetLastTouchPlayer(goalie, e_TouchType_Accidental);
-    // Saved: end the lunge here and start the get-up window (UpdatePenaltyDefense would do the same).
     p.divePending = false;
-    p.getUpUntil_ms = actualTime_ms + penaltyKeeperGetUp_ms;
   }
 }
 
