@@ -93,9 +93,11 @@ struct PlayerBounce {
 // to the deflect path, carrying the keeper's body into the latched zone (into empty space when the
 // guess is wrong; at the real crossing lateral when it is right).
 struct PenaltyDefense {
-  PenaltyDefense() : divePending(false), diveUntil_ms(0), diveTarget(), diveClipTarget() {}
-  bool divePending;    // the committed lunge is still running
-  unsigned long diveUntil_ms; // when the lunge stops driving (host sim time)
+  PenaltyDefense() : wasDiving(false), divePending(false), diveUntil_ms(0), getUpUntil_ms(0), diveTarget(), diveClipTarget() {}
+  bool wasDiving;      // a dive happened and the keeper has not stood back up yet
+  bool divePending;    // the committed lunge is still running (body still being driven)
+  unsigned long diveUntil_ms;  // when the lunge stops driving (host sim time)
+  unsigned long getUpUntil_ms; // how long the get-up window lasts after the lunge
   Vector3 diveTarget;      // positional target (body slide + save)
   Vector3 diveClipTarget;  // synthetic ball point that makes the animator pick the far dive clip
 };
@@ -308,6 +310,8 @@ class Match {
     // Penalty defense (spec 2026-09-29 §9, #33). Host-sim, per defending team.
     // The synthetic ball point that steers the dive-clip choice (far lunge) for the active lunge.
     bool GetPenaltyDiveClipTarget(int teamID, Vector3 &target);
+    // True while the keeper is lying on the ground after the lunge (dive clip over, not yet up).
+    bool IsPenaltyKeeperDown(int teamID) const;
 
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 

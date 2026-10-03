@@ -299,6 +299,22 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       return;
     }
 
+    // Lying on the ground after the lunge: issue a plain movement command (nothing special), so the
+    // animator picks the stand_up_from_front get-up clip on its own; DrivePenaltyDive keeps the body
+    // at the landing point while it plays.
+    if (match->IsPenaltyKeeperDown(team->GetID())) {
+      PlayerCommand getUpCommand;
+      getUpCommand.desiredFunctionType = e_FunctionType_Movement;
+      getUpCommand.useDesiredMovement = true;
+      getUpCommand.desiredDirection = CastPlayer()->GetDirectionVec();
+      getUpCommand.desiredVelocityFloat = idleVelocity;
+      getUpCommand.useDesiredLookAt = true;
+      getUpCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+      commandQueue.push_back(getUpCommand);
+      _SetInput(getUpCommand.desiredDirection, getUpCommand.desiredVelocityFloat);
+      return;
+    }
+
     // keeper's mental image for deflections is near-instant; let's just call it premonition ;)
     const MentalImage *keeperMentalImage = _mentalImage;
     static_cast<GoalieDefaultStrategy*>(goalieStrategy)->CalculateIfBallIsBoundForGoal(keeperMentalImage);
