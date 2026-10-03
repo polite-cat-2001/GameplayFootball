@@ -395,6 +395,9 @@ class Match {
     void KeeperReleaseBall(int teamID, const Vector3 &velocity);
     // Nearest active outfield teammate (keeper excluded) to a position; null when there is none.
     Player *GetNearestOutfieldPlayer(int teamID, const Vector3 &position);
+    // On entering Returning, hand control from the human keeper to a field player so the AI runs
+    // the keeper back to goal (spec §8.5, #32). No-op for AI keepers.
+    void ReleaseKeeperControl(int teamID);
     // Collapse queued substitution chains (X->Z + Z->W == X->W, X<->Z cancels).
     void NormalizePendingSubstitutions();
     void CheckHumanoidCollisions();

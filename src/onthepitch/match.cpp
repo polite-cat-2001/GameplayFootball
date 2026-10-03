@@ -2229,8 +2229,10 @@ void Match::UpdateKeeperState() {
 
       case e_KeeperState_Hands:
         if (GetBallRetainer() != goalie) {
-          // Lost the ball (or released it): field mode / return to goal, control flows away.
+          // Lost the ball (or released it): the keeper returns to goal under AI while control
+          // flows to a field player (spec §8.5, #32).
           keeperStates[t] = e_KeeperState_Returning;
+          ReleaseKeeperControl(t);
         } else if (actualTime_ms - keeperHandsStart_ms[t] >= (unsigned long)keeperSixSecond_ms) {
           // Six-second rule: the host forces a clearance to the centre and hands control to the
           // teammate nearest the landing point (spec §8.6, #32).
@@ -2243,11 +2245,15 @@ void Match::UpdateKeeperState() {
           keeperStates[t] = e_KeeperState_Hands;
           keeperHandsStart_ms[t] = actualTime_ms;
         } else if (!goalie->HasPossession()) {
+          // Passed, shot, cleared or lost the ball as a field player: run back to goal (spec §8.5).
           keeperStates[t] = e_KeeperState_Returning;
+          ReleaseKeeperControl(t);
         }
         break;
 
       case e_KeeperState_Returning:
+        // Keep the returning keeper under AI: a manual Switch must not re-grab him (spec §8.5).
+        ReleaseKeeperControl(t);
         {
           Vector3 clamped = keeperlogic::ClampToBox(goalie->GetPosition(), teams[t]->GetSide(),
                                                     keeperBoxDepth, keeperBoxHalfWidth);
@@ -2274,6 +2280,19 @@ Player *Match::GetNearestOutfieldPlayer(int teamID, const Vector3 &position) {
     }
   }
   return best;
+}
+
+void Match::ReleaseKeeperControl(int teamID) {
+  Player *goalie = teams[teamID]->GetGoalie();
+  if (!goalie || !teams[teamID]->IsHumanControlled(goalie->GetID())) return;
+
+  // Prefer the teammate with possession; otherwise the nearest outfield player to the ball. The
+  // normal auto-switch does not fire on a loose ball, so without this the human would keep steering
+  // the returning keeper instead of the field.
+  Player *target = teams[teamID]->GetDesignatedTeamPossessionPlayer();
+  if (!target || target == goalie || target->GetFormationEntry().role == e_PlayerRole_GK)
+    target = GetNearestOutfieldPlayer(teamID, ball->Predict(0).Get2D());
+  if (target) teams[teamID]->SelectPlayer(target);
 }
 
 void Match::KeeperReleaseBall(int teamID, const Vector3 &velocity) {
