@@ -157,9 +157,8 @@ const float keeperHandRollDist = 12.0f;        // low roll target distance band 
 const float keeperHandThrowDist = 30.0f;       // overhand throw target distance band (m)
 const float keeperHandThrowPeak = 2.5f;        // overhand throw arc peak height (m)
 const float keeperHandsVelocityFloat = 0.85f;  // movement speed while holding, as a share of sprint
-const float keeperClearSpeed = 34.0f;          // foot-to-centre clear horizontal speed (m/s)
-const float keeperClearLift = 15.0f;           // foot-to-centre clear vertical launch (m/s)
-const float keeperKickLoft = 5.0f;             // directed foot clear arc peak height (m)
+const float keeperKickLoft = 5.0f;             // foot clear arc peak height (m)
+const float keeperCenterClearPower = 1.0f;     // fixed power of the foot-to-centre clear (0..1)
 // Grace after a chip to feet (or a foot drop) during which the keeper stays in Outfield while the
 // ball is still falling out of his hands (HasPossession is briefly false).
 const int keeperDropGrace_ms = 1000;

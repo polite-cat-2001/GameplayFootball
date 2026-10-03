@@ -848,50 +848,39 @@ void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueu
 }
 
 void HumanController::_KeeperClearKickCommand(PlayerCommandQueue &commandQueue) {
-  if (keeperClearButton == e_ButtonFunction_Shot) {
-    // Foot-to-centre: a normal shot whose planned launch is the centre clearance (spec §8.4). The
-    // ball is already at the keeper's feet from the drop; forceTouch guards the contact.
-    Vector3 direction(-team->GetSide(), 0, 0); // toward the centre of the pitch
-    PlayerCommand command;
-    command.desiredFunctionType = e_FunctionType_Shot;
-    command.useDesiredMovement = false;
-    command.useDesiredLookAt = false;
-    command.desiredVelocityFloat = 0.0f;
-    command.touchInfo.inputDirection = direction;
-    command.touchInfo.desiredDirection = direction;
-    command.touchInfo.autoDirectionBias = 0.0f;
-    command.touchInfo.shotType = e_ShotType_Normal;
-    command.touchInfo.useSetPieceLaunch = true;
-    command.touchInfo.setPieceLaunch = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
-    command.touchInfo.forceTouch = true;
-    commandQueue.push_back(command);
-    return;
+  bool toCentre = (keeperClearButton == e_ButtonFunction_Shot);
+
+  // Only the directed clear has an addressee for the handoff (spec §8.7); the centre clear has none.
+  Player *target = 0;
+  if (!toCentre) {
+    std::vector<Vector3> candidates;
+    std::vector<Player*> candidatePlayers;
+    std::vector<Player*> players;
+    team->GetActivePlayers(players);
+    for (unsigned int i = 0; i < players.size(); i++) {
+      Player *mate = players.at(i);
+      if (mate == CastPlayer() || mate->GetFormationEntry().role == e_PlayerRole_GK) continue;
+      candidates.push_back(mate->GetPosition());
+      candidatePlayers.push_back(mate);
+    }
+    int idx = keeperlogic::SelectDistributionTarget(candidates, CastPlayer()->GetPosition(), keeperClearAim,
+                                                    keeperHandRollDist, keeperHandThrowDist, keeperClearCharge);
+    target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
   }
 
-  // Directed foot clear (HighPass): stick direction, charge sets the pace, the addressee gets the
-  // handoff (spec §8.4/§8.7). The addressee is picked now, once the ball has settled.
-  std::vector<Vector3> candidates;
-  std::vector<Player*> candidatePlayers;
-  std::vector<Player*> players;
-  team->GetActivePlayers(players);
-  for (unsigned int i = 0; i < players.size(); i++) {
-    Player *mate = players.at(i);
-    if (mate == CastPlayer() || mate->GetFormationEntry().role == e_PlayerRole_GK) continue;
-    candidates.push_back(mate->GetPosition());
-    candidatePlayers.push_back(mate);
-  }
-  int idx = keeperlogic::SelectDistributionTarget(candidates, CastPlayer()->GetPosition(), keeperClearAim,
-                                                  keeperHandRollDist, keeperHandThrowDist, keeperClearCharge);
-  Player *target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
+  // Both clears use the same high-pass kick path; the centre clear is fixed strong and straight
+  // downfield, the directed clear takes the stick direction and charge (spec §8.4).
+  Vector3 direction = toCentre ? Vector3(-team->GetSide(), 0, 0) : keeperClearAim;
+  float power = toCentre ? keeperCenterClearPower : clamp(0.2f + keeperClearCharge * 0.6f, 0.2f, 0.8f);
 
   PlayerCommand command;
   command.desiredFunctionType = e_FunctionType_HighPass;
   command.useDesiredMovement = false;
   command.useDesiredLookAt = false;
-  command.touchInfo.inputDirection = keeperClearAim;
-  command.touchInfo.inputPower = clamp(0.2f + keeperClearCharge * 0.6f, 0.2f, 0.8f);
-  command.touchInfo.desiredDirection = keeperClearAim;
-  command.touchInfo.desiredPower = command.touchInfo.inputPower;
+  command.touchInfo.inputDirection = direction;
+  command.touchInfo.inputPower = power;
+  command.touchInfo.desiredDirection = direction;
+  command.touchInfo.desiredPower = power;
   command.touchInfo.autoDirectionBias = 0.0f;
   command.touchInfo.autoPowerBias = 0.0f;
   command.touchInfo.aimHeight = keeperKickLoft;
