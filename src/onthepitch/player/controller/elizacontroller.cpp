@@ -39,6 +39,8 @@
 ElizaController::ElizaController(Match *match) : PlayerController(match) {
   lastDesiredDirection = Vector3(0);
   lastDesiredVelocity = 0;
+  keeperWasInDeflect = false;
+  keeperDeflectRecoveryUntil_ms = 0;
 }
 
 ElizaController::~ElizaController() {
@@ -305,13 +307,24 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     if (CastPlayer() != match->GetDesignatedPossessionPlayer()) manualMovement = true;
     goalieStrategy->RequestInput(keeperMentalImage, manualMovementDirection, manualMovementVelocityFloat);
 
+    // Deflect recovery (open play): after a deflect anim ends, wait a moment before diving again.
+    // Without it a slow lobbed ball makes the keeper land and instantly re-dive (get up, dive, ...).
+    if (CastPlayer()->GetCurrentFunctionType() == e_FunctionType_Deflect) {
+      keeperWasInDeflect = true;
+    } else if (keeperWasInDeflect) {
+      keeperWasInDeflect = false;
+      keeperDeflectRecoveryUntil_ms = match->GetActualTime_ms() + keeperDeflectRecovery_ms;
+    }
+
     // Only a keeper already carrying the ball at his feet (Outfield) plays the ball with his feet.
     // Otherwise he must go for the catch: a slow ball rolling in from an opponent used to read as
     // "unique possession", which skipped the deflect/catch and made the AI volley it away (#32).
     if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
-      bool onlyPickupAnims = false;
-      if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
-      _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
+      if (!keeperWasInDeflect && match->GetActualTime_ms() >= keeperDeflectRecoveryUntil_ms) {
+        bool onlyPickupAnims = false;
+        if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
+        _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
+      }
     } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
     }

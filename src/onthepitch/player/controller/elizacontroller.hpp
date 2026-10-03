@@ -67,6 +67,11 @@ class ElizaController : public PlayerController {
     Vector3 lastDesiredDirection;
     float lastDesiredVelocity;
 
+    // Goalkeeper deflect recovery: after a deflect/lunge anim ends, wait a little before diving
+    // again, so a slow ball does not make him instantly re-dive (get up, dive, get up, ...).
+    bool keeperWasInDeflect;
+    unsigned long keeperDeflectRecoveryUntil_ms;
+
 };
 
 #endif
