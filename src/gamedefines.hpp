@@ -177,10 +177,13 @@ const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the di
 // The dive target is the near post of the chosen half, so a correct side guess covers the whole
 // side. Low and high differ only in the clip/pose; the body reaches the same width.
 const float penaltyKeeperDiveLateral = 3.2f;       // positional target lateral of a side zone (m)
-// Clip-selection point: the natural touch of the far-dive clips (`090_ground_deflect_far` 2.53/0.11,
-// `090_high_deflect_far` 1.26/2.09), so the animator picks that lunge instead of a close catch.
+// Clip-selection point: the far-dive clips (`090_ground_deflect_far` 2.53/0.11,
+// `090_high_deflect_far` 1.26/2.09) are the only deflect anims whose touch frame is late enough for
+// a struck penalty. The clip target follows the body lateral but is pushed outward by this margin
+// (capped at the far edge) so the animator still picks that far lunge instead of a close catch.
 const float penaltyKeeperDiveClipLateralLow = 2.5f;
 const float penaltyKeeperDiveClipLateralHigh = 1.26f;
+const float penaltyKeeperDiveClipBias = 0.6f;      // outward push of the clip point past the body (m)
 const float penaltyKeeperDiveLowY = 0.11f;         // representative height of a low side zone (m)
 const float penaltyKeeperDiveHighY = 2.09f;        // representative height of a high side zone (m)
 const float penaltyKeeperHighThreshold = 1.1f;     // crossing height above which a zone reads HIGH

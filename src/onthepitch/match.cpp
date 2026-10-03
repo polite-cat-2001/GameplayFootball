@@ -2295,9 +2295,13 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
   p.diveTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, lateral,
                                              penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
-  // Clip target aims at the far-dive clips' natural touch so the animator picks a real lunge.
+  // Clip target tracks the body target's lateral so the chosen lunge's touch and the driven body
+  // coincide, but stays biased outward by a margin so the animator still picks a far lunge (the
+  // far-dive clips are the only deflect anims whose touch frame is late enough for a struck
+  // penalty). On a correct guess this pulls the clip in from the far edge to the real crossing.
   const bool lowBand = (zone == e_KeeperDiveZone_LowL || zone == e_KeeperDiveZone_LowR);
-  const float clipLateral = lowBand ? penaltyKeeperDiveClipLateralLow : penaltyKeeperDiveClipLateralHigh;
+  const float clipFarEdge = lowBand ? penaltyKeeperDiveClipLateralLow : penaltyKeeperDiveClipLateralHigh;
+  const float clipLateral = clamp(std::fabs(lateral) + penaltyKeeperDiveClipBias, 0.0f, clipFarEdge);
   p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
