@@ -1335,7 +1335,6 @@ void Match::ProcessState(EnvState *state) {
 
   // Penalty defense (spec §9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
-    state->process(penaltyDefense[t].wasDiving);
     state->process(penaltyDefense[t].divePending);
     state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
@@ -2247,21 +2246,9 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
 
 void Match::UpdatePenaltyDefense() {
   for (int t = 0; t < 2; t++) {
-    // End the lunge (and its body drive) the moment the dive clip stops being the current anim, so
-    // the keeper is left lying and the animator can pick the stand_up get-up clip on its own.
+    // Stop driving a lunge once it has run its course.
     PenaltyDefense &p = penaltyDefense[t];
-    Player *goalie = teams[t]->GetGoalie();
-    if (p.divePending) {
-      const bool clipDone = !goalie || goalie->GetCurrentFunctionType() != e_FunctionType_Deflect;
-      if (actualTime_ms >= p.diveUntil_ms || clipDone) p.divePending = false;
-    }
-    // Clear the "down" flag once the keeper is no longer in a get-up/dive anim (back to normal play).
-    if (p.wasDiving && !p.divePending && goalie) {
-      const e_FunctionType ft = goalie->GetCurrentFunctionType();
-      if (ft != e_FunctionType_Deflect && ft != e_FunctionType_Movement) p.wasDiving = false;
-      else if (ft == e_FunctionType_Movement &&
-               goalie->GetCurrentFrame() == 0) p.wasDiving = false; // get-up finished / back to play
-    }
+    if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
   }
 }
 
@@ -2315,7 +2302,6 @@ void Match::CommitPenaltyDive(int takerTeamID) {
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
-  p.wasDiving = true;
 }
 
 bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
@@ -2324,13 +2310,6 @@ bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
   if (!p.divePending) return false;
   target = p.diveClipTarget;
   return true;
-}
-
-bool Match::IsPenaltyKeeperDown(int teamID) const {
-  if (teamID < 0 || teamID >= 2) return false;
-  const PenaltyDefense &p = penaltyDefense[teamID];
-  // Down = the lunge ended (no longer driving) but the keeper has not got back up yet.
-  return p.wasDiving && !p.divePending;
 }
 
 void Match::DrivePenaltyDive() {

@@ -16,9 +16,6 @@ extension,football,29,-0.869999,-0.650000,2.229998
 <incomingballdirection>
 	0.000000,1.000000,0.000000
 </incomingballdirection>
-<outgoing_special_state>
-	lay_front
-</outgoing_special_state>
 <type>
 	deflect
 </type>

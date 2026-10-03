@@ -291,10 +291,8 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   }
 
   else if (match->IsInPlay() && !match->IsInSetPiece() && CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK) {
-    // Penalty dive (#33): play the far dive clip picked from the zone point, then hand back to the
-    // normal logic. The body slide (Match::DrivePenaltyDive) carries it to the zone during the clip;
-    // once the clip ends the keeper is left lying (`lay_front`) and the animator picks the
-    // stand_up_from_front get-up clip on its own.
+    // Penalty dive (#33): play the far dive clip picked from the zone point; the body slide
+    // (Match::DrivePenaltyDive) carries it to the zone and Match::TryPenaltyDiveSave resolves the save.
     Vector3 penaltyDiveTarget, diveClipTarget;
     if (match->GetPenaltyDiveClipTarget(team->GetID(), diveClipTarget)) {
       _KeeperDeflectCommand(commandQueue, false, true, diveClipTarget);
@@ -318,17 +316,10 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       keeperDeflectRecoveryUntil_ms = match->GetActualTime_ms() + keeperDeflectRecovery_ms;
     }
 
-    // Still lying on the ground after the deflect/lunge: do nothing special this tick. The normal
-    // movement command below is what lets the animator pick the stand_up_from_front get-up clip.
-    if (match->IsPenaltyKeeperDown(team->GetID())) {
-      // fall through to the movement command, but hold the defensive run so he just gets up
-      manualMovement = true;
-      manualMovementDirection = CastPlayer()->GetDirectionVec();
-      manualMovementVelocityFloat = idleVelocity;
-    } else if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
-      // Only a keeper already carrying the ball at his feet (Outfield) plays the ball with his feet.
-      // Otherwise he must go for the catch: a slow ball rolling in from an opponent used to read as
-      // "unique possession", which skipped the deflect/catch and made the AI volley it away (#32).
+    // Only a keeper already carrying the ball at his feet (Outfield) plays the ball with his feet.
+    // Otherwise he must go for the catch: a slow ball rolling in from an opponent used to read as
+    // "unique possession", which skipped the deflect/catch and made the AI volley it away (#32).
+    if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
       if (!keeperWasInDeflect && match->GetActualTime_ms() >= keeperDeflectRecoveryUntil_ms) {
         bool onlyPickupAnims = false;
         if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
