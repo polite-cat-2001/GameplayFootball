@@ -168,8 +168,8 @@ const int keeperDropGrace_ms = 1000;
 // while the body is driven at the zone. All values in metres / metres-per-second.
 // The dive is a committed lunge: the body is driven at the zone by a direct positional slide, so it
 // is still there when the ball arrives.
-const int penaltyKeeperDiveDuration_ms = 600;
-const float penaltyKeeperDiveSpeed = 8.0f;         // positional lunge speed toward the zone (m/s)
+const int penaltyKeeperDiveDuration_ms = 900;
+const float penaltyKeeperDiveSpeed = 4.5f;         // positional lunge speed toward the zone (m/s)
 const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the diving keeper is saved (m)
 // Dive-target geometry: the side zones aim at the reach of the far-dive clips
 // (`090_ground_deflect_far` / `090_high_deflect_far` in deflect/idle), which are the only deflect
