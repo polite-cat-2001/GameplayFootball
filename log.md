@@ -3108,3 +3108,22 @@ x86 `083bc33b…` → `dd8b7a33…`; сборка зелёная, `nettest` 60, 
 и штатная стойка. Константы пенальти не затронуты. Хеш не сдвинулся (`dd8b7a33…`). Сборка зелёная,
 `nettest` 60, `lanmatchtest` 42. Headless воспроизвести не удалось (сценарии уводили мяч в аут) —
 см. [[открытые-вопросы]], [[матч]], [[константы]].
+
+## [2026-10-03] fix | #33: вратарь на пенальти встаёт с земли (stand_up_from_front)
+
+Полевой отзыв: после нырка на пенальти вратарь мгновенно вставал вертикально без анимации. Разбор:
+дальние dive-клипы заканчиваются `<outgoing_special_state>lay_front</outgoing_special_state>`, а
+`movement_special/idle/special/000_stand_up_from_front.anim` начинается с `incoming_special_state =
+lay_front` — связка штатная (как после сейва/подката). Но **idle-варианты** дальнего нырка
+(`deflect/idle/000_high_deflect_*`) в отличие от walk-вариантов (`090_*`) не имели
+`outgoing_special_state`, поэтому движок не мог выбрать вставание и телепортировал вратаря в стойку.
+
+- Добавлен тег `lay_front` в `data/media/animations/deflect/idle/000_high_deflect_far.anim`,
+  `000_high_deflect_close.anim`, `000_high_deflect_sideclose.anim`.
+- `Match::UpdatePenaltyDefense` снимает `divePending` (прекращает ручной сдвиг тела) ровно когда
+  deflect-клип заканчивается, а `IsPenaltyKeeperDown` (новое, по `wasDiving`) удерживает контроль до
+  конца вставания; `ElizaController` в этот момент просто отдаёт обычную movement-команду.
+
+Headless: после `deflect` проигрывается `000_stand_up_from_front` от начала до конца, сейв/гол не
+сломаны. Хеш Windows x86 `dd8b7a33…` → `4b357ee4…` (добавлен `wasDiving` в `ProcessState`); сборка
+зелёная, `nettest` 60, `lanmatchtest` 42. Эталоны — #40. См. [[матч]], [[открытые-вопросы]].
