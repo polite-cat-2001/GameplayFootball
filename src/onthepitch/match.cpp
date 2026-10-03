@@ -1340,6 +1340,7 @@ void Match::ProcessState(EnvState *state) {
     state->process(penaltyDefense[t].divePending);
     state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
+    state->process(penaltyDefense[t].diveClipTarget);
   }
 }
 
@@ -2316,15 +2317,20 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
   p.diveTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, lateral,
                                              penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
+  // Clip target aims at the far-dive clips' natural touch so the animator picks a real lunge.
+  const bool lowBand = (zone == e_KeeperDiveZone_LowL || zone == e_KeeperDiveZone_LowR);
+  const float clipLateral = lowBand ? penaltyKeeperDiveClipLateralLow : penaltyKeeperDiveClipLateralHigh;
+  p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
+                                                 penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
 }
 
-bool Match::GetPenaltyDive(int teamID, Vector3 &target) {
+bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
   if (teamID < 0 || teamID >= 2) return false;
   PenaltyDefense &p = penaltyDefense[teamID];
   if (!p.divePending) return false;
-  target = p.diveTarget;
+  target = p.diveClipTarget;
   return true;
 }
 

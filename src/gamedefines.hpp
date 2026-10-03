@@ -180,7 +180,11 @@ const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the di
 // anims whose touch frame is late enough for a struck penalty. Low dives reach wider than high.
 // The dive target is the near post of the chosen half, so a correct side guess covers the whole
 // side. Low and high differ only in the clip/pose; the body reaches the same width.
-const float penaltyKeeperDiveLateral = 3.2f;       // representative lateral offset of a side zone (m)
+const float penaltyKeeperDiveLateral = 3.2f;       // positional target lateral of a side zone (m)
+// Clip-selection point: the natural touch of the far-dive clips (`090_ground_deflect_far` 2.53/0.11,
+// `090_high_deflect_far` 1.26/2.09), so the animator picks that lunge instead of a close catch.
+const float penaltyKeeperDiveClipLateralLow = 2.5f;
+const float penaltyKeeperDiveClipLateralHigh = 1.26f;
 const float penaltyKeeperDiveLowY = 0.11f;         // representative height of a low side zone (m)
 const float penaltyKeeperDiveHighY = 2.09f;        // representative height of a high side zone (m)
 const float penaltyKeeperHighThreshold = 1.1f;     // crossing height above which a zone reads HIGH
@@ -310,6 +314,8 @@ struct TouchInfo {
     aimLateral = 0;
     aimSpeed = 0;
     forceTouch = false;
+    useSyntheticBallTarget = false;
+    syntheticBallTarget = Vector3(0);
   }
 
   Vector3         inputDirection;
@@ -353,6 +359,11 @@ struct TouchInfo {
   // state, so the held ball cannot be glued to the animation's contact point. Never set by normal
   // outfield commands.
   bool            forceTouch;
+
+  // Penalty dive (spec 2026-09-29 §9, #33): pick the dive clip from a synthetic ball point at the
+  // zone's far edge instead of the real ball, so the deflect animator chooses the far lunge clip.
+  bool            useSyntheticBallTarget;
+  Vector3         syntheticBallTarget;
 
 };
 

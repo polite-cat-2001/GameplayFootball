@@ -313,26 +313,11 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   }
 
   else if (match->IsInPlay() && !match->IsInSetPiece() && CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK) {
-    // Penalty dive (#33): the zone was latched at the touch. Drive the body at it with the normal
-    // locomotion as the only command this tick, so nothing (interfere / ball control) steals the
-    // keeper; the ball-body collision then decides the save.
-    Vector3 penaltyDiveTarget;
-    if (match->GetPenaltyDive(team->GetID(), penaltyDiveTarget)) {
-      PlayerCommand command;
-      command.desiredFunctionType = e_FunctionType_Movement;
-      command.useDesiredMovement = true;
-      Vector3 toTarget = (penaltyDiveTarget - CastPlayer()->GetPosition()).Get2D();
-      if (toTarget.GetLength() > 0.3f) {
-        command.desiredDirection = toTarget.GetNormalized(CastPlayer()->GetDirectionVec());
-        command.desiredVelocityFloat = sprintVelocity;
-      } else {
-        command.desiredDirection = CastPlayer()->GetDirectionVec();
-        command.desiredVelocityFloat = idleVelocity; // keep the lunge pose but stop driving
-      }
-      command.useDesiredLookAt = true;
-      command.desiredLookAt = CastPlayer()->GetPosition() + command.desiredDirection * 10.0f;
-      commandQueue.push_back(command);
-      _SetInput(command.desiredDirection, command.desiredVelocityFloat);
+    // Penalty dive (#33): play the far dive clip picked from the zone point; the body slide
+    // (Match::DrivePenaltyDive) carries it to the zone and Match::TryPenaltyDiveSave resolves the save.
+    Vector3 penaltyDiveTarget, diveClipTarget;
+    if (match->GetPenaltyDiveClipTarget(team->GetID(), diveClipTarget)) {
+      _KeeperDeflectCommand(commandQueue, false, true, diveClipTarget);
       return;
     }
 
