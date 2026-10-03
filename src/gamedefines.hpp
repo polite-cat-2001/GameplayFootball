@@ -159,10 +159,12 @@ const float keeperHandThrowPeak = 2.5f;        // overhand throw arc peak height
 const float keeperHandsVelocityFloat = 0.85f;  // movement speed while holding, as a share of sprint
 const float keeperClearSpeed = 26.0f;          // forced centre clear horizontal speed (m/s)
 const float keeperClearLift = 10.0f;           // forced centre clear vertical launch (m/s)
-const float keeperClearSpeedMinFactor = 0.6f;  // directed clear speed = min..max * keeperClearSpeed
-const float keeperClearSpeedMaxFactor = 1.4f;
-const float keeperDropFeetOffset = 0.5f;       // "to feet" ball offset ahead of the keeper (m)
-const float keeperDropFeetHeight = 0.11f;      // "to feet" ball height on the turf (m)
+const float keeperKickLoft = 4.0f;             // directed foot clear arc peak height (m)
+// Ball offset ahead of the keeper before a foot distribution. Must match the forward idle shot /
+// highpass animations' touch offset (0.88-0.99 m) plus their root run-in, otherwise the touch anim
+// is not selected (see #32).
+const float keeperDropFeetOffset = 0.9f;
+const float keeperDropFeetHeight = 0.11f;      // ball height on the turf for a drop / "to feet" (m)
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
@@ -282,6 +284,7 @@ struct TouchInfo {
     useAimTarget = false;
     aimLateral = 0;
     aimSpeed = 0;
+    forceTouch = false;
   }
 
   Vector3         inputDirection;
@@ -319,6 +322,12 @@ struct TouchInfo {
   bool            useAimTarget;
   float           aimLateral; // y offset from the goal centre (m)
   float           aimSpeed;   // horizontal launch speed (m/s)
+
+  // Keeper distribution (#32): a foot kick from the hands lays the ball a fixed distance ahead and
+  // forces the touch on the animation's touch frame -- the shot/highpass anims carry no retain
+  // state, so the held ball cannot be glued to the animation's contact point. Never set by normal
+  // outfield commands.
+  bool            forceTouch;
 
 };
 

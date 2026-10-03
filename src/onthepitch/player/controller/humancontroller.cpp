@@ -102,6 +102,16 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
   if (actionMode == 2) {
 
+    // Keeper foot-to-centre (Shot) is instant: drop the ball and kick as soon as the action is
+    // requested, without waiting for a charge (spec §8, #32).
+    if (_IsKeeperHands() && actionButton == e_ButtonFunction_Shot) {
+      _KeeperDistributionCommand(commandQueue);
+      actionMode = 0;
+      gauge_ms = 0;
+      actionBufferTime_ms = 0;
+      return;
+    }
+
     if (!hid->GetButton(actionButton) ||
         (hid->GetButton(actionButton) && gauge_ms > 500) || // allow anim to kick in before queue is complete (before button is released), it will usually touch ball after the remaining time anyway, so we still have time to add more power, yet still respond as fast as possible
         (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0)) {
@@ -505,7 +515,8 @@ void HumanController::Process() {
       }
 
       if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot)) {
-        match->KeeperClearCenter(team->GetID());
+        actionMode = 2;
+        actionButton = e_ButtonFunction_Shot;
       }
 
       if (hid->GetButton(e_ButtonFunction_LongPass) && !hid->GetPreviousButtonState(e_ButtonFunction_LongPass)) {
@@ -716,6 +727,27 @@ float HumanController::_KeeperChargeRatio() const {
 void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueue) {
   float chargeRatio = _KeeperChargeRatio();
 
+  // Foot-to-centre (Shot): drop the ball, then play a normal shot whose planned launch is the
+  // centre clearance (spec §8.4). forceTouch makes the existing shot clip strike the dropped ball.
+  if (actionButton == e_ButtonFunction_Shot) {
+    match->KeeperPrepareDropKick(team->GetID());
+    Vector3 direction(-team->GetSide(), 0, 0); // toward the centre of the pitch
+    PlayerCommand command;
+    command.desiredFunctionType = e_FunctionType_Shot;
+    command.useDesiredMovement = false;
+    command.useDesiredLookAt = false;
+    command.desiredVelocityFloat = 0.0f;
+    command.touchInfo.inputDirection = direction;
+    command.touchInfo.desiredDirection = direction;
+    command.touchInfo.autoDirectionBias = 0.0f;
+    command.touchInfo.shotType = e_ShotType_Normal;
+    command.touchInfo.useSetPieceLaunch = true;
+    command.touchInfo.setPieceLaunch = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
+    command.touchInfo.forceTouch = true;
+    commandQueue.push_back(command);
+    return;
+  }
+
   // Outfield teammates in front of the keeper, scored by direction x distance band (spec §8.8).
   std::vector<Vector3> candidates;
   std::vector<Player*> candidatePlayers;
@@ -734,10 +766,27 @@ void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueu
   Player *target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
 
   if (actionButton == e_ButtonFunction_HighPass) {
-    // Directed foot clear (spec §8.4, #32): stick direction, charge = distance, hand off to the
-    // aimed addressee when there is one (spec §8.7). Launched directly: the kick anims carry no
-    // retain state, so a held-ball kick animation is not available.
-    match->KeeperClearDirected(team->GetID(), aim, chargeRatio, target);
+    // Directed foot clear (spec §8.4, #32): drop the ball and play a normal high pass toward the
+    // stick direction; charge sets the pace and the target band, the addressee gets the handoff
+    // (spec §8.7). forceTouch makes the highpass clip strike the dropped ball.
+    match->KeeperPrepareDropKick(team->GetID());
+    PlayerCommand command;
+    command.desiredFunctionType = e_FunctionType_HighPass;
+    command.useDesiredMovement = false;
+    command.useDesiredLookAt = false;
+    command.touchInfo.inputDirection = aim;
+    command.touchInfo.inputPower = clamp(0.2f + chargeRatio * 0.6f, 0.2f, 0.8f);
+    command.touchInfo.desiredDirection = aim;
+    command.touchInfo.desiredPower = command.touchInfo.inputPower;
+    command.touchInfo.autoDirectionBias = 0.0f;
+    command.touchInfo.autoPowerBias = 0.0f;
+    command.touchInfo.aimHeight = keeperKickLoft;
+    command.touchInfo.useAimHeight = true;
+    command.touchInfo.targetPlayer = target;
+    command.touchInfo.forcedTargetPlayer = target;
+    command.touchInfo.forceTouch = true;
+    commandQueue.push_back(command);
+    if (target) team->SelectPlayer(target); // hand off to the addressee (spec §8.7)
     return;
   }
 

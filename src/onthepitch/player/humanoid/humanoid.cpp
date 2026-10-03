@@ -420,7 +420,11 @@ void Humanoid::Process() {
     bumpyRideBias = curve(bumpyRideBias, 0.5f);
     Vector3 currentBallVec = match->GetBall()->GetMovement();
 
-    if (fullBallDistance < touchableDistance && fabs(desiredBallHeight - match->GetBall()->Predict(0).coords[2]) < 1.0f) {
+    // Keeper foot distribution (#32): force the contact on the animation's touch frame even if the
+    // dropped ball is a little off the animation's ideal spot, so the existing kick clip still
+    // strikes it.
+    bool forceTouch = currentAnim->originatingCommand.touchInfo.forceTouch;
+    if ((fullBallDistance < touchableDistance || forceTouch) && fabs(desiredBallHeight - match->GetBall()->Predict(0).coords[2]) < 1.0f) {
 
       radian nextBodyAngle = startAngle + currentAnim->anim->GetOutgoingAngle() + currentAnim->anim->GetOutgoingBodyAngle() + currentAnim->rotationSmuggle.end;
 
@@ -1716,21 +1720,21 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   else if (command.desiredFunctionType == e_FunctionType_BallControl) {
     if (NeedTouch(*dataSet.begin(), command)) {
       float hasteFactor = GetHasteFactor(false);
-      selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot);
+      selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
     }
   }
   else if (command.desiredFunctionType == e_FunctionType_Trap ||
            command.desiredFunctionType == e_FunctionType_Interfere ||
            command.desiredFunctionType == e_FunctionType_Deflect) {
     float hasteFactor = GetHasteFactor(false);
-    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot);
+    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
   }
   else if (command.desiredFunctionType == e_FunctionType_ShortPass ||
            command.desiredFunctionType == e_FunctionType_LongPass ||
            command.desiredFunctionType == e_FunctionType_HighPass ||
            command.desiredFunctionType == e_FunctionType_Shot) {
     float hasteFactor = GetHasteFactor(false);
-    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim);
+    selectedAnimID = GetBestCheatableAnimID(dataSet, command.useDesiredMovement, command.desiredDirection, command.desiredVelocityFloat, command.useDesiredLookAt, desiredBodyDirectionRel, positions_tmp, touchFrame_tmp, radiusOffset_tmp, touchPos_tmp, fullActionSmuggle_tmp, actionSmuggle_tmp, rotationSmuggle_tmp, hasteFactor, localInterruptAnim, preferPassAndShot, command.touchInfo.forceTouch);
 /*
     if (player->GetDebug()) {
       if (CastPlayer()->AllowLastDitch()) printf("  * lastditch allowed\n");
@@ -2031,7 +2035,7 @@ float Humanoid::GetBodyBallDistanceAdvantage(const Animation *anim, e_FunctionTy
   return result;
 }
 
-signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool useDesiredMovement, const Vector3 &desiredDirection, float desiredVelocityFloat, bool useDesiredBodyDirection, const Vector3 &desiredBodyDirectionRel, std::vector<Vector3> &positions_ret, int &animTouchFrame_ret, float &radiusOffset_ret, Vector3 &touchPos_ret, Vector3 &fullActionSmuggle_ret, Vector3 &actionSmuggle_ret, radian &rotationSmuggle_ret, float hasteFactor, e_InterruptAnim localInterruptAnim, bool preferPassAndShot) const {
+signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool useDesiredMovement, const Vector3 &desiredDirection, float desiredVelocityFloat, bool useDesiredBodyDirection, const Vector3 &desiredBodyDirectionRel, std::vector<Vector3> &positions_ret, int &animTouchFrame_ret, float &radiusOffset_ret, Vector3 &touchPos_ret, Vector3 &fullActionSmuggle_ret, Vector3 &actionSmuggle_ret, radian &rotationSmuggle_ret, float hasteFactor, e_InterruptAnim localInterruptAnim, bool preferPassAndShot, bool forceTouch) const {
 
   // never allow touchanims when someone else is holding the ball in his/her hands
   if (match->GetBallRetainer() != 0 && match->GetBallRetainer() != player) return -1;
@@ -2249,7 +2253,7 @@ signed int Humanoid::GetBestCheatableAnimID(const DataSet &sortedDataSet, bool u
         float touchFramedRadiusFactor = radiusFactor * touchFrameFactor;
         float bodyBallDistanceAdvantage = GetBodyBallDistanceAdvantage(anim, functionType, animTouchMovement, touchMovement, incomingMovement, adaptedOutgoingMovement, predictedAngle, bodyPos, FFO, animBallPos.Get2D(), ballPos.Get2D(), ballMovement.Get2D(), touchFramedRadiusFactor, radiusCheatOffset, 1.0f, debug);
 
-        if (bodyBallDistanceAdvantage >= 1.0f || match->GetBallRetainer() == player) {
+        if (bodyBallDistanceAdvantage >= 1.0f || match->GetBallRetainer() == player || forceTouch) {
 
           //SetGreenDebugPilon(spatialState.position + animBallPos.GetRotated2D(spatialState.angle));
 
