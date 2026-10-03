@@ -159,10 +159,8 @@ const float keeperHandThrowPeak = 2.5f;        // overhand throw arc peak height
 const float keeperHandsVelocityFloat = 0.85f;  // movement speed while holding, as a share of sprint
 const float keeperClearSpeed = 26.0f;          // forced centre clear horizontal speed (m/s)
 const float keeperClearLift = 10.0f;           // forced centre clear vertical launch (m/s)
-const float keeperClearSpeedMinFactor = 0.6f;  // directed clear speed = min..max * keeperClearSpeed
-const float keeperClearSpeedMaxFactor = 1.4f;
-const float keeperDropFeetOffset = 0.5f;       // "to feet" ball offset in front of the keeper (m)
-const float keeperDropFeetHeight = 0.11f;      // "to feet" ball height, resting on the turf (m)
+const float keeperDropFeetOffset = 0.5f;       // drop-kick / "to feet" ball offset ahead of the keeper (m)
+const float keeperDropFeetHeight = 0.11f;      // drop-kick / "to feet" ball height on the turf (m)
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 

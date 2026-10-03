@@ -2276,23 +2276,16 @@ Player *Match::GetNearestOutfieldPlayer(int teamID, const Vector3 &position) {
   return best;
 }
 
-void Match::KeeperReleaseBall(int teamID, const Vector3 &velocity, Player *addressee) {
-  Player *goalie = teams[teamID]->GetGoalie();
-  if (!goalie) return;
-
+void Match::KeeperReleaseBall(int teamID, const Vector3 &velocity) {
   ball->Touch(velocity);
   SetBallRetainer(0);
   keeperStates[teamID] = e_KeeperState_Returning;
 
-  // Hand control to the addressee (manual distribution, spec §8.7); otherwise to the teammate
-  // nearest the predicted landing point (the 6-second auto-clear, spec §8.6).
-  if (addressee) {
-    teams[teamID]->SelectPlayer(addressee);
-  } else {
-    Vector3 landing = keeperlogic::PredictLandingPoint(ball->Predict(0), velocity, _default_Shot_Gravity);
-    Player *nearest = GetNearestOutfieldPlayer(teamID, landing);
-    if (nearest) teams[teamID]->SelectPlayer(nearest);
-  }
+  // Hand control to the teammate nearest the predicted landing point (the 6-second auto-clear,
+  // spec §8.6). Manual distributions hand off from their controller/touch instead.
+  Vector3 landing = keeperlogic::PredictLandingPoint(ball->Predict(0), velocity, _default_Shot_Gravity);
+  Player *nearest = GetNearestOutfieldPlayer(teamID, landing);
+  if (nearest) teams[teamID]->SelectPlayer(nearest);
 }
 
 void Match::KeeperClearCenter(int teamID) {
@@ -2303,14 +2296,20 @@ void Match::KeeperClearCenter(int teamID) {
   KeeperReleaseBall(teamID, velocity);
 }
 
-void Match::KeeperClearDirected(int teamID, const Vector3 &aimDirection, float chargeRatio,
-                                Player *addressee) {
+void Match::KeeperPrepareDropKick(int teamID) {
+  Player *goalie = teams[teamID]->GetGoalie();
+  if (!goalie) return;
+
+  // A foot distribution is a drop-kick (spec §8.4): release the hands and lay the ball on the
+  // turf in front of the keeper, so the normal Shot/HighPass animation can strike it. UpdateKeeperState
+  // then sees the lost retain and moves the keeper to Returning.
   signed int side = teams[teamID]->GetSide();
-  Vector3 direction = aimDirection.Get2D().GetNormalized(Vector3(-side, 0, 0));
-  float speedFactor = keeperClearSpeedMinFactor +
-                      (keeperClearSpeedMaxFactor - keeperClearSpeedMinFactor) * clamp(chargeRatio, 0.0f, 1.0f);
-  Vector3 velocity = direction * (keeperClearSpeed * speedFactor) + Vector3(0, 0, keeperClearLift);
-  KeeperReleaseBall(teamID, velocity, addressee);
+  Vector3 forward = goalie->GetDirectionVec().Get2D().GetNormalized(Vector3(-side, 0, 0));
+  Vector3 to = goalie->GetPosition() + forward * keeperDropFeetOffset;
+  to.coords[2] = keeperDropFeetHeight;
+  SetBallRetainer(0);
+  ball->SetPosition(to);
+  ball->Touch(Vector3(0));
 }
 
 void Match::KeeperDropToFeet(int teamID) {
