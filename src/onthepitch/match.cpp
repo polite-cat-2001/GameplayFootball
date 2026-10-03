@@ -2234,9 +2234,9 @@ void Match::UpdateKeeperState() {
           keeperStates[t] = e_KeeperState_Returning;
           ReleaseKeeperControl(t);
         } else if (actualTime_ms - keeperHandsStart_ms[t] >= (unsigned long)keeperSixSecond_ms) {
-          // Six-second rule: the host forces a clearance to the centre and hands control to the
-          // teammate nearest the landing point (spec §8.6, #32).
-          KeeperClearCenter(t);
+          // Six seconds are up: the keeper puts the ball down at his feet and carries on as a
+          // field player (Hands -> Outfield) instead of hoofing it away (spec §8.6, #32).
+          KeeperDropToFeet(t);
         }
         break;
 
@@ -2293,26 +2293,6 @@ void Match::ReleaseKeeperControl(int teamID) {
   if (!target || target == goalie || target->GetFormationEntry().role == e_PlayerRole_GK)
     target = GetNearestOutfieldPlayer(teamID, ball->Predict(0).Get2D());
   if (target) teams[teamID]->SelectPlayer(target);
-}
-
-void Match::KeeperReleaseBall(int teamID, const Vector3 &velocity) {
-  ball->Touch(velocity);
-  SetBallRetainer(0);
-  keeperStates[teamID] = e_KeeperState_Returning;
-
-  // Hand control to the teammate nearest the predicted landing point (the 6-second auto-clear,
-  // spec §8.6). Manual distributions hand off from their controller/touch instead.
-  Vector3 landing = keeperlogic::PredictLandingPoint(ball->Predict(0), velocity, _default_Shot_Gravity);
-  Player *nearest = GetNearestOutfieldPlayer(teamID, landing);
-  if (nearest) teams[teamID]->SelectPlayer(nearest);
-}
-
-void Match::KeeperClearCenter(int teamID) {
-  signed int side = teams[teamID]->GetSide();
-  // Own goal sits at x = side * pitchHalfW, so the centre of the pitch is towards -side.
-  Vector3 direction(-side, 0, 0);
-  Vector3 velocity = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
-  KeeperReleaseBall(teamID, velocity);
 }
 
 void Match::KeeperPrepareDropKick(int teamID) {

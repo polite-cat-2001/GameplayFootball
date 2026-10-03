@@ -286,11 +286,10 @@ class Match {
       return state == e_KeeperState_Hands || state == e_KeeperState_Outfield;
     }
 
-    // Keeper distribution (spec 2026-09-29 §8, #32). Host-side: the forced centre clear (six
-    // seconds) launches the ball directly; the human foot distributions drop the ball for a normal
-    // Shot/HighPass kick command (with a forced touch, see TouchInfo::forceTouch) and "to feet"
-    // hands the keeper to the outfield mode.
-    void KeeperClearCenter(int teamID);
+    // Keeper distribution (spec 2026-09-29 §8, #32). Host-side: the foot distributions drop the
+    // ball for a normal Shot/HighPass kick command (with a forced touch, see
+    // TouchInfo::forceTouch); "to feet" and the six-second timeout put it at the keeper's feet so
+    // he carries on as a field player.
     void KeeperPrepareDropKick(int teamID);
     void KeeperDropToFeet(int teamID);
 
@@ -391,9 +390,6 @@ class Match {
     void CalculateBestPossessionTeamID();
     // Advance the per-team keeper state machine (open play only); called once per Process tick.
     void UpdateKeeperState();
-    // Launch the retained ball with `velocity`, drop the retain and hand control to the teammate
-    // nearest the predicted landing point (the six-second auto-clear, spec §8.6, #32).
-    void KeeperReleaseBall(int teamID, const Vector3 &velocity);
     // Nearest active outfield teammate (keeper excluded) to a position; null when there is none.
     Player *GetNearestOutfieldPlayer(int teamID, const Vector3 &position);
     // On entering Returning, hand control from the human keeper to a field player so the AI runs
