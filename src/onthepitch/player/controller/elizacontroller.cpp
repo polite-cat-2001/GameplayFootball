@@ -256,6 +256,30 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   }
 
 
+  // penalty defense (spec 2026-09-29 §9, #33): the keeper stays AI, but the human's raw stick is a
+  // side channel. While the taker prepares, the X axis drifts him along the line; the dive itself
+  // is latched on the touch and issued through the keeper path below once the set piece ends.
+
+  else if (match->IsDefendingPenalty(team->GetID()) &&
+           CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK) {
+
+    PlayerCommand command;
+    command.desiredFunctionType = e_FunctionType_Movement;
+    command.useDesiredMovement = true;
+    float side = team->GetSide();
+    Vector3 lineTarget(side * (pitchHalfW - penaltyKeeperLineDepth), match->GetPenaltyKeeperLateral(team->GetID()), 0.0f);
+    Vector3 toTarget = lineTarget - CastPlayer()->GetPosition();
+    command.desiredDirection = toTarget.GetNormalized(CastPlayer()->GetDirectionVec());
+    command.desiredVelocityFloat = clamp(toTarget.GetLength() * distanceToVelocityMultiplier, idleVelocity, penaltyKeeperStepSpeed);
+    command.useDesiredLookAt = true;
+    command.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+    commandQueue.push_back(command);
+    _SetInput(command.desiredDirection, command.desiredVelocityFloat);
+
+    return;
+  }
+
+
   // default strategies for defensively, midfielders and offensively positioned players
 
   else if (match->IsInPlay() && !match->IsInSetPiece() && match->GetBallRetainer() != player && match->GetDesignatedPossessionPlayer() != player && CastPlayer()->GetFormationEntry().role != e_PlayerRole_GK) { //(match->GetDesignatedPossessionPlayer() != player || (CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK && !CastPlayer()->HasPossession()))) {
@@ -303,7 +327,11 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
       bool onlyPickupAnims = false;
       if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
-      _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
+      // Penalty dive (#33): the zone was latched at the touch; consume it once and steer the
+      // deflect path at the picked zone (or the real crossing on a correct guess).
+      Vector3 diveTarget;
+      bool penaltyDive = match->ConsumePenaltyDive(team->GetID(), diveTarget);
+      _KeeperDeflectCommand(commandQueue, onlyPickupAnims, penaltyDive, diveTarget);
     } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
     }

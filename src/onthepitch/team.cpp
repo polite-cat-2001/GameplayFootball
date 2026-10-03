@@ -259,6 +259,11 @@ void Team::GetActivePlayers(std::vector<Player*> &activePlayers) {
   }
 }
 
+IHIDevice *Team::GetHumanGamerDevice(int index) const {
+  if (index < 0 || index >= (signed int)humanGamers.size()) return 0;
+  return humanGamers.at(index)->GetHIDevice();
+}
+
 void Team::AddHumanGamer(IHIDevice *hid, e_PlayerColor color) {
   HumanGamer *humanGamer = new HumanGamer(this, hid, color);
 

@@ -64,4 +64,57 @@ int SelectDistributionTarget(const std::vector<Vector3> &candidates, const Vecto
   return best;
 }
 
+e_KeeperDiveZone StickToDiveZone(float stickX, float stickY, float deadzone) {
+  if (std::sqrt(stickX * stickX + stickY * stickY) < deadzone) return e_KeeperDiveZone_Center;
+  const bool right = stickX >= 0.0f;
+  const bool high = stickY > 0.0f;
+  if (right) return high ? e_KeeperDiveZone_HighR : e_KeeperDiveZone_LowR;
+  return high ? e_KeeperDiveZone_HighL : e_KeeperDiveZone_LowL;
+}
+
+e_KeeperDiveZone RandomDiveZone() {
+  const float r = random(0.0f, 1.0f);
+  float acc = 0.0f;
+  acc += penaltyKeeperZoneWeightLow;
+  if (r < acc) return e_KeeperDiveZone_LowL;
+  acc += penaltyKeeperZoneWeightLow;
+  if (r < acc) return e_KeeperDiveZone_LowR;
+  acc += penaltyKeeperZoneWeightHigh;
+  if (r < acc) return e_KeeperDiveZone_HighL;
+  acc += penaltyKeeperZoneWeightHigh;
+  if (r < acc) return e_KeeperDiveZone_HighR;
+  acc += penaltyKeeperZoneWeightCenter;
+  if (r < acc) return e_KeeperDiveZone_Center;
+  return e_KeeperDiveZone_Center; // float remainder (weights sum to 1)
+}
+
+e_KeeperDiveZone BallFlightZone(float worldLateral, float height, int takerSide,
+                                float goalHalfWidth, float goalHeight,
+                                float centerBand, float highThreshold) {
+  if (std::fabs(worldLateral) > goalHalfWidth || height < 0.0f || height > goalHeight) {
+    return e_KeeperDiveZone_OffTarget;
+  }
+  if (std::fabs(worldLateral) <= centerBand) return e_KeeperDiveZone_Center;
+  const bool right = (worldLateral * takerSide) > 0.0f;
+  const bool high = height > highThreshold;
+  if (right) return high ? e_KeeperDiveZone_HighR : e_KeeperDiveZone_LowR;
+  return high ? e_KeeperDiveZone_HighL : e_KeeperDiveZone_LowL;
+}
+
+Vector3 DiveZoneTarget(e_KeeperDiveZone zone, float planeX, int takerSide,
+                       float lateral, float lowY, float highY, float centerY) {
+  float worldY = 0.0f;
+  float height = centerY;
+  switch (zone) {
+    case e_KeeperDiveZone_LowL: worldY = -takerSide * lateral; height = lowY; break;
+    case e_KeeperDiveZone_HighL: worldY = -takerSide * lateral; height = highY; break;
+    case e_KeeperDiveZone_LowR: worldY = takerSide * lateral; height = lowY; break;
+    case e_KeeperDiveZone_HighR: worldY = takerSide * lateral; height = highY; break;
+    case e_KeeperDiveZone_Center:
+    case e_KeeperDiveZone_OffTarget:
+    default: worldY = 0.0f; height = centerY; break;
+  }
+  return Vector3(planeX, worldY, height);
+}
+
 } // namespace keeperlogic

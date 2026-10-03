@@ -38,7 +38,7 @@ class PlayerController : public IController {
     float CouldWinABallDuelLikeliness();
     virtual void _Preprocess();
     virtual void _SetInput(const Vector3 &inputDirection, float inputVelocityFloat) { this->inputDirection = inputDirection; this->inputVelocityFloat = inputVelocityFloat; }
-    virtual void _KeeperDeflectCommand(PlayerCommandQueue &commandQueue, bool onlyPickupAnims = false);
+    virtual void _KeeperDeflectCommand(PlayerCommandQueue &commandQueue, bool onlyPickupAnims = false, bool penaltyDive = false, const Vector3 &syntheticBallTarget = Vector3(0));
     virtual void _SetPieceCommand(PlayerCommandQueue &commandQueue);
     virtual void _BallControlCommand(PlayerCommandQueue &commandQueue, bool idleTurnToOpponentGoal = false, bool knockOn = false, bool stickyRunDirection = false, bool keepCurrentBodyDirection = false);
     virtual void _TrapCommand(PlayerCommandQueue &commandQueue, bool idleTurnToOpponentGoal = false, bool knockOn = false);

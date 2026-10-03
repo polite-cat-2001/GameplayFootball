@@ -87,6 +87,19 @@ struct PlayerBounce {
   float force;
 };
 
+// Penalty defense (spec 2026-09-29 §9, #33), per defending team. The keeper is still AI; this is
+// the side channel his single path consumes: the human's raw stick while the taker prepares, and
+// the zone latched at the moment of the touch. `diveTarget` is the synthetic ball prediction fed
+// to the deflect path, carrying the keeper's body into the latched zone (into empty space when the
+// guess is wrong; at the real crossing lateral when it is right).
+struct PenaltyDefense {
+  PenaltyDefense() : active(false), lateral(0.0f), divePending(false), diveTarget() {}
+  bool active;
+  float lateral;       // world lateral offset along the goal line (m)
+  bool divePending;    // a latched dive not yet consumed by the keeper's controller
+  Vector3 diveTarget;
+};
+
 struct ReplayState {
   ReplayState() {
     dirty = false;
@@ -292,6 +305,19 @@ class Match {
     // goes through the normal on-ball logic once the ball has settled).
     void KeeperDropToFeet(int teamID);
 
+    // Penalty defense (spec 2026-09-29 §9, #33). Host-sim, per defending team.
+    // True while `teamID` is defending a live penalty: its keeper drifts along the line.
+    bool IsDefendingPenalty(int teamID) const {
+      return teamID >= 0 && teamID < 2 && penaltyDefense[teamID].active;
+    }
+    // Current lateral offset (world y) of the defending keeper's line position.
+    float GetPenaltyKeeperLateral(int teamID) const {
+      return (teamID >= 0 && teamID < 2) ? penaltyDefense[teamID].lateral : 0.0f;
+    }
+    // Consume the dive latched for `teamID` at the touch. Returns false when none is pending;
+    // otherwise sets `target` (the synthetic deflect point) and clears it.
+    bool ConsumePenaltyDive(int teamID, Vector3 &target);
+
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
     unsigned long GetIterations() const { return iterations.GetData(); }
@@ -389,6 +415,12 @@ class Match {
     void CalculateBestPossessionTeamID();
     // Advance the per-team keeper state machine (open play only); called once per Process tick.
     void UpdateKeeperState();
+    // Penalty defense (spec §9, #33): refresh the defending keepers' active flag and lateral
+    // drift each tick; commit the latched dive when the taker touches the ball.
+    void UpdatePenaltyDefense();
+    void CommitPenaltyDive(int takerTeamID);
+    // Raw stick of the first human gamer on `teamID`, if any (false for an AI team).
+    bool GetDefenderStick(int teamID, Vector3 &stick);
     // Nearest active outfield teammate (keeper excluded) to a position; null when there is none.
     Player *GetNearestOutfieldPlayer(int teamID, const Vector3 &position);
     // On entering Returning, hand control from the human keeper to a field player so the AI runs
@@ -487,6 +519,9 @@ class Match {
     // Time the keeper last put the ball down to his feet (Outfield); a short grace keeps him in
     // Outfield while the ball is still falling (HasPossession flickers false).
     unsigned long keeperDropStart_ms[2];
+
+    // Penalty defense (spec §9, #33), one entry per defending team.
+    PenaltyDefense penaltyDefense[2];
 
     std::vector<Substitution> pendingSubstitutions;
     std::vector<SubstitutionNotice> substitutionNotices;

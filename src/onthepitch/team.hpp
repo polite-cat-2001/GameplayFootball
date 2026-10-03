@@ -69,6 +69,8 @@ class Team {
     Player *GetRolePlayer(e_TeamRole role);
 
     unsigned int GetHumanGamerCount() const { return humanGamers.size(); }
+    // HID device of human gamer `index`, or null. Used by the penalty keeper side channel (#33).
+    IHIDevice *GetHumanGamerDevice(int index) const;
     void AddHumanGamer(IHIDevice *hid, e_PlayerColor color);
     void DeleteHumanGamers();
     e_PlayerColor GetPlayerColor(int playerID);

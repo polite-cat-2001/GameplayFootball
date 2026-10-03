@@ -163,6 +163,26 @@ const float keeperCenterClearPower = 1.0f;     // fixed power of the foot-to-cen
 // ball is still falling out of his hands (HasPossession is briefly false).
 const int keeperDropGrace_ms = 1000;
 
+// Penalty defense (spec 2026-09-29 §9, #33). The keeper stays under AI; the human's raw stick is a
+// side channel: before the touch the X axis drifts him along the line, on the touch the stick X+Y
+// picks one of five dive zones. The dive itself is a synthetic ball prediction fed to the normal
+// deflect path -- no new jump physics. All values in metres / metres-per-second.
+const float penaltyKeeperStepSpeed = 3.0f;         // lateral drift along the goal line before the kick
+const float penaltyKeeperStepMargin = 0.5f;        // keep this far off either post while drifting
+const float penaltyKeeperLineDepth = 0.5f;         // drift line sits this far in front of the goal line
+const float penaltyKeeperDiveLateral = 1.6f;       // representative lateral offset of a side zone
+                                                   // (kept within the deflect path's reach; the zone's
+                                                   // real extent only matters once a guess connects)
+const float penaltyKeeperDiveLowY = 0.4f;          // representative height of a low side zone
+const float penaltyKeeperDiveHighY = 1.9f;         // representative height of a high side zone
+const float penaltyKeeperHighThreshold = 1.1f;     // crossing height above which a zone reads HIGH
+const float penaltyKeeperCenterBand = 0.8f;        // |lateral| within this reads CENTER
+const float penaltyKeeperStickDeadzone = 0.15f;    // stick length below which the pick is CENTER
+// AI zone weights (symmetric): low 25% per side, high 12% per side, centre 26%.
+const float penaltyKeeperZoneWeightLow = 0.25f;
+const float penaltyKeeperZoneWeightHigh = 0.12f;
+const float penaltyKeeperZoneWeightCenter = 0.26f;
+
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 
 const unsigned int ballPredictionSize_ms = 3000;
@@ -282,6 +302,8 @@ struct TouchInfo {
     aimLateral = 0;
     aimSpeed = 0;
     forceTouch = false;
+    useSyntheticBallTarget = false;
+    syntheticBallTarget = Vector3(0);
   }
 
   Vector3         inputDirection;
@@ -325,6 +347,12 @@ struct TouchInfo {
   // state, so the held ball cannot be glued to the animation's contact point. Never set by normal
   // outfield commands.
   bool            forceTouch;
+
+  // Penalty dive (spec 2026-09-29 §9, #33): present the deflect path with a synthetic ball
+  // prediction instead of the real one, so the chosen dive clip and its action smuggle carry the
+  // keeper's body into the picked zone even when the real ball is elsewhere. Penalty-only.
+  bool            useSyntheticBallTarget;
+  Vector3         syntheticBallTarget;
 
 };
 
