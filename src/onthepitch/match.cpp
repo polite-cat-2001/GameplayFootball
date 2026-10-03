@@ -1335,8 +1335,6 @@ void Match::ProcessState(EnvState *state) {
 
   // Penalty defense (spec §9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
-    state->process(penaltyDefense[t].active);
-    state->process(penaltyDefense[t].lateral);
     state->process(penaltyDefense[t].divePending);
     state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
@@ -2247,30 +2245,10 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
 }
 
 void Match::UpdatePenaltyDefense() {
-  const int takerTeam = (IsInSetPiece() && setPieceType == e_SetPiece_Penalty) ? referee->GetBuffer().teamID : -1;
   for (int t = 0; t < 2; t++) {
+    // Stop driving a lunge once it has run its course.
     PenaltyDefense &p = penaltyDefense[t];
-    // Stop driving the lunge once it has run its course.
     if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
-    if (takerTeam == -1 || t == takerTeam) {
-      p.active = false;
-      continue;
-    }
-    if (!p.active) {
-      // New penalty: forget the previous drift.
-      p.lateral = 0.0f;
-    }
-    p.active = true;
-    // The human's raw stick drifts the keeper along the line; an AI team stays centred. The
-    // simulation tick is a fixed 10 ms (see Match::Process).
-    Vector3 stick;
-    if (GetDefenderStick(t, stick)) {
-      const int takerSide = teams[takerTeam]->GetSide();
-      const float dt_s = 0.01f;
-      p.lateral += stick.coords[0] * takerSide * penaltyKeeperStepSpeed * dt_s;
-      const float limit = goalHalfWidth - penaltyKeeperStepMargin;
-      p.lateral = clamp(p.lateral, -limit, limit);
-    }
   }
 }
 

@@ -163,15 +163,11 @@ const float keeperCenterClearPower = 1.0f;     // fixed power of the foot-to-cen
 // ball is still falling out of his hands (HasPossession is briefly false).
 const int keeperDropGrace_ms = 1000;
 
-// Penalty defense (spec 2026-09-29 §9, #33). The keeper stays under AI; the human's raw stick is a
-// side channel: before the touch the X axis drifts him along the line, on the touch the stick X+Y
-// picks one of five dive zones. The dive itself is a synthetic ball prediction fed to the normal
-// deflect path -- no new jump physics. All values in metres / metres-per-second.
-const float penaltyKeeperStepSpeed = 3.0f;         // lateral drift along the goal line before the kick
-const float penaltyKeeperStepMargin = 0.5f;        // keep this far off either post while drifting
-const float penaltyKeeperLineDepth = 0.5f;         // drift line sits this far in front of the goal line
-// The dive is a committed lunge: the body is driven at the zone by locomotion plus a direct
-// positional slide, so it is still there when the ball arrives (ball-body collision decides).
+// Penalty defense (spec 2026-09-29 §9, #33). The keeper stays under AI; on the taker's touch the
+// defending human's raw stick X+Y picks one of five dive zones. The dive plays a far deflect clip
+// while the body is driven at the zone. All values in metres / metres-per-second.
+// The dive is a committed lunge: the body is driven at the zone by a direct positional slide, so it
+// is still there when the ball arrives.
 const int penaltyKeeperDiveDuration_ms = 600;
 const float penaltyKeeperDiveSpeed = 8.0f;         // positional lunge speed toward the zone (m/s)
 const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the diving keeper is saved (m)

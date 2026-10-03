@@ -93,9 +93,7 @@ struct PlayerBounce {
 // to the deflect path, carrying the keeper's body into the latched zone (into empty space when the
 // guess is wrong; at the real crossing lateral when it is right).
 struct PenaltyDefense {
-  PenaltyDefense() : active(false), lateral(0.0f), divePending(false), diveUntil_ms(0), diveTarget(), diveClipTarget() {}
-  bool active;
-  float lateral;       // world lateral offset along the goal line (m)
+  PenaltyDefense() : divePending(false), diveUntil_ms(0), diveTarget(), diveClipTarget() {}
   bool divePending;    // the committed lunge is still running
   unsigned long diveUntil_ms; // when the lunge stops driving (host sim time)
   Vector3 diveTarget;      // positional target (body slide + save)
@@ -308,14 +306,6 @@ class Match {
     void KeeperDropToFeet(int teamID);
 
     // Penalty defense (spec 2026-09-29 §9, #33). Host-sim, per defending team.
-    // True while `teamID` is defending a live penalty: its keeper drifts along the line.
-    bool IsDefendingPenalty(int teamID) const {
-      return teamID >= 0 && teamID < 2 && penaltyDefense[teamID].active;
-    }
-    // Current lateral offset (world y) of the defending keeper's line position.
-    float GetPenaltyKeeperLateral(int teamID) const {
-      return (teamID >= 0 && teamID < 2) ? penaltyDefense[teamID].lateral : 0.0f;
-    }
     // The synthetic ball point that steers the dive-clip choice (far lunge) for the active lunge.
     bool GetPenaltyDiveClipTarget(int teamID, Vector3 &target);
 
