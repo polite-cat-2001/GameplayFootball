@@ -297,14 +297,14 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     if (CastPlayer() != match->GetDesignatedPossessionPlayer()) manualMovement = true;
     goalieStrategy->RequestInput(keeperMentalImage, manualMovementDirection, manualMovementVelocityFloat);
 
-    //if (boundForGoal && hasUniquePossession) printf("has unique possession, so no deflect anims (poss: %f)\n", possessionAmount);
-    if (!hasUniquePossession || possessionAmount < 3.4f) {
+    // Only a keeper already carrying the ball at his feet (Outfield) plays the ball with his feet.
+    // Otherwise he must go for the catch: a slow ball rolling in from an opponent used to read as
+    // "unique possession", which skipped the deflect/catch and made the AI volley it away (#32).
+    if (match->GetKeeperState(team->GetID()) != e_KeeperState_Outfield) {
       bool onlyPickupAnims = false;
       if (!boundForGoal && possessionAmount > 1.3f) onlyPickupAnims = true;
       _KeeperDeflectCommand(commandQueue, onlyPickupAnims);
-    }
-
-    if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
+    } else if (CastPlayer()->GetTimeNeededToGetToBall_ms() < 1000 && match->GetDesignatedPossessionPlayer() == player) {
       GetOnTheBallCommands(commandQueue, rawInputDirection, rawInputVelocityFloat);
     }
   }

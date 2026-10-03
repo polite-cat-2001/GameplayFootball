@@ -55,10 +55,12 @@ class HumanController : public PlayerController {
     void _SetPieceKickCommand(PlayerCommandQueue &commandQueue);
 
     // keeper distribution (spec 2026-09-29 §8, #32): true while this player is the keeper holding
-    // the ball (Hands). The hand throw is a throw-clip pass command; the foot actions launch the
-    // ball directly through Match. The charge is clamped to keeperDistChargeMax_ms.
+    // the ball (Hands). The hand throw uses the throw clip; a foot clear first drops the ball to
+    // the keeper's feet (gravity) and is then executed once it has settled.
     bool _IsKeeperHands();
+    bool _IsKeeperOutfield();
     void _KeeperDistributionCommand(PlayerCommandQueue &commandQueue);
+    void _KeeperClearKickCommand(PlayerCommandQueue &commandQueue);
     float _KeeperChargeRatio() const;
 
     IHIDevice *hid;
@@ -73,6 +75,14 @@ class HumanController : public PlayerController {
     int gauge_ms;
 
     e_ShotType pendingShotType;
+
+    // Keeper foot clear (#32): the ball is dropped on the button, then the intent (button, charge,
+    // direction, addressee) is executed through the normal kick path once the ball has settled.
+    bool keeperClearArmed;
+    e_ButtonFunction keeperClearButton;
+    float keeperClearCharge;
+    Vector3 keeperClearAim;
+    int keeperClearArmedTime_ms;
 
     // double-tap Sprint (knock-on) tracking
     int lastSprintTapTime_ms;

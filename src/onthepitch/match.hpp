@@ -286,11 +286,10 @@ class Match {
       return state == e_KeeperState_Hands || state == e_KeeperState_Outfield;
     }
 
-    // Keeper distribution (spec 2026-09-29 §8, #32). Host-side: the foot distributions drop the
-    // ball for a normal Shot/HighPass kick command (with a forced touch, see
-    // TouchInfo::forceTouch); "to feet" and the six-second timeout put it at the keeper's feet so
-    // he carries on as a field player.
-    void KeeperPrepareDropKick(int teamID);
+    // Keeper distribution (spec 2026-09-29 §8, #32). Host-side: release the ball from the hands so
+    // it drops to the keeper's feet under gravity and hand him to the Outfield mode. Used by the
+    // "to feet" action, the six-second timeout, and as the drop before a foot clear (the kick then
+    // goes through the normal on-ball logic once the ball has settled).
     void KeeperDropToFeet(int teamID);
 
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
@@ -485,6 +484,9 @@ class Match {
     e_KeeperState keeperStates[2];
     // Time the keeper caught the ball (start of the Hands state) for the 6-second rule.
     unsigned long keeperHandsStart_ms[2];
+    // Time the keeper last put the ball down to his feet (Outfield); a short grace keeps him in
+    // Outfield while the ball is still falling (HasPossession flickers false).
+    unsigned long keeperDropStart_ms[2];
 
     std::vector<Substitution> pendingSubstitutions;
     std::vector<SubstitutionNotice> substitutionNotices;

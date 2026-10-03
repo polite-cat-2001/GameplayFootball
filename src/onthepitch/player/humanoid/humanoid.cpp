@@ -421,10 +421,12 @@ void Humanoid::Process() {
     Vector3 currentBallVec = match->GetBall()->GetMovement();
 
     // Keeper foot distribution (#32): force the contact on the animation's touch frame even if the
-    // dropped ball is a little off the animation's ideal spot, so the existing kick clip still
+    // falling ball is off the animation's ideal spot / height, so the existing kick clip still
     // strikes it.
     bool forceTouch = currentAnim->originatingCommand.touchInfo.forceTouch;
-    if ((fullBallDistance < touchableDistance || forceTouch) && fabs(desiredBallHeight - match->GetBall()->Predict(0).coords[2]) < 1.0f) {
+    if (forceTouch ||
+        (fullBallDistance < touchableDistance &&
+         fabs(desiredBallHeight - match->GetBall()->Predict(0).coords[2]) < 1.0f)) {
 
       radian nextBodyAngle = startAngle + currentAnim->anim->GetOutgoingAngle() + currentAnim->anim->GetOutgoingBodyAngle() + currentAnim->rotationSmuggle.end;
 

@@ -147,6 +147,8 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   keeperStates[1] = e_KeeperState_None;
   keeperHandsStart_ms[0] = 0;
   keeperHandsStart_ms[1] = 0;
+  keeperDropStart_ms[0] = 0;
+  keeperDropStart_ms[1] = 0;
 
 
   // teams
@@ -1055,6 +1057,8 @@ void Match::ResetSituation(const Vector3 &focusPos) {
   keeperStates[1] = e_KeeperState_None;
   keeperHandsStart_ms[0] = 0;
   keeperHandsStart_ms[1] = 0;
+  keeperDropStart_ms[0] = 0;
+  keeperDropStart_ms[1] = 0;
   SetGoalScored(false);
   for (unsigned int i = 0; i < mentalImages.size(); i++) {
     delete mentalImages[i];
@@ -1325,6 +1329,7 @@ void Match::ProcessState(EnvState *state) {
   // Keeper layer state (spec §8, #31/#32): part of the deterministic simulation.
   for (int t = 0; t < 2; t++) state->process(keeperStates[t]);
   for (int t = 0; t < 2; t++) state->process(keeperHandsStart_ms[t]);
+  for (int t = 0; t < 2; t++) state->process(keeperDropStart_ms[t]);
 }
 
 void Match::Process() {
@@ -2224,6 +2229,7 @@ void Match::UpdateKeeperState() {
           keeperHandsStart_ms[t] = actualTime_ms;
         } else if (goalie->HasPossession()) {
           keeperStates[t] = e_KeeperState_Outfield;
+          keeperDropStart_ms[t] = actualTime_ms;
         }
         break;
 
@@ -2244,8 +2250,10 @@ void Match::UpdateKeeperState() {
         if (GetBallRetainer() == goalie) { // collected it
           keeperStates[t] = e_KeeperState_Hands;
           keeperHandsStart_ms[t] = actualTime_ms;
-        } else if (!goalie->HasPossession()) {
+        } else if (!goalie->HasPossession() &&
+                   actualTime_ms - keeperDropStart_ms[t] > (unsigned long)keeperDropGrace_ms) {
           // Passed, shot, cleared or lost the ball as a field player: run back to goal (spec §8.5).
+          // The grace lets a just-dropped ball fall from the hands to the feet first.
           keeperStates[t] = e_KeeperState_Returning;
           ReleaseKeeperControl(t);
         }
@@ -2295,35 +2303,13 @@ void Match::ReleaseKeeperControl(int teamID) {
   if (target) teams[teamID]->SelectPlayer(target);
 }
 
-void Match::KeeperPrepareDropKick(int teamID) {
-  Player *goalie = teams[teamID]->GetGoalie();
-  if (!goalie) return;
-
-  // Foot distribution (spec §8.4): release the hands and lay the ball where the shot/highpass
-  // animations expect their contact (keeperDropFeetOffset), in front of the keeper. UpdateKeeperState
-  // then sees the lost retain and moves the keeper to Returning.
-  signed int side = teams[teamID]->GetSide();
-  Vector3 forward = goalie->GetDirectionVec().Get2D().GetNormalized(Vector3(-side, 0, 0));
-  Vector3 to = goalie->GetPosition() + forward * keeperDropFeetOffset;
-  to.coords[2] = keeperDropFeetHeight;
-  SetBallRetainer(0);
-  ball->SetPosition(to);
-  ball->Touch(Vector3(0));
-}
-
 void Match::KeeperDropToFeet(int teamID) {
-  Player *goalie = teams[teamID]->GetGoalie();
-  if (!goalie) return;
-
+  // Put the ball down: release the retain and let it drop from the hands to the keeper's feet under
+  // gravity. Outfield carries him on as a field player; the grace keeps him there while it falls.
   SetBallRetainer(0);
-  // The ball is received with the feet as a field player (spec §8.5, #32): drop it low right in
-  // front of the keeper so he can carry on with the normal outfield dribble/pass/shot logic.
-  signed int side = teams[teamID]->GetSide();
-  Vector3 forward = goalie->GetDirectionVec().Get2D().GetNormalized(Vector3(-side, 0, 0));
-  Vector3 to = goalie->GetPosition() + forward * keeperDropFeetOffset;
-  to.coords[2] = keeperDropFeetHeight;
-  ball->SetPosition(to);
+  ball->Touch(Vector3(0));
   keeperStates[teamID] = e_KeeperState_Outfield;
+  keeperDropStart_ms[teamID] = actualTime_ms;
 }
 
 void Match::CheckHumanoidCollisions() {

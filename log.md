@@ -2976,3 +2976,21 @@ Share/`Tab`, host-authoritative смена фактического бьющег
 полевой игрок. `KeeperClearCenter` и `KeeperReleaseBall` удалены как неиспользуемые; константы
 `keeperClearSpeed`/`keeperClearLift` остались — их использует ручная ножная раздача в центр
 (`Shot`). Обновлены [[матч]], [[константы]]. Сборка и тесты зелёные, хеш `4305b934…`.
+
+## [2026-10-02] feat | #32: мяч падает в ноги под гравитацией, удар — по намерению после падения
+
+По идее владельца убрал телепорт мяча. Теперь:
+- кнопка ножной раздачи (`Shot`/`HighPass`) сначала **роняет мяч из рук** (`Match::KeeperDropToFeet`:
+  `SetBallRetainer(0)` + `Outfield` + грация `keeperDropGrace_ms`), без `SetPosition`;
+- `HumanController` запоминает намерение (кнопка, заряд, направление) и, когда мяч осел у ног
+  (`HasPossession`), выполняет `Shot`/`HighPass` обычным путём (`_KeeperClearKickCommand`);
+- «в ноги» и 6 с тоже роняют мяч, вратарь продолжает как полевой;
+- `KeeperPrepareDropKick` удалён (объединён с `KeeperDropToFeet`); константы `keeperClearSpeed` 34,
+  `keeperClearLift` 15, `keeperKickLoft` 5 (вынос выше/дальше).
+- **ИИ-вратарь:** ветка Eliza GK играет мяч ногами только в `Outfield`; иначе идёт на перехват. Фикс:
+  медленный мяч от соперника читался как «уникальный possession», перехват пропускался, и вратарь
+  выбивал мяч ногой — теперь ловит.
+
+Хеш Windows x86 `4305b934…` → `0c70efdb…` (добавлено `keeperDropStart_ms` в `ProcessState` + смена
+ИИ). Сборка зелёная, `nettest` 60, `lanmatchtest` 42. Полевой проверки нет — см.
+[[открытые-вопросы]].

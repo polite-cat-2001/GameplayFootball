@@ -150,21 +150,19 @@ const float keeperBoxEpsilon = 0.01f;
 // Keeper distribution (spec 2026-09-29 §8, #32): the four Hands actions, the 6-second rule and
 // the hand throw / foot clear ballistics. The hand roll and throw target bands, the tap/hold
 // threshold and the charge window live here; the centre clear speed/lift define the forced kick.
-const int keeperSixSecond_ms = 6000;           // catch -> forced centre clear timeout
+const int keeperSixSecond_ms = 6000;           // catch -> ball put down at the keeper's feet timeout
 const int keeperDistChargeMax_ms = 700;        // full charge of a keeper distribution
 const int keeperHandThrowCharge_ms = 200;      // hold >= this = overhand throw, below = low roll
 const float keeperHandRollDist = 12.0f;        // low roll target distance band (m)
 const float keeperHandThrowDist = 30.0f;       // overhand throw target distance band (m)
 const float keeperHandThrowPeak = 2.5f;        // overhand throw arc peak height (m)
 const float keeperHandsVelocityFloat = 0.85f;  // movement speed while holding, as a share of sprint
-const float keeperClearSpeed = 26.0f;          // forced centre clear horizontal speed (m/s)
-const float keeperClearLift = 10.0f;           // forced centre clear vertical launch (m/s)
-const float keeperKickLoft = 4.0f;             // directed foot clear arc peak height (m)
-// Ball offset ahead of the keeper before a foot distribution. Must match the forward idle shot /
-// highpass animations' touch offset (0.88-0.99 m) plus their root run-in, otherwise the touch anim
-// is not selected (see #32).
-const float keeperDropFeetOffset = 0.9f;
-const float keeperDropFeetHeight = 0.11f;      // ball height on the turf for a drop / "to feet" (m)
+const float keeperClearSpeed = 34.0f;          // foot-to-centre clear horizontal speed (m/s)
+const float keeperClearLift = 15.0f;           // foot-to-centre clear vertical launch (m/s)
+const float keeperKickLoft = 5.0f;             // directed foot clear arc peak height (m)
+// Grace after a chip to feet (or a foot drop) during which the keeper stays in Outfield while the
+// ball is still falling out of his hands (HasPossession is briefly false).
+const int keeperDropGrace_ms = 1000;
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 

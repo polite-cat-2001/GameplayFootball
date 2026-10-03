@@ -41,6 +41,32 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
   _GetHidInput(rawInputDirection, rawInputVelocityFloat);
   _SetInput(rawInputDirection, rawInputVelocityFloat);
 
+  // Keeper foot clear (#32): the ball was dropped on the button; once it has settled at the
+  // keeper's feet, execute the intent through the normal kick path.
+  if (keeperClearArmed) {
+    actionMode = 0;
+    gauge_ms = 0;
+    actionBufferTime_ms = 0;
+    if (_IsKeeperOutfield() && CastPlayer()->HasPossession()) {
+      _KeeperClearKickCommand(commandQueue);
+      keeperClearArmed = false;
+      return;
+    }
+    if ((int)match->GetActualTime_ms() - keeperClearArmedTime_ms > 2000) {
+      keeperClearArmed = false; // the ball never settled (lost it): give up and play normally
+    } else {
+      PlayerCommand command;
+      command.desiredFunctionType = e_FunctionType_Movement;
+      command.useDesiredMovement = true;
+      command.desiredDirection = CastPlayer()->GetDirectionVec();
+      command.desiredVelocityFloat = idleVelocity;
+      command.useDesiredLookAt = true;
+      command.desiredLookAt = CastPlayer()->GetPosition() + CastPlayer()->GetDirectionVec() * 10.0f;
+      commandQueue.push_back(command);
+      return;
+    }
+  }
+
 
   // clear buffer?
 
@@ -102,16 +128,6 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
   if (actionMode == 2) {
 
-    // Keeper foot-to-centre (Shot) is instant: drop the ball and kick as soon as the action is
-    // requested, without waiting for a charge (spec §8, #32).
-    if (_IsKeeperHands() && actionButton == e_ButtonFunction_Shot) {
-      _KeeperDistributionCommand(commandQueue);
-      actionMode = 0;
-      gauge_ms = 0;
-      actionBufferTime_ms = 0;
-      return;
-    }
-
     if (!hid->GetButton(actionButton) ||
         (hid->GetButton(actionButton) && gauge_ms > 500) || // allow anim to kick in before queue is complete (before button is released), it will usually touch ball after the remaining time anyway, so we still have time to add more power, yet still respond as fast as possible
         (!CastPlayer()->HasPossession() && !match->IsInSetPiece() && actionBufferTime_ms > 0)) {
@@ -120,13 +136,33 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
       float gaugeFactor = GetChargeRatio();
 
       // Keeper distribution (spec §8, #32): the hand throw (ShortPass) plays the existing throw
-      // clip; the directed clear (HighPass) launches the ball directly. Both commit on release.
-      if (_IsKeeperHands() &&
-          (actionButton == e_ButtonFunction_ShortPass || actionButton == e_ButtonFunction_HighPass)) {
+      // clip on release; the directed foot clear (HighPass) drops the ball and arms a kick that
+      // fires once the ball has settled at the feet.
+      if (_IsKeeperHands() && actionButton == e_ButtonFunction_ShortPass) {
         _KeeperDistributionCommand(commandQueue);
         actionMode = 0;
         gauge_ms = 0;
         actionBufferTime_ms = 0;
+        return;
+      }
+      if (_IsKeeperHands() && actionButton == e_ButtonFunction_HighPass) {
+        match->KeeperDropToFeet(team->GetID());
+        keeperClearArmed = true;
+        keeperClearButton = e_ButtonFunction_HighPass;
+        keeperClearCharge = _KeeperChargeRatio();
+        keeperClearAim = inputDirection.Get2D().GetNormalized(CastPlayer()->GetDirectionVec().Get2D());
+        keeperClearArmedTime_ms = match->GetActualTime_ms();
+        actionMode = 0;
+        gauge_ms = 0;
+        actionBufferTime_ms = 0;
+        PlayerCommand idle;
+        idle.desiredFunctionType = e_FunctionType_Movement;
+        idle.useDesiredMovement = true;
+        idle.desiredDirection = CastPlayer()->GetDirectionVec();
+        idle.desiredVelocityFloat = idleVelocity;
+        idle.useDesiredLookAt = true;
+        idle.desiredLookAt = CastPlayer()->GetPosition() + CastPlayer()->GetDirectionVec() * 10.0f;
+        commandQueue.push_back(idle);
         return;
       }
 
@@ -502,8 +538,9 @@ void HumanController::Process() {
 
     } else if (_IsKeeperHands()) {
 
-      // Keeper distribution (spec §8, #32): the hand throw and the directed clear charge like
-      // normal passes; the centre clear (Shot) and "to feet" (LongPass) launch immediately.
+      // Keeper distribution (spec §8, #32). The hand throw (ShortPass) charges and plays the throw
+      // clip; the directed clear (HighPass) charges and arms a kick; the centre clear (Shot) drops
+      // the ball and arms immediately; "to feet" (LongPass) just drops the ball.
       if (hid->GetButton(e_ButtonFunction_ShortPass) && !hid->GetPreviousButtonState(e_ButtonFunction_ShortPass)) {
         actionMode = 2;
         actionButton = e_ButtonFunction_ShortPass;
@@ -515,13 +552,20 @@ void HumanController::Process() {
       }
 
       if (hid->GetButton(e_ButtonFunction_Shot) && !hid->GetPreviousButtonState(e_ButtonFunction_Shot)) {
-        actionMode = 2;
-        actionButton = e_ButtonFunction_Shot;
+        match->KeeperDropToFeet(team->GetID());
+        keeperClearArmed = true;
+        keeperClearButton = e_ButtonFunction_Shot;
+        keeperClearCharge = 1.0f;
+        keeperClearArmedTime_ms = match->GetActualTime_ms();
       }
 
       if (hid->GetButton(e_ButtonFunction_LongPass) && !hid->GetPreviousButtonState(e_ButtonFunction_LongPass)) {
         match->KeeperDropToFeet(team->GetID());
       }
+
+    } else if (keeperClearArmed) {
+
+      // Ball dropped, waiting for it to settle at the keeper's feet; RequestCommand issues the kick.
 
     } else {
 
@@ -611,6 +655,12 @@ void HumanController::Reset() {
   actionButton = e_ButtonFunction_ShortPass;
   actionBufferTime_ms = 0;
   pendingShotType = e_ShotType_Normal;
+
+  keeperClearArmed = false;
+  keeperClearButton = e_ButtonFunction_Shot;
+  keeperClearCharge = 0.0f;
+  keeperClearAim = Vector3(-1, 0, 0);
+  keeperClearArmedTime_ms = 0;
 
   lastSprintTapTime_ms = -100000;
   knockOnArmed = false;
@@ -720,33 +770,17 @@ bool HumanController::_IsKeeperHands() {
          match->GetBallRetainer() == CastPlayer();
 }
 
+bool HumanController::_IsKeeperOutfield() {
+  return CastPlayer()->GetFormationEntry().role == e_PlayerRole_GK &&
+         match->GetKeeperState(team->GetID()) == e_KeeperState_Outfield;
+}
+
 float HumanController::_KeeperChargeRatio() const {
   return clamp((float)gauge_ms / (float)keeperDistChargeMax_ms, 0.0f, 1.0f);
 }
 
 void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueue) {
   float chargeRatio = _KeeperChargeRatio();
-
-  // Foot-to-centre (Shot): drop the ball, then play a normal shot whose planned launch is the
-  // centre clearance (spec §8.4). forceTouch makes the existing shot clip strike the dropped ball.
-  if (actionButton == e_ButtonFunction_Shot) {
-    match->KeeperPrepareDropKick(team->GetID());
-    Vector3 direction(-team->GetSide(), 0, 0); // toward the centre of the pitch
-    PlayerCommand command;
-    command.desiredFunctionType = e_FunctionType_Shot;
-    command.useDesiredMovement = false;
-    command.useDesiredLookAt = false;
-    command.desiredVelocityFloat = 0.0f;
-    command.touchInfo.inputDirection = direction;
-    command.touchInfo.desiredDirection = direction;
-    command.touchInfo.autoDirectionBias = 0.0f;
-    command.touchInfo.shotType = e_ShotType_Normal;
-    command.touchInfo.useSetPieceLaunch = true;
-    command.touchInfo.setPieceLaunch = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
-    command.touchInfo.forceTouch = true;
-    commandQueue.push_back(command);
-    return;
-  }
 
   // Outfield teammates in front of the keeper, scored by direction x distance band (spec §8.8).
   std::vector<Vector3> candidates;
@@ -765,33 +799,8 @@ void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueu
                                                   keeperHandRollDist, keeperHandThrowDist, chargeRatio);
   Player *target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
 
-  if (actionButton == e_ButtonFunction_HighPass) {
-    // Directed foot clear (spec §8.4, #32): drop the ball and play a normal high pass toward the
-    // stick direction; charge sets the pace and the target band, the addressee gets the handoff
-    // (spec §8.7). forceTouch makes the highpass clip strike the dropped ball.
-    match->KeeperPrepareDropKick(team->GetID());
-    PlayerCommand command;
-    command.desiredFunctionType = e_FunctionType_HighPass;
-    command.useDesiredMovement = false;
-    command.useDesiredLookAt = false;
-    command.touchInfo.inputDirection = aim;
-    command.touchInfo.inputPower = clamp(0.2f + chargeRatio * 0.6f, 0.2f, 0.8f);
-    command.touchInfo.desiredDirection = aim;
-    command.touchInfo.desiredPower = command.touchInfo.inputPower;
-    command.touchInfo.autoDirectionBias = 0.0f;
-    command.touchInfo.autoPowerBias = 0.0f;
-    command.touchInfo.aimHeight = keeperKickLoft;
-    command.touchInfo.useAimHeight = true;
-    command.touchInfo.targetPlayer = target;
-    command.touchInfo.forcedTargetPlayer = target;
-    command.touchInfo.forceTouch = true;
-    commandQueue.push_back(command);
-    if (target) team->SelectPlayer(target); // hand off to the addressee (spec §8.7)
-    return;
-  }
-
   // Hand throw (ShortPass): tap = low roll to the nearest, hold = overhand throw to the furthest.
-  // Uses the existing throw clip.
+  // Uses the existing throw clip, so the ball stays in the hands until the release frame.
   bool isThrow = gauge_ms >= keeperHandThrowCharge_ms;
 
   PlayerCommand command;
@@ -836,6 +845,62 @@ void HumanController::_KeeperDistributionCommand(PlayerCommandQueue &commandQueu
 
   // Hand off control to the addressee immediately (spec §8.7, #32).
   if (target) team->SelectPlayer(target);
+}
+
+void HumanController::_KeeperClearKickCommand(PlayerCommandQueue &commandQueue) {
+  if (keeperClearButton == e_ButtonFunction_Shot) {
+    // Foot-to-centre: a normal shot whose planned launch is the centre clearance (spec §8.4). The
+    // ball is already at the keeper's feet from the drop; forceTouch guards the contact.
+    Vector3 direction(-team->GetSide(), 0, 0); // toward the centre of the pitch
+    PlayerCommand command;
+    command.desiredFunctionType = e_FunctionType_Shot;
+    command.useDesiredMovement = false;
+    command.useDesiredLookAt = false;
+    command.desiredVelocityFloat = 0.0f;
+    command.touchInfo.inputDirection = direction;
+    command.touchInfo.desiredDirection = direction;
+    command.touchInfo.autoDirectionBias = 0.0f;
+    command.touchInfo.shotType = e_ShotType_Normal;
+    command.touchInfo.useSetPieceLaunch = true;
+    command.touchInfo.setPieceLaunch = direction * keeperClearSpeed + Vector3(0, 0, keeperClearLift);
+    command.touchInfo.forceTouch = true;
+    commandQueue.push_back(command);
+    return;
+  }
+
+  // Directed foot clear (HighPass): stick direction, charge sets the pace, the addressee gets the
+  // handoff (spec §8.4/§8.7). The addressee is picked now, once the ball has settled.
+  std::vector<Vector3> candidates;
+  std::vector<Player*> candidatePlayers;
+  std::vector<Player*> players;
+  team->GetActivePlayers(players);
+  for (unsigned int i = 0; i < players.size(); i++) {
+    Player *mate = players.at(i);
+    if (mate == CastPlayer() || mate->GetFormationEntry().role == e_PlayerRole_GK) continue;
+    candidates.push_back(mate->GetPosition());
+    candidatePlayers.push_back(mate);
+  }
+  int idx = keeperlogic::SelectDistributionTarget(candidates, CastPlayer()->GetPosition(), keeperClearAim,
+                                                  keeperHandRollDist, keeperHandThrowDist, keeperClearCharge);
+  Player *target = (idx >= 0) ? candidatePlayers.at(idx) : 0;
+
+  PlayerCommand command;
+  command.desiredFunctionType = e_FunctionType_HighPass;
+  command.useDesiredMovement = false;
+  command.useDesiredLookAt = false;
+  command.touchInfo.inputDirection = keeperClearAim;
+  command.touchInfo.inputPower = clamp(0.2f + keeperClearCharge * 0.6f, 0.2f, 0.8f);
+  command.touchInfo.desiredDirection = keeperClearAim;
+  command.touchInfo.desiredPower = command.touchInfo.inputPower;
+  command.touchInfo.autoDirectionBias = 0.0f;
+  command.touchInfo.autoPowerBias = 0.0f;
+  command.touchInfo.aimHeight = keeperKickLoft;
+  command.touchInfo.useAimHeight = true;
+  command.touchInfo.targetPlayer = target;
+  command.touchInfo.forcedTargetPlayer = target;
+  command.touchInfo.forceTouch = true;
+  commandQueue.push_back(command);
+  if (target) team->SelectPlayer(target); // hand off to the addressee
 }
 
 float HumanController::GetChargeRatio() const {
