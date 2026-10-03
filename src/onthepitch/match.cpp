@@ -2334,16 +2334,18 @@ void Match::DrivePenaltyDive() {
 }
 
 void Match::TryPenaltyDiveSave() {
-  // The diving keeper's body was driven at the zone; when the ball reaches it, punch it clear.
-  // Geometry alone is unreliable for a fast penalty, so the save is resolved here.
+  // The diving keeper's body was driven at the zone; when the ball reaches his hands, punch it
+  // clear. Geometry alone is unreliable for a fast penalty, so the save is resolved here — but the
+  // check is the same as an open-play deflect: the ball must be within penaltyKeeperSaveRadius of
+  // the animation's touch point, in 3D (so a low dive cannot save a ball over its head).
   for (int t = 0; t < 2; t++) {
     PenaltyDefense &p = penaltyDefense[t];
     if (!p.divePending) continue;
     Player *goalie = teams[t]->GetGoalie();
     if (!goalie) continue;
     Vector3 ballPos = ball->Predict(0);
-    Vector3 toBall = ballPos.Get2D() - goalie->GetPosition().Get2D();
-    if (ball->GetMovement().GetLength() < 2.0f || toBall.GetLength() > penaltyKeeperSaveRadius) continue;
+    Vector3 touchPos = goalie->GetTouchPos();
+    if (ball->GetMovement().GetLength() < 2.0f || (ballPos - touchPos).GetLength() > penaltyKeeperSaveRadius) continue;
     // Deflect away from the defended goal and up a little; mark it as an accidental keeper touch.
     Vector3 away = (ballPos.Get2D() - Vector3(teams[t]->GetSide() * pitchHalfW, 0.0f, 0.0f)).GetNormalized(Vector3(-teams[t]->GetSide(), 0.0f, 0.0f));
     Vector3 punch = away * std::max(ball->GetMovement().GetLength() * 0.5f, 8.0f) + Vector3(0.0f, 0.0f, 2.0f);
