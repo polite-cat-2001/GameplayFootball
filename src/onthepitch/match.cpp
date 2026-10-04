@@ -2268,7 +2268,6 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   // Where the struck ball actually crosses the defended goal line (fresh predictions).
   float worldLateral = 0.0f;
   float crossHeight = 0.0f;
-  float flight_ms = 0.0f;
   bool crossed = false;
   for (unsigned int t = 0; t + 10 < ballPredictionSize_ms; t += 10) {
     const Vector3 p0 = ball->Predict(t);
@@ -2277,7 +2276,6 @@ void Match::CommitPenaltyDive(int takerTeamID) {
       const float u = (lineX - p0.coords[0]) / (p1.coords[0] - p0.coords[0]);
       worldLateral = p0.coords[1] + (p1.coords[1] - p0.coords[1]) * u;
       crossHeight = p0.coords[2] + (p1.coords[2] - p0.coords[2]) * u;
-      flight_ms = t + u * 10.0f;
       crossed = true;
       break;
     }
@@ -2291,11 +2289,7 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   // lateral (clamped to the near post), so the body meets the ball; otherwise it is the near post
   // of the picked side (a committed lunge into that zone).
   const bool guessed = crossed && zone != e_KeeperDiveZone_OffTarget && zone == realZone;
-  const float desired = guessed ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral) : penaltyKeeperDiveLateral;
-  // Reach limit (option B): the keeper only commits to what he can physically reach before the ball
-  // arrives. A slow lunge plus a short flight means he simply falls short and misses the far corner.
-  const float reachable = penaltyKeeperDiveSpeed * (flight_ms * 0.001f);
-  const float lateral = std::min(desired, reachable);
+  const float lateral = guessed ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral) : penaltyKeeperDiveLateral;
   Player *goalie = teams[defTeam]->GetGoalie();
   const float targetX = goalie ? goalie->GetPosition().coords[0] : lineX;
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
@@ -2310,8 +2304,6 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float clipLateral = clamp(std::fabs(lateral) + penaltyKeeperDiveClipBias, 0.0f, clipFarEdge);
   p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
-  // Commit immediately: with the reach limit there is no reason to hold — every millisecond is
-  // travel the keeper needs.
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
 }
@@ -2342,18 +2334,17 @@ void Match::DrivePenaltyDive() {
 }
 
 void Match::TryPenaltyDiveSave() {
-  // The diving keeper's body was driven at the zone; when the ball reaches his hands, punch it
-  // clear. Geometry alone is unreliable for a fast penalty, so the save is resolved here — but the
-  // check is the same as an open-play deflect: the ball must be within penaltyKeeperSaveRadius of
-  // the animation's touch point, in 3D (so a low dive cannot save a ball over its head).
+  // The diving keeper's body was driven at the zone; when the ball reaches the hand, punch it clear.
+  // Geometry alone is unreliable for a fast penalty, so the save is resolved here. The ball must
+  // reach the clip's aim point in 3D: the vertical part matters, so a low dive cannot save a ball
+  // over its head, nor a high dive a ball at its feet.
   for (int t = 0; t < 2; t++) {
     PenaltyDefense &p = penaltyDefense[t];
     if (!p.divePending) continue;
     Player *goalie = teams[t]->GetGoalie();
     if (!goalie) continue;
     Vector3 ballPos = ball->Predict(0);
-    Vector3 touchPos = goalie->GetTouchPos();
-    if (ball->GetMovement().GetLength() < 2.0f || (ballPos - touchPos).GetLength() > penaltyKeeperSaveRadius) continue;
+    if (ball->GetMovement().GetLength() < 2.0f || (ballPos - p.diveClipTarget).GetLength() > penaltyKeeperSaveRadius) continue;
     // Deflect away from the defended goal and up a little; mark it as an accidental keeper touch.
     Vector3 away = (ballPos.Get2D() - Vector3(teams[t]->GetSide() * pitchHalfW, 0.0f, 0.0f)).GetNormalized(Vector3(-teams[t]->GetSide(), 0.0f, 0.0f));
     Vector3 punch = away * std::max(ball->GetMovement().GetLength() * 0.5f, 8.0f) + Vector3(0.0f, 0.0f, 2.0f);
