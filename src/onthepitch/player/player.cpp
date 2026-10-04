@@ -380,13 +380,14 @@ void Player::PreparePutBuffers(unsigned long snapshotTime_ms) {
 
     // Penalty defense (#33): the defending human controls the keeper's dive via the stick, but the
     // keeper stays under the AI controller, so it reads as unselected. Highlight it as the human's
-    // selected player (same color) so the user sees he can steer it.
+    // selected player (same color) so the user sees he can steer it. On a thin client the selected
+    // player is always rendered Blue (see above), so match that instead of the gamer's raw color.
     SetPiecePresentation *presentation = match->GetSetPiecePresentation();
     if (presentation && presentation->GetType() == e_SetPiece_Penalty &&
         presentation->GetTaker() && presentation->GetTaker()->GetTeamID() != team->GetID() &&
         team->GetGoalie() == this && team->GetHumanGamerCount() > 0) {
       buf_nameCaptionShowCondition = true;
-      playerColor = team->GetHumanGamerColor(0);
+      playerColor = match->IsRemotePresentation() ? e_PlayerColor_Blue : team->GetHumanGamerColor(0);
     }
   }
   switch (playerColor) {
