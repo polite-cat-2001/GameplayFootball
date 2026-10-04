@@ -67,9 +67,8 @@ int SelectDistributionTarget(const std::vector<Vector3> &candidates, const Vecto
 e_KeeperDiveZone StickToDiveZone(float stickX, float stickY, float deadzone) {
   if (std::sqrt(stickX * stickX + stickY * stickY) < deadzone) return e_KeeperDiveZone_Center;
   const bool right = stickX >= 0.0f;
-  const bool high = stickY > 0.0f;
-  if (right) return high ? e_KeeperDiveZone_HighR : e_KeeperDiveZone_LowR;
-  return high ? e_KeeperDiveZone_HighL : e_KeeperDiveZone_LowL;
+  if (right) return stickY > deadzone ? e_KeeperDiveZone_HighR : (stickY < -deadzone ? e_KeeperDiveZone_LowR : e_KeeperDiveZone_MidR);
+  return stickY > deadzone ? e_KeeperDiveZone_HighL : (stickY < -deadzone ? e_KeeperDiveZone_LowL : e_KeeperDiveZone_MidL);
 }
 
 e_KeeperDiveZone RandomDiveZone() {
@@ -77,10 +76,14 @@ e_KeeperDiveZone RandomDiveZone() {
   float acc = 0.0f;
   acc += penaltyKeeperZoneWeightLow;
   if (r < acc) return e_KeeperDiveZone_LowL;
-  acc += penaltyKeeperZoneWeightLow;
-  if (r < acc) return e_KeeperDiveZone_LowR;
+  acc += penaltyKeeperZoneWeightMid;
+  if (r < acc) return e_KeeperDiveZone_MidL;
   acc += penaltyKeeperZoneWeightHigh;
   if (r < acc) return e_KeeperDiveZone_HighL;
+  acc += penaltyKeeperZoneWeightLow;
+  if (r < acc) return e_KeeperDiveZone_LowR;
+  acc += penaltyKeeperZoneWeightMid;
+  if (r < acc) return e_KeeperDiveZone_MidR;
   acc += penaltyKeeperZoneWeightHigh;
   if (r < acc) return e_KeeperDiveZone_HighR;
   acc += penaltyKeeperZoneWeightCenter;
@@ -90,25 +93,28 @@ e_KeeperDiveZone RandomDiveZone() {
 
 e_KeeperDiveZone BallFlightZone(float worldLateral, float height, int takerSide,
                                 float goalHalfWidth, float goalHeight,
-                                float centerBand, float highThreshold) {
+                                float centerBand, float midThreshold, float highThreshold) {
   if (std::fabs(worldLateral) > goalHalfWidth || height < 0.0f || height > goalHeight) {
     return e_KeeperDiveZone_OffTarget;
   }
   if (std::fabs(worldLateral) <= centerBand) return e_KeeperDiveZone_Center;
   const bool right = (worldLateral * takerSide) > 0.0f;
   const bool high = height > highThreshold;
-  if (right) return high ? e_KeeperDiveZone_HighR : e_KeeperDiveZone_LowR;
-  return high ? e_KeeperDiveZone_HighL : e_KeeperDiveZone_LowL;
+  const bool mid = !high && height > midThreshold;
+  if (right) return high ? e_KeeperDiveZone_HighR : (mid ? e_KeeperDiveZone_MidR : e_KeeperDiveZone_LowR);
+  return high ? e_KeeperDiveZone_HighL : (mid ? e_KeeperDiveZone_MidL : e_KeeperDiveZone_LowL);
 }
 
 Vector3 DiveZoneTarget(e_KeeperDiveZone zone, float planeX, int takerSide,
-                       float lateral, float lowY, float highY, float centerY) {
+                       float lateral, float lowY, float midY, float highY, float centerY) {
   float worldY = 0.0f;
   float height = centerY;
   switch (zone) {
     case e_KeeperDiveZone_LowL: worldY = -takerSide * lateral; height = lowY; break;
+    case e_KeeperDiveZone_MidL: worldY = -takerSide * lateral; height = midY; break;
     case e_KeeperDiveZone_HighL: worldY = -takerSide * lateral; height = highY; break;
     case e_KeeperDiveZone_LowR: worldY = takerSide * lateral; height = lowY; break;
+    case e_KeeperDiveZone_MidR: worldY = takerSide * lateral; height = midY; break;
     case e_KeeperDiveZone_HighR: worldY = takerSide * lateral; height = highY; break;
     case e_KeeperDiveZone_Center:
     case e_KeeperDiveZone_OffTarget:

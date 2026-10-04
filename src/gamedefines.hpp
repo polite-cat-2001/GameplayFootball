@@ -164,35 +164,42 @@ const float keeperCenterClearPower = 1.0f;     // fixed power of the foot-to-cen
 const int keeperDropGrace_ms = 1000;
 
 // Penalty defense (spec 2026-09-29 §9, #33). The keeper stays under AI; on the taker's touch the
-// defending human's raw stick X+Y picks one of five dive zones. The dive plays a far deflect clip
-// while the body is driven at the zone. All values in metres / metres-per-second.
+// defending human's raw stick X+Y picks one of the dive zones (three height bands per side, plus a
+// centre band). The dive plays a far deflect clip while the body is driven at the zone. All values
+// in metres / metres-per-second.
 // The dive is a committed lunge: the body is driven at the zone by a direct positional slide, so it
 // is still there when the ball arrives.
 const int penaltyKeeperDiveDuration_ms = 900;
 const float penaltyKeeperDiveSpeed = 4.5f;         // positional lunge speed toward the zone (m/s)
 const float penaltyKeeperSaveRadius = 0.8f;        // ball within this of the diving keeper is saved (m)
 // Dive-target geometry: the side zones aim at the reach of the far-dive clips
-// (`090_ground_deflect_far` / `090_high_deflect_far` in deflect/idle), which are the only deflect
-// anims whose touch frame is late enough for a struck penalty. Low dives reach wider than high.
+// (`090_ground_deflect_far` / `090_midheight_deflect_far` / `090_high_deflect_far` in deflect/idle),
+// which are the only deflect anims whose touch frame is late enough for a struck penalty.
 // The dive target is the near post of the chosen half, so a correct side guess covers the whole
-// side. Low and high differ only in the clip/pose; the body reaches the same width.
+// side. The bands differ only in the clip/pose; the body reaches the same width.
 const float penaltyKeeperDiveLateral = 3.2f;       // positional target lateral of a side zone (m)
 // Clip-selection point: the far-dive clips (`090_ground_deflect_far` 2.53/0.11,
-// `090_high_deflect_far` 1.26/2.09) are the only deflect anims whose touch frame is late enough for
-// a struck penalty. The clip target follows the body lateral but is pushed outward by this margin
-// (capped at the far edge) so the animator still picks that far lunge instead of a close catch.
+// `090_midheight_deflect_far` 1.94/0.94, `090_high_deflect_far` 1.26/2.09) are the only deflect
+// anims whose touch frame is late enough for a struck penalty. The clip target follows the body
+// lateral but is pushed outward by this margin (capped at the far edge) so the animator still picks
+// that far lunge instead of a close catch.
 const float penaltyKeeperDiveClipLateralLow = 2.5f;
+const float penaltyKeeperDiveClipLateralMid = 1.94f;
 const float penaltyKeeperDiveClipLateralHigh = 1.26f;
 const float penaltyKeeperDiveClipBias = 0.6f;      // outward push of the clip point past the body (m)
 const float penaltyKeeperDiveLowY = 0.11f;         // representative height of a low side zone (m)
+const float penaltyKeeperDiveMidY = 0.94f;         // representative height of a mid side zone (m)
 const float penaltyKeeperDiveHighY = 2.09f;        // representative height of a high side zone (m)
-const float penaltyKeeperHighThreshold = 1.1f;     // crossing height above which a zone reads HIGH
+const float penaltyKeeperMidThreshold = 0.8f;      // crossing height above which a zone is no longer LOW
+const float penaltyKeeperHighThreshold = 1.6f;     // crossing height above which a zone reads HIGH
 const float penaltyKeeperCenterBand = 0.8f;        // |lateral| within this reads CENTER
 const float penaltyKeeperStickDeadzone = 0.15f;    // stick length below which the pick is CENTER
-// AI zone weights (symmetric): low 25% per side, high 12% per side, centre 26%.
-const float penaltyKeeperZoneWeightLow = 0.25f;
-const float penaltyKeeperZoneWeightHigh = 0.12f;
-const float penaltyKeeperZoneWeightCenter = 0.26f;
+// AI zone weights (symmetric): low 17% per side, mid 15.5% per side, high 15.5% per side,
+// centre 4% (sums to 1).
+const float penaltyKeeperZoneWeightLow = 0.17f;
+const float penaltyKeeperZoneWeightMid = 0.155f;
+const float penaltyKeeperZoneWeightHigh = 0.155f;
+const float penaltyKeeperZoneWeightCenter = 0.04f;
 
 const float distanceToVelocityMultiplier = 2.6f; // for example: when we need to travel 4 meters, we need to go at velo 4 * distanceToVelocityMultiplier
 

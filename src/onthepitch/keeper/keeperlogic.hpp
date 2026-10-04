@@ -24,11 +24,14 @@ enum e_KeeperState {
 };
 
 // Penalty dive zones (spec 2026-09-29 §9, #33). L/R are screen-relative, resolved to world signs by
-// the taker's side. `OffTarget` means "no side zone" (the ball misses the goal); it is never picked.
+// the taker's side; three height bands per side (Low / Mid / High). `OffTarget` means "no side zone"
+// (the ball misses the goal); it is never picked.
 enum e_KeeperDiveZone {
   e_KeeperDiveZone_LowL,
+  e_KeeperDiveZone_MidL,
   e_KeeperDiveZone_HighL,
   e_KeeperDiveZone_LowR,
+  e_KeeperDiveZone_MidR,
   e_KeeperDiveZone_HighR,
   e_KeeperDiveZone_Center,
   e_KeeperDiveZone_OffTarget
@@ -54,25 +57,27 @@ int SelectDistributionTarget(const std::vector<Vector3> &candidates, const Vecto
                              float charge);
 
 // Penalty dive zone from the stick direction (spec §9). `stickX` is screen-right positive, `stickY`
-// screen-up positive; a length below `deadzone` reads CENTER. L/R are screen-relative.
+// screen-up positive; a length below `deadzone` reads CENTER, otherwise the vertical band reads
+// LOW (down) / MID (neutral) / HIGH (up). L/R are screen-relative.
 e_KeeperDiveZone StickToDiveZone(float stickX, float stickY, float deadzone);
 
-// Symmetric weighted AI zone: low per side, high per side, centre. Uses the deterministic
+// Symmetric weighted AI zone: low / mid / high per side, plus centre. Uses the deterministic
 // `random()` (seeded by the caller). Weights live in gamedefines.hpp.
 e_KeeperDiveZone RandomDiveZone();
 
 // Screen-relative zone of a ball crossing the defended goal line at (`worldLateral`, `height`).
 // `takerSide` converts the world lateral sign to the taker's camera frame (screen-right == world
-// +y when takerSide == 1). Off-target crossings read OffTarget.
+// +y when takerSide == 1). Three height bands split by `midThreshold` (low/mid) and `highThreshold`
+// (mid/high). Off-target crossings read OffTarget.
 e_KeeperDiveZone BallFlightZone(float worldLateral, float height, int takerSide,
                                 float goalHalfWidth, float goalHeight,
-                                float centerBand, float highThreshold);
+                                float centerBand, float midThreshold, float highThreshold);
 
 // Representative point of `zone` beside the keeper, in world space. `planeX` is the keeper's
-// lateral plane; side zones sit at `(planeX, +-takerSide*lateral, lowY/highY)`, CENTER at
+// lateral plane; side zones sit at `(planeX, +-takerSide*lateral, lowY/midY/highY)`, CENTER at
 // `(planeX, 0, centerY)`.
 Vector3 DiveZoneTarget(e_KeeperDiveZone zone, float planeX, int takerSide,
-                       float lateral, float lowY, float highY, float centerY);
+                       float lateral, float lowY, float midY, float highY, float centerY);
 
 } // namespace keeperlogic
 

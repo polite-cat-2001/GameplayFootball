@@ -2282,7 +2282,8 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   }
   const e_KeeperDiveZone realZone =
       crossed ? keeperlogic::BallFlightZone(worldLateral, crossHeight, takerSide, goalHalfWidth,
-                                            goalHeight, penaltyKeeperCenterBand, penaltyKeeperHighThreshold)
+                                            goalHeight, penaltyKeeperCenterBand,
+                                            penaltyKeeperMidThreshold, penaltyKeeperHighThreshold)
               : e_KeeperDiveZone_OffTarget;
 
   // The dive target sits on the keeper's own plane. On a correct guess it is the real crossing
@@ -2294,16 +2295,18 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float targetX = goalie ? goalie->GetPosition().coords[0] : lineX;
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
   p.diveTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, lateral,
-                                             penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
+                                             penaltyKeeperDiveLowY, penaltyKeeperDiveMidY, penaltyKeeperDiveHighY, centerY);
   // Clip target tracks the body target's lateral so the chosen lunge's touch and the driven body
   // coincide, but stays biased outward by a margin so the animator still picks a far lunge (the
   // far-dive clips are the only deflect anims whose touch frame is late enough for a struck
   // penalty). On a correct guess this pulls the clip in from the far edge to the real crossing.
   const bool lowBand = (zone == e_KeeperDiveZone_LowL || zone == e_KeeperDiveZone_LowR);
-  const float clipFarEdge = lowBand ? penaltyKeeperDiveClipLateralLow : penaltyKeeperDiveClipLateralHigh;
+  const bool highBand = (zone == e_KeeperDiveZone_HighL || zone == e_KeeperDiveZone_HighR);
+  const float clipFarEdge = lowBand ? penaltyKeeperDiveClipLateralLow
+                                    : (highBand ? penaltyKeeperDiveClipLateralHigh : penaltyKeeperDiveClipLateralMid);
   const float clipLateral = clamp(std::fabs(lateral) + penaltyKeeperDiveClipBias, 0.0f, clipFarEdge);
   p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
-                                                 penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
+                                                 penaltyKeeperDiveLowY, penaltyKeeperDiveMidY, penaltyKeeperDiveHighY, centerY);
   p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
   p.divePending = true;
 }
