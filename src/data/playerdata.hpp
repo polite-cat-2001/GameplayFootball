@@ -27,6 +27,8 @@ struct PlayerDataRaw {
   std::string hairStyle = "short01";
   std::string hairColor = "darkblonde";
   float height = 1.8f;
+  // Preferred kicking foot: 0 = right (default when the DB has no data), 1 = left.
+  int strongFoot = 0;
 };
 
 class PlayerData {
@@ -50,6 +52,9 @@ class PlayerData {
     std::string GetHairStyle() { return raw.hairStyle; }
     std::string GetHairColor() { return raw.hairColor; }
     float GetHeight() { return raw.height; }
+    // Preferred kicking foot: true == left-footed. Players without data (strong_foot absent or
+    // empty in the DB) are treated as right-footed.
+    bool IsLeftFooted() const { return raw.strongFoot == 1; }
 
     const PlayerDataRaw &GetRaw() const { return raw; }
 

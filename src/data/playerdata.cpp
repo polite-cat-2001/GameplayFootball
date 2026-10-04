@@ -12,7 +12,7 @@
 
 PlayerData::PlayerData(int playerDatabaseID) : databaseID(playerDatabaseID) {
 
-  DatabaseResult *result = GetDB()->Query("select firstname, lastname, role, base_stat, profile_xml, age, skincolor, hairstyle, haircolor, height, tm_id from players where id = " + int_to_str(databaseID) + " limit 1");
+  DatabaseResult *result = GetDB()->Query("select firstname, lastname, role, base_stat, profile_xml, age, skincolor, hairstyle, haircolor, height, tm_id, strong_foot from players where id = " + int_to_str(databaseID) + " limit 1");
 
   raw.databaseID = playerDatabaseID;
   raw.baseStat = 0.0f;
@@ -33,6 +33,7 @@ PlayerData::PlayerData(int playerDatabaseID) : databaseID(playerDatabaseID) {
     if (result->header.at(c).compare("hairstyle") == 0) raw.hairStyle = result->data.at(0).at(c);
     if (result->header.at(c).compare("haircolor") == 0) raw.hairColor = result->data.at(0).at(c);
     if (result->header.at(c).compare("tm_id") == 0) raw.tmId = atoi(result->data.at(0).at(c).c_str());
+    if (result->header.at(c).compare("strong_foot") == 0) raw.strongFoot = atoi(result->data.at(0).at(c).c_str());
     if (result->header.at(c).compare("height") == 0) {
       float parsedHeight = atof(result->data.at(0).at(c).c_str());
       // NULL/empty or implausible values (scraper artifacts) would give

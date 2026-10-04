@@ -19,7 +19,7 @@ extern unsigned long time_ms;
 // `PRAGMA user_version` (and in manifest.json as schema_version) by
 // tm-gf-import. Bump together with the game's CREATE TABLE schema in
 // src/menu/mainmenu.cpp; the game rejects an incompatible database at startup.
-const int databaseSchemaVersion = 2;
+const int databaseSchemaVersion = 3;
 
 const float idleVelocity = 0.0f;
 const float dribbleVelocity = 3.5f;

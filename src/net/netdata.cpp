@@ -13,6 +13,7 @@ void SerializePlayerDataRaw(NetBuffer &buffer, const PlayerDataRaw &player) {
   buffer.PutString(player.hairStyle);
   buffer.PutString(player.hairColor);
   buffer.PutFloat(player.height);
+  buffer.PutU32((uint32_t)player.strongFoot);
 }
 
 PlayerDataRaw DeserializePlayerDataRaw(NetBuffer &buffer) {
@@ -29,6 +30,7 @@ PlayerDataRaw DeserializePlayerDataRaw(NetBuffer &buffer) {
   player.hairStyle = buffer.GetString();
   player.hairColor = buffer.GetString();
   player.height = buffer.GetFloat();
+  player.strongFoot = (int)buffer.GetU32();
   return player;
 }
 

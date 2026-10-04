@@ -44,7 +44,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DATABASE_SCHEMA_VERSION = 2  # src/gamedefines.hpp: databaseSchemaVersion
+DATABASE_SCHEMA_VERSION = 3  # src/gamedefines.hpp: databaseSchemaVersion
 
 FACES_DIR = "faces"
 EXCLUDE_FILES = {".gitignore"}

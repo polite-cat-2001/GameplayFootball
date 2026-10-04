@@ -402,7 +402,8 @@ bool MainMenuPage::GoImportDB() {
                                                "height FLOAT, "
                                                "weight FLOAT, "
                                                "formationorder INTEGER, "
-                                               "nationalteamformationorder INTEGER);");
+                                               "nationalteamformationorder INTEGER, "
+                                               "strong_foot INTEGER);");
   delete result;
 
   result = GetDB()->Query("CREATE TABLE tournaments(id INTEGER PRIMARY KEY AUTOINCREMENT, "
