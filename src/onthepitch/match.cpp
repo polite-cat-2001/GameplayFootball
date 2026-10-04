@@ -1336,7 +1336,6 @@ void Match::ProcessState(EnvState *state) {
   // Penalty defense (spec §9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
     state->process(penaltyDefense[t].divePending);
-    state->process(penaltyDefense[t].diveStart_ms);
     state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
     state->process(penaltyDefense[t].diveClipTarget);
@@ -2247,10 +2246,9 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
 
 void Match::UpdatePenaltyDefense() {
   for (int t = 0; t < 2; t++) {
+    // Stop driving a lunge once it has run its course.
     PenaltyDefense &p = penaltyDefense[t];
-    // Engage the committed lunge at its scheduled start (the ball-flight lead), disengage when done.
-    if (!p.divePending && p.diveStart_ms != 0 && actualTime_ms >= p.diveStart_ms) p.divePending = true;
-    if (p.divePending && actualTime_ms >= p.diveUntil_ms) { p.divePending = false; p.diveStart_ms = 0; }
+    if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
   }
 }
 
@@ -2293,7 +2291,11 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   // lateral (clamped to the near post), so the body meets the ball; otherwise it is the near post
   // of the picked side (a committed lunge into that zone).
   const bool guessed = crossed && zone != e_KeeperDiveZone_OffTarget && zone == realZone;
-  const float lateral = guessed ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral) : penaltyKeeperDiveLateral;
+  const float desired = guessed ? clamp(std::fabs(worldLateral), 0.0f, penaltyKeeperDiveLateral) : penaltyKeeperDiveLateral;
+  // Reach limit (option B): the keeper only commits to what he can physically reach before the ball
+  // arrives. A slow lunge plus a short flight means he simply falls short and misses the far corner.
+  const float reachable = penaltyKeeperDiveSpeed * (flight_ms * 0.001f);
+  const float lateral = std::min(desired, reachable);
   Player *goalie = teams[defTeam]->GetGoalie();
   const float targetX = goalie ? goalie->GetPosition().coords[0] : lineX;
   const float centerY = clamp(crossHeight, 0.0f, goalHeight);
@@ -2308,19 +2310,10 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float clipLateral = clamp(std::fabs(lateral) + penaltyKeeperDiveClipBias, 0.0f, clipFarEdge);
   p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
-  // Start the lunge so its touch frame lands when the ball arrives: the keeper dives on time
-  // instead of lunging early and hanging. Never negative — a ball faster than the clip simply
-  // leaves the keeper too little time (he dives immediately and may not reach it).
-  const float lead_ms = std::max(flight_ms - penaltyKeeperDiveTouchLead_ms, 0.0f);
-  p.diveStart_ms = actualTime_ms + (unsigned long)lead_ms;
-  p.diveUntil_ms = p.diveStart_ms + penaltyKeeperDiveDuration_ms;
-  p.divePending = false; // armed; UpdatePenaltyDefense flips it on at diveStart_ms
-}
-
-bool Match::IsPenaltyDiveScheduled(int teamID) const {
-  if (teamID < 0 || teamID >= 2) return false;
-  const PenaltyDefense &p = penaltyDefense[teamID];
-  return p.diveStart_ms != 0 && !p.divePending;
+  // Commit immediately: with the reach limit there is no reason to hold — every millisecond is
+  // travel the keeper needs.
+  p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
+  p.divePending = true;
 }
 
 bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
