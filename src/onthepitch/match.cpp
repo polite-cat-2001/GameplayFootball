@@ -2244,6 +2244,19 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
   return true;
 }
 
+bool Match::IsTeamLocallyControlled(int teamID) {
+  if (teamID < 0 || teamID >= 2) return false;
+  std::vector<Player*> players;
+  teams[teamID]->GetActivePlayers(players);
+  for (unsigned int i = 0; i < players.size(); i++) {
+    // Thin client has no human gamers: the snapshot carries the controlling peer per player.
+    int owner = remotePresentation ? players.at(i)->GetRemoteOwnerId()
+                                   : teams[teamID]->GetControllingPeerId(players.at(i)->GetID());
+    if (owner >= 0 && owner == localPeerId) return true;
+  }
+  return false;
+}
+
 void Match::UpdatePenaltyDefense() {
   for (int t = 0; t < 2; t++) {
     // Stop driving a lunge once it has run its course.

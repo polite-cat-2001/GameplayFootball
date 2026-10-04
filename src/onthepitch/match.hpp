@@ -308,6 +308,10 @@ class Match {
     // Penalty defense (spec 2026-09-29 §9, #33). Host-sim, per defending team.
     // The synthetic ball point that steers the dive-clip choice (far lunge) for the active lunge.
     bool GetPenaltyDiveClipTarget(int teamID, Vector3 &target);
+    // True when the local peer controls `teamID` (host: a human gamer owns one of its players;
+    // thin client: the snapshot tagged one of its players with the local peer id). Used for the
+    // penalty-keeper highlight (#33).
+    bool IsTeamLocallyControlled(int teamID);
 
     float GetAveragePossessionSide(int time_ms) const { return possessionSideHistory->GetAverage(time_ms); }
 
