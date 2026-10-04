@@ -296,6 +296,19 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
       _KeeperDeflectCommand(commandQueue, false, true, diveClipTarget);
       return;
     }
+    // The lunge is armed but its start is delayed to meet the ball: hold the line instead of
+    // running the open-play keeper logic (which could commit an early catch/deflect).
+    if (match->IsPenaltyDiveScheduled(team->GetID())) {
+      PlayerCommand hold;
+      hold.desiredFunctionType = e_FunctionType_Movement;
+      hold.useDesiredMovement = true;
+      hold.desiredDirection = CastPlayer()->GetDirectionVec();
+      hold.desiredVelocityFloat = idleVelocity;
+      hold.useDesiredLookAt = true;
+      hold.desiredLookAt = CastPlayer()->GetPosition() + CastPlayer()->GetDirectionVec() * 10.0f;
+      commandQueue.push_back(hold);
+      return;
+    }
 
     // keeper's mental image for deflections is near-instant; let's just call it premonition ;)
     const MentalImage *keeperMentalImage = _mentalImage;

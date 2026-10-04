@@ -1336,6 +1336,7 @@ void Match::ProcessState(EnvState *state) {
   // Penalty defense (spec §9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
     state->process(penaltyDefense[t].divePending);
+    state->process(penaltyDefense[t].diveStart_ms);
     state->process(penaltyDefense[t].diveUntil_ms);
     state->process(penaltyDefense[t].diveTarget);
     state->process(penaltyDefense[t].diveClipTarget);
@@ -2246,9 +2247,10 @@ bool Match::GetDefenderStick(int teamID, Vector3 &stick) {
 
 void Match::UpdatePenaltyDefense() {
   for (int t = 0; t < 2; t++) {
-    // Stop driving a lunge once it has run its course.
     PenaltyDefense &p = penaltyDefense[t];
-    if (p.divePending && actualTime_ms >= p.diveUntil_ms) p.divePending = false;
+    // Engage the committed lunge at its scheduled start (the ball-flight lead), disengage when done.
+    if (!p.divePending && p.diveStart_ms != 0 && actualTime_ms >= p.diveStart_ms) p.divePending = true;
+    if (p.divePending && actualTime_ms >= p.diveUntil_ms) { p.divePending = false; p.diveStart_ms = 0; }
   }
 }
 
@@ -2268,6 +2270,7 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   // Where the struck ball actually crosses the defended goal line (fresh predictions).
   float worldLateral = 0.0f;
   float crossHeight = 0.0f;
+  float flight_ms = 0.0f;
   bool crossed = false;
   for (unsigned int t = 0; t + 10 < ballPredictionSize_ms; t += 10) {
     const Vector3 p0 = ball->Predict(t);
@@ -2276,6 +2279,7 @@ void Match::CommitPenaltyDive(int takerTeamID) {
       const float u = (lineX - p0.coords[0]) / (p1.coords[0] - p0.coords[0]);
       worldLateral = p0.coords[1] + (p1.coords[1] - p0.coords[1]) * u;
       crossHeight = p0.coords[2] + (p1.coords[2] - p0.coords[2]) * u;
+      flight_ms = t + u * 10.0f;
       crossed = true;
       break;
     }
@@ -2304,8 +2308,19 @@ void Match::CommitPenaltyDive(int takerTeamID) {
   const float clipLateral = clamp(std::fabs(lateral) + penaltyKeeperDiveClipBias, 0.0f, clipFarEdge);
   p.diveClipTarget = keeperlogic::DiveZoneTarget(zone, targetX, takerSide, clipLateral,
                                                  penaltyKeeperDiveLowY, penaltyKeeperDiveHighY, centerY);
-  p.diveUntil_ms = actualTime_ms + penaltyKeeperDiveDuration_ms;
-  p.divePending = true;
+  // Start the lunge so its touch frame lands when the ball arrives: the keeper dives on time
+  // instead of lunging early and hanging. Never negative — a ball faster than the clip simply
+  // leaves the keeper too little time (he dives immediately and may not reach it).
+  const float lead_ms = std::max(flight_ms - penaltyKeeperDiveTouchLead_ms, 0.0f);
+  p.diveStart_ms = actualTime_ms + (unsigned long)lead_ms;
+  p.diveUntil_ms = p.diveStart_ms + penaltyKeeperDiveDuration_ms;
+  p.divePending = false; // armed; UpdatePenaltyDefense flips it on at diveStart_ms
+}
+
+bool Match::IsPenaltyDiveScheduled(int teamID) const {
+  if (teamID < 0 || teamID >= 2) return false;
+  const PenaltyDefense &p = penaltyDefense[teamID];
+  return p.diveStart_ms != 0 && !p.divePending;
 }
 
 bool Match::GetPenaltyDiveClipTarget(int teamID, Vector3 &target) {
