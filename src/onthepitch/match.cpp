@@ -1397,9 +1397,9 @@ void Match::Process() {
           referee->DebugForceSetPiece(e_SetPiece_Penalty, takerTeamID,
                                       Vector3(-takerTeam->GetSide() * (pitchHalfW - 11.0f), 0, 0));
         } else if (debugFreeKick) {
-          // 25 m out, central, in front of the goal the taker team attacks
-          referee->DebugForceSetPiece(e_SetPiece_FreeKick, takerTeamID,
-                                      Vector3(-takerTeam->GetSide() * (pitchHalfW - 25.0f), 0, 0));
+          // at the ball's current spot (x/y), so the wall/lane can be tested from any position
+          Vector3 ballPos = ball->Predict(0).Get2D();
+          referee->DebugForceSetPiece(e_SetPiece_FreeKick, takerTeamID, ballPos);
         } else {
           // corner flag of the goal the taker team attacks
           referee->DebugForceSetPiece(e_SetPiece_Corner, takerTeamID,
@@ -2941,10 +2941,18 @@ void Match::CheckBallCollisions() {
     float lastTouchBias = players[i]->GetLastTouchBias(touchTimeThreshold_ms);
     float oppLastTouchBiasLong = GetTeam(abs(teamID - 1))->GetLastTouchBias(1600);
 
-    if (lastTouchBias <= 0.01f && oppLastTouchBias > 0.01f/* && ballTowardsPlayer*/) { // cannot collide if opp didn't recently touch ball (we would be able to predict ball by then), or if player itself already did (to overcome the 'perpetuum collision' problem, and to allow for 'controlled ball collisions' in humanoid class)
+    // The free-kick wall (#34) deliberately stands in the shot line: let it block even after the
+    // shooter's short touch-bias window has expired (the ball flies ~9.15 m, often longer than the
+    // 200 ms window), otherwise every shot sails through the wall.
+    bool freeKickWallBlock = players[i]->GetTeam()->GetController()->IsFreeKickWallPlayer(players[i]);
+
+    if (freeKickWallBlock || (lastTouchBias <= 0.01f && oppLastTouchBias > 0.01f/* && ballTowardsPlayer*/)) { // cannot collide if opp didn't recently touch ball (we would be able to predict ball by then), or if player itself already did (to overcome the 'perpetuum collision' problem, and to allow for 'controlled ball collisions' in humanoid class)
 
       bool collisionAnim = false;
-      if (players[i]->GetCurrentFunctionType() == e_FunctionType_Movement || players[i]->GetCurrentFunctionType() == e_FunctionType_Trip || players[i]->GetCurrentFunctionType() == e_FunctionType_Sliding || players[i]->GetCurrentFunctionType() == e_FunctionType_Interfere || players[i]->GetCurrentFunctionType() == e_FunctionType_Deflect) collisionAnim = true;
+      // Special is included so the free-kick wall still blocks while it plays the forced jump clip
+      // (#34): the jump is a game-functiontype-Special command, and without this the ball would pass
+      // through the wall exactly when it arrives.
+      if (players[i]->GetCurrentFunctionType() == e_FunctionType_Movement || players[i]->GetCurrentFunctionType() == e_FunctionType_Trip || players[i]->GetCurrentFunctionType() == e_FunctionType_Sliding || players[i]->GetCurrentFunctionType() == e_FunctionType_Interfere || players[i]->GetCurrentFunctionType() == e_FunctionType_Deflect || players[i]->GetCurrentFunctionType() == e_FunctionType_Special) collisionAnim = true;
       bool onlyWhenDirectionChangedUnexpectedly = false;
       if (players[i]->GetCurrentFunctionType() == e_FunctionType_Interfere || players[i]->GetCurrentFunctionType() == e_FunctionType_Deflect) onlyWhenDirectionChangedUnexpectedly = true;
 

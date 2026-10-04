@@ -55,6 +55,9 @@ class TeamAIController {
     // referee uses the two extremes as the shot-lane cone edges. Kept alive across the
     // "set piece taken" (None) reset so the wall can still jump as the ball arrives.
     const std::vector<Player*> &GetFreeKickWallPlayers() { return freeKickWallPlayers; }
+    // True while this player is standing in the live free-kick wall (#34). The ball collision code
+    // uses it to let the wall block a shot even after the shooter's short touch-bias window expired.
+    bool IsFreeKickWallPlayer(Player *player) const;
     void ApplyAttackingRun(Player *manualPlayer = 0);
     void ApplyTeamPressure();
     void ApplyKeeperRush();

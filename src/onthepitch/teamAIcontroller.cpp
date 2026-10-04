@@ -1016,6 +1016,13 @@ void TeamAIController::PositionSetPieceTaker() {
   }
 }
 
+bool TeamAIController::IsFreeKickWallPlayer(Player *player) const {
+  for (unsigned int i = 0; i < freeKickWallPlayers.size(); i++) {
+    if (freeKickWallPlayers.at(i) == player) return true;
+  }
+  return false;
+}
+
 void TeamAIController::UpdateFreeKickWallJump() {
   // Height-independent wall jump (spec §10, #34): once the ball flies at the wall and is about
   // `freeKickWallJumpTime / 2` away, issue one forced Special command to the whole wall, then never
