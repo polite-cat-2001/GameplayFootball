@@ -71,6 +71,8 @@ class Team {
     unsigned int GetHumanGamerCount() const { return humanGamers.size(); }
     // HID device of human gamer `index`, or null. Used by the penalty keeper side channel (#33).
     IHIDevice *GetHumanGamerDevice(int index) const;
+    // Color of human gamer `index` (the selected-player highlight color), or Default if out of range.
+    e_PlayerColor GetHumanGamerColor(int index) const;
     void AddHumanGamer(IHIDevice *hid, e_PlayerColor color);
     void DeleteHumanGamers();
     e_PlayerColor GetPlayerColor(int playerID);

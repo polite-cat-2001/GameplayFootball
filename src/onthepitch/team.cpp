@@ -264,6 +264,11 @@ IHIDevice *Team::GetHumanGamerDevice(int index) const {
   return humanGamers.at(index)->GetHIDevice();
 }
 
+e_PlayerColor Team::GetHumanGamerColor(int index) const {
+  if (index < 0 || index >= (signed int)humanGamers.size()) return e_PlayerColor_Default;
+  return humanGamers.at(index)->GetPlayerColor();
+}
+
 void Team::AddHumanGamer(IHIDevice *hid, e_PlayerColor color) {
   HumanGamer *humanGamer = new HumanGamer(this, hid, color);
 

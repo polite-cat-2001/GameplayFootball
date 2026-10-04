@@ -21,6 +21,7 @@
 
 #include "../match.hpp"
 #include "../team.hpp"
+#include "../setpiece/setpiecepresentation.hpp"
 
 #include "controller/elizacontroller.hpp"
 #include "controller/strategies/strategy.hpp"
@@ -375,6 +376,17 @@ void Player::PreparePutBuffers(unsigned long snapshotTime_ms) {
       if (match->IsRemotePresentation()) playerColor = e_PlayerColor_Blue;
     } else if (buf_nameCaptionShowCondition) {
       playerColor = e_PlayerColor_Default;
+    }
+
+    // Penalty defense (#33): the defending human controls the keeper's dive via the stick, but the
+    // keeper stays under the AI controller, so it reads as unselected. Highlight it as the human's
+    // selected player (same color) so the user sees he can steer it.
+    SetPiecePresentation *presentation = match->GetSetPiecePresentation();
+    if (presentation && presentation->GetType() == e_SetPiece_Penalty &&
+        presentation->GetTaker() && presentation->GetTaker()->GetTeamID() != team->GetID() &&
+        team->GetGoalie() == this && team->GetHumanGamerCount() > 0) {
+      buf_nameCaptionShowCondition = true;
+      playerColor = team->GetHumanGamerColor(0);
     }
   }
   switch (playerColor) {
