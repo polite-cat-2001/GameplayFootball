@@ -48,6 +48,9 @@ class Player : public PlayerBase {
 
     void SelectRetainAnim() { CastHumanoid()->SelectRetainAnim(); }
 
+    // Forced free-kick wall jump (spec §10, #34); issued once by TeamAIController.
+    void TriggerFreeKickWallJump() { CastHumanoid()->ForceFreeKickWallJump(); }
+
     inline e_FunctionType GetCurrentFunctionType() { return CastHumanoid()->GetCurrentFunctionType(); }
     FormationEntry GetFormationEntry();
     inline void SetDynamicFormationEntry(FormationEntry entry) { dynamicFormationEntry = entry; }

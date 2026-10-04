@@ -1416,6 +1416,7 @@ bool HumanoidBase::SelectAnim(const PlayerCommand &command, e_InterruptAnim loca
 
   query.byIncomingVelocity = true;
   query.incomingVelocity = spatialState.enumVelocity;
+  if (command.forceIncomingVelocityIdle) query.incomingVelocity = e_Velocity_Idle;
   query.incomingVelocity_Strict = true;
   query.byIncomingBodyDirection = true;
   query.incomingBodyDirection_Strict = true;

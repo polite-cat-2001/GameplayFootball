@@ -69,6 +69,8 @@ Humanoid::Humanoid(Player *player, boost::intrusive_ptr<Node> humanoidSourceNode
 
   team = CastPlayer()->GetTeam();
 
+  freeKickWallJumpPending = false;
+
   stat_GetBodyBallDistanceAdvantage_RadiusDeny = 0;
   stat_GetBodyBallDistanceAdvantage_DistanceDeny = 0;
 }
@@ -224,6 +226,22 @@ void Humanoid::Process() {
       commandQueue.push_back(GetBasicMovementCommand(tripDirection, spatialState.floatVelocity)); // backup, if there's no applicable trip anim
     } else {
       CastPlayer()->RequestCommand(commandQueue);
+    }
+
+    // Forced free-kick wall jump (spec section 10, #34): play the jump clip off the ball. It is
+    // prepended so SelectAnim picks it over the controller's commands. `forceIncomingVelocityIdle`
+    // makes the clip selectable however fast the wall player is currently moving (the jump clip is
+    // authored idle-incoming).
+    if (freeKickWallJumpPending) {
+      freeKickWallJumpPending = false;
+      PlayerCommand jumpCommand;
+      jumpCommand.desiredFunctionType = e_FunctionType_Special;
+      jumpCommand.useSpecialVar1 = true;
+      jumpCommand.specialVar1 = freeKickWallJumpSpecialVar1;
+      jumpCommand.useDesiredMovement = false;
+      jumpCommand.useDesiredLookAt = false;
+      jumpCommand.forceIncomingVelocityIdle = true;
+      commandQueue.insert(commandQueue.begin(), jumpCommand);
     }
 
 
@@ -1158,6 +1176,11 @@ void Humanoid::SelectRetainAnim() {
   match->SetBallRetainer(CastPlayer());
 }
 
+void Humanoid::ForceFreeKickWallJump() {
+  freeKickWallJumpPending = true;
+  if (interruptAnim == e_InterruptAnim_None) interruptAnim = e_InterruptAnim_Switch;
+}
+
 void Humanoid::ClampKeeperToBox() {
   if (CastPlayer()->GetFormationEntry().role != e_PlayerRole_GK) return;
   if (match->GetKeeperState(team->GetID()) != e_KeeperState_Hands) return;
@@ -1303,6 +1326,8 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
 
   query.byIncomingVelocity = true;
   query.incomingVelocity = spatialState.enumVelocity;
+
+  if (command.forceIncomingVelocityIdle) query.incomingVelocity = e_Velocity_Idle;
 
   if (query.functionType != e_FunctionType_Movement && query.incomingVelocity == e_Velocity_Dribble) query.incomingVelocity = e_Velocity_Walk;
 

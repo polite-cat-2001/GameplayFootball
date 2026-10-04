@@ -51,6 +51,10 @@ class TeamAIController {
     void PrepareSetPiece(e_SetPiece setPiece, int takerTeamID = -1, Player *forcedTaker = 0);
     Player *GetPieceTaker() { return taker; }
     e_SetPiece GetSetPieceType() { return setPieceType; }
+    // Defenders deliberately placed in the free-kick wall (spec §10, #34), in row order; the
+    // referee uses the two extremes as the shot-lane cone edges. Kept alive across the
+    // "set piece taken" (None) reset so the wall can still jump as the ball arrives.
+    const std::vector<Player*> &GetFreeKickWallPlayers() { return freeKickWallPlayers; }
     void ApplyAttackingRun(Player *manualPlayer = 0);
     void ApplyTeamPressure();
     void ApplyKeeperRush();
@@ -77,10 +81,18 @@ class TeamAIController {
     // Walks `taker` to its start position for the current set-piece type (throw-in retains).
     void PositionSetPieceTaker();
 
+    // Free-kick wall jump trigger (spec §10, #34): once the ball flies at the wall and is about to
+    // arrive, issue a single forced Special command to every wall player. Height-independent.
+    void UpdateFreeKickWallJump();
+
     Match *match;
     Team *team;
     Player *taker;
     e_SetPiece setPieceType;
+
+    std::vector<Player*> freeKickWallPlayers;
+    Vector3 freeKickWallCenter;
+    bool freeKickWallActive;
 
     Properties baseTeamTactics;
     Properties teamTacticsModMultipliers;

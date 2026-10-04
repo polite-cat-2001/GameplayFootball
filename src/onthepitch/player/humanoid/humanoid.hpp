@@ -34,6 +34,10 @@ class Humanoid : public HumanoidBase {
 
     void SelectRetainAnim();
 
+    // Forced free-kick wall jump (spec §10, #34): play the dedicated Special clip off the ball.
+    // TeamAIController calls this once per wall; the next Process picks it up as a command.
+    void ForceFreeKickWallJump();
+
     virtual void ResetSituation(const Vector3 &focusPos);
 
   protected:
@@ -50,6 +54,8 @@ class Humanoid : public HumanoidBase {
     Vector3 GetBestPossibleTouch(const Vector3 &desiredTouch, e_FunctionType functionType);
 
     Team *team;
+
+    bool freeKickWallJumpPending; // a forced wall-jump Special command waits to be picked up in Process
 
     mutable int stat_GetBodyBallDistanceAdvantage_RadiusDeny;
     mutable int stat_GetBodyBallDistanceAdvantage_DistanceDeny;

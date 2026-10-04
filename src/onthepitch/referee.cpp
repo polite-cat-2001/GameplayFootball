@@ -12,6 +12,39 @@
 
 #include "../main.hpp"
 
+namespace {
+  // Push a player out of the free-kick lane. `apex` is the ball, `axis` points from the ball to the
+  // goal and `perp` is its left normal. The lane is a corridor of half width `runupHalfWidth`
+  // behind the ball (the taker's run-up side) that opens into the wall cone ahead: at distance d>0
+  // the half width is max(minHalfWidth, coneSlope * d), where `coneSlope` is the wall's own
+  // half-width per metre on that side (0 when there is no wall). Players inside are pushed
+  // perpendicular to the axis, never radially, so they leave the kick line; `extraPush` adds a
+  // further sideways offset (half the ball->wall distance). The cone is asymmetric: each side uses
+  // the wall edge on that side (`coneSlopePos` for +perp, `coneSlopeNeg` for -perp). Returns the
+  // untouched position when already outside.
+  Vector3 PushOutOfFreeKickLane(const Vector3 &pos, const Vector3 &apex,
+                                const Vector3 &axis, const Vector3 &perp,
+                                float coneSlopePos, float coneSlopeNeg, float extraPush,
+                                float runupHalfWidth, float minHalfWidth, float margin,
+                                float runupBack, float laneForward) {
+    Vector3 rel = pos - apex; rel.coords[2] = 0.0f;
+    float d = rel.GetDotProduct(axis);
+    if (d < -runupBack || d > laneForward) return pos;
+    float s = rel.GetDotProduct(perp);
+    float coneSlope = (s >= 0.0f) ? coneSlopePos : coneSlopeNeg;
+    float halfWidth = minHalfWidth;
+    if (d <= 0.0f) {
+      halfWidth = runupHalfWidth;
+    } else {
+      float cone = coneSlope * d;
+      if (cone > halfWidth) halfWidth = cone;
+    }
+    if (s <= -(halfWidth + margin) || s >= (halfWidth + margin)) return pos; // already outside
+    float newS = (s >= 0.0f ? 1.0f : -1.0f) * (halfWidth + margin + extraPush);
+    return apex + axis * d + perp * newS;
+  }
+}
+
 Referee::Referee(Match *match) : match(match) {
   buffer.desiredSetPiece = e_SetPiece_KickOff;
   buffer.teamID = 0;
@@ -264,6 +297,63 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
   match->GetTeam(1)->GetController()->PrepareSetPiece(setPiece, buffer.teamID);
 
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
+
+  // FIFA/PES-like: keep the free-kick lane clear of everyone but the taker, the keepers and the
+  // wall, so nobody stands between the taker and the wall (or in the kick line). The lane is the
+  // run-up corridor behind the ball opening into the cone through the wall edges (spec §10, #34).
+  if (setPiece == e_SetPiece_FreeKick) {
+    Vector3 apex = match->GetBall()->Predict(0).Get2D();
+    Team *takerTeam = match->GetTeam(buffer.teamID);
+    Vector3 axis(-takerTeam->GetSide() * pitchHalfW, 0, 0); axis = axis - apex; axis.coords[2] = 0.0f;
+    if (axis.GetLength() >= 0.01f) {
+      axis.Normalize();
+      Vector3 perp(-axis.coords[1], axis.coords[0], 0.0f);
+      Team *defendingTeam = match->GetTeam(abs(buffer.teamID - 1));
+      const std::vector<Player*> &wall = defendingTeam->GetController()->GetFreeKickWallPlayers();
+      float slopePos = 0.0f;     // lane half width per metre ahead on the +perp side, from that wall edge
+      float slopeNeg = 0.0f;     // ... on the -perp side
+      float wallDist = 0.0f;     // ball -> wall distance along the axis (0 when there is no wall)
+      if (wall.size() >= 2) {
+        Vector3 a = wall.front()->GetPosition() - apex; a.coords[2] = 0.0f;
+        Vector3 b = wall.back()->GetPosition() - apex; b.coords[2] = 0.0f;
+        float dist = (a.GetDotProduct(axis) + b.GetDotProduct(axis)) * 0.5f;
+        if (dist < 0.01f) dist = 0.01f;
+        // each wall extreme bounds its own side of the cone, so the cleared cone is the one through
+        // both extremes (asymmetric when the near-post line is not centred on the goal)
+        Vector3 extremes[2] = { a, b };
+        for (int e = 0; e < 2; e++) {
+          float s = extremes[e].GetDotProduct(perp);
+          float slope = fabs(s) / dist;
+          if (s >= 0.0f) { if (slope > slopePos) slopePos = slope; }
+                    else { if (slope > slopeNeg) slopeNeg = slope; }
+        }
+        wallDist = dist;
+      }
+      // outside the lane, push a further half of the ball->wall distance sideways, so a player can
+      // not sit just at the lane edge and still get in the way
+      float extraPush = _default_FreeKick_LanePushFactor * wallDist;
+      for (int t = 0; t < 2; t++) {
+        std::vector<Player*> players;
+        match->GetTeam(t)->GetActivePlayers(players);
+        for (unsigned int i = 0; i < players.size(); i++) {
+          Player *p = players.at(i);
+          if (p == buffer.taker) continue;
+          if (p->GetFormationEntry().role == e_PlayerRole_GK) continue;
+          bool isWall = false;
+          for (unsigned int w = 0; w < wall.size(); w++) { if (wall.at(w) == p) { isWall = true; break; } }
+          if (isWall) continue;
+
+          Vector3 pushed = PushOutOfFreeKickLane(p->GetPosition(), apex, axis, perp, slopePos, slopeNeg, extraPush,
+                                                 _default_FreeKick_LaneRunupHalfWidth,
+                                                 _default_FreeKick_LaneMinHalfWidth,
+                                                 _default_FreeKick_LaneMargin,
+                                                 _default_FreeKick_LaneRunupBack,
+                                                 _default_FreeKick_LaneForward);
+          if ((pushed - p->GetPosition()).GetLength() > 0.001f) p->ResetPosition(pushed, apex);
+        }
+      }
+    }
+  }
 }
 
 void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {

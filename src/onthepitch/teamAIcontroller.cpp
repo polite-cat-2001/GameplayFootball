@@ -41,6 +41,9 @@ TeamAIController::TeamAIController(Team *team) : team(team) {
 
   setPieceType = e_SetPiece_None;
 
+  freeKickWallCenter = Vector3(0);
+  freeKickWallActive = false;
+
   offsideTrapX = 0;
 
   endApplyAttackingRun_ms = 0;
@@ -240,6 +243,8 @@ void TeamAIController::Process() {
   if (match->GetActualTime_ms() % 1500 == 0) {
     forwardSupportPlayer = AI_GetClosestPlayer(team, team->GetDesignatedTeamPossessionPlayer()->GetPosition() * Vector3(1.0f, 1.0f, 0.0f) + Vector3(-team->GetSide() * 1.5f, 0, 0), false, team->GetDesignatedTeamPossessionPlayer());
   }
+
+  UpdateFreeKickWallJump();
 
 }
 
@@ -673,7 +678,17 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID, Pla
   setPieceType = setPiece;
 
   if (takerTeamID == -1) assert(setPieceType == e_SetPiece_None);
-  if (setPieceType == e_SetPiece_None) return;
+  if (setPieceType == e_SetPiece_None) {
+    // The set piece has been taken: keep the free-kick wall state intact so the wall-jump trigger
+    // can still fire this tick (the ball starts moving exactly when the set piece ends). A new set
+    // piece rebuilds it below.
+    return;
+  }
+
+  // A new set piece: drop any wall left over from the previous one.
+  freeKickWallPlayers.clear();
+  freeKickWallCenter = Vector3(0);
+  freeKickWallActive = false;
 
   std::vector<Player*> players;
   team->GetActivePlayers(players);
@@ -821,25 +836,72 @@ void TeamAIController::PrepareSetPiece(e_SetPiece setPiece, int takerTeamID, Pla
         highYBound = pitchHalfH * 0.7;
         Vector3 basePos = AI_GetAdaptedFormationPosition(match, players.at(i), backXBound, frontXBound, lowYBound, highYBound, xFocus, xFocusStrength, yFocus, yFocusStrength, ballPos, 0.4, 0, 0, false);
 
-        // keep distance
+        // keep distance (IFAB 9.15 m law: defenders stay this far from the ball)
         if (!isTakerTeam) {
-          if ((basePos - match->GetBall()->Predict(0).Get2D()).GetLength() < 9.15) {
-            basePos = match->GetBall()->Predict(0).Get2D() + (basePos - match->GetBall()->Predict(0).Get2D()).GetNormalized() * 9.15;
+          if ((basePos - match->GetBall()->Predict(0).Get2D()).GetLength() < freeKickWallDistance) {
+            basePos = match->GetBall()->Predict(0).Get2D() + (basePos - match->GetBall()->Predict(0).Get2D()).GetNormalized() * freeKickWallDistance;
           }
         }
 
         players.at(i)->ResetPosition(basePos, match->GetBall()->Predict(0).Get2D());
       }
 
-      // wall
-      if (!isTakerTeam && (match->GetBall()->Predict(0).Get2D() - Vector3(team->GetSide() * pitchHalfW, 0, 0)).GetLength() < 40.0) {
-        std::vector<Player*> result;
-        AI_GetClosestPlayers(team, match->GetBall()->Predict(0).Get2D(), false, result, 3);
-        for (unsigned int i = 0; i < result.size(); i++) {
-          Vector3 toGoal = (Vector3(team->GetSide() * pitchHalfW, 0, 0) - match->GetBall()->Predict(0).Get2D()).GetNormalized(0);
-          toGoal += Vector3(0, 1.0 - i, 0) * 0.07;
-          toGoal.Normalize();
-          result.at(i)->ResetPosition(match->GetBall()->Predict(0).Get2D() + toGoal * 9.15f, match->GetBall()->Predict(0).Get2D());
+      // wall (spec §10, #34): a row of the N nearest AI field players on the ball->near-post line,
+      // spaced shoulder-to-shoulder; the goalkeeper and any human-controlled player are left alone.
+      if (!isTakerTeam) {
+        Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
+        Vector3 ownGoal(team->GetSide() * pitchHalfW, 0, 0);
+        float distToGoal = (ballPos - ownGoal).GetLength();
+        int count = 0;
+        if (distToGoal <= freeKickWallFarDist) {
+          if (distToGoal <= freeKickWallNearDist) {
+            count = freeKickWallMaxPlayers;
+          } else {
+            float t = (distToGoal - freeKickWallNearDist) / (freeKickWallFarDist - freeKickWallNearDist);
+            count = (int)round(freeKickWallMaxPlayers + (freeKickWallMinPlayers - freeKickWallMaxPlayers) * t);
+          }
+        }
+        if (count > 0) {
+          // N nearest field players, excluding the human-controlled player (players already has the GK removed)
+          std::vector<Player*> result;
+          std::vector<bool> used(players.size(), false);
+          for (int k = 0; k < count; k++) {
+            float bestDistance = 1e9f;
+            int best = -1;
+            for (unsigned int i = 0; i < players.size(); i++) {
+              if (used.at(i) || team->IsHumanControlled(players.at(i)->GetID())) continue;
+              float distance = (players.at(i)->GetPosition().Get2D() - ballPos).GetLength();
+              if (distance < bestDistance) { bestDistance = distance; best = (int)i; }
+            }
+            if (best == -1) break;
+            used.at(best) = true;
+            result.push_back(players.at(best));
+          }
+
+          // row: on the ball->near-post line, freeKickWallDistance from the ball; if the goal is
+          // closer than that, sit on the goal line instead, centred on the goal mouth.
+          Vector3 goalCenter(ownGoal.coords[0], 0, 0);
+          Vector3 nearPost(ownGoal.coords[0], (ballPos.coords[1] < 0 ? -goalHalfWidth : goalHalfWidth), 0);
+          Vector3 toNear = (nearPost - ballPos).Get2D();
+          Vector3 center;
+          Vector3 right;
+          if (toNear.GetLength() <= freeKickWallDistance) {
+            center = goalCenter;
+            right = Vector3(0, 1, 0);
+          } else {
+            Vector3 dir = toNear.GetNormalized();
+            center = ballPos + dir * freeKickWallDistance;
+            right = Vector3(-dir.coords[1], dir.coords[0], 0);
+          }
+
+          int n = (int)result.size();
+          for (int i = 0; i < n; i++) {
+            float offset = (i - (n - 1) * 0.5f) * freeKickWallSpacing;
+            result.at(i)->ResetPosition(center + right * offset, ballPos);
+          }
+          freeKickWallCenter = center;
+          freeKickWallPlayers = result;
+          freeKickWallActive = !result.empty();
         }
       }
 
@@ -954,6 +1016,31 @@ void TeamAIController::PositionSetPieceTaker() {
   }
 }
 
+void TeamAIController::UpdateFreeKickWallJump() {
+  // Height-independent wall jump (spec §10, #34): once the ball flies at the wall and is about
+  // `freeKickWallJumpTime / 2` away, issue one forced Special command to the whole wall, then never
+  // again. Before the kick the ball is (almost) still, so the speed gate keeps the wall grounded.
+  if (!freeKickWallActive) return;
+  if (freeKickWallPlayers.empty()) { freeKickWallActive = false; return; }
+
+  Vector3 ballMovement = match->GetBall()->GetMovement().Get2D();
+  float speed = ballMovement.GetLength();
+  if (speed < freeKickWallJumpMinSpeed) return; // not kicked yet (or the ball has stopped)
+
+  Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
+  Vector3 toWall = (freeKickWallCenter - ballPos).Get2D();
+  float along = toWall.GetDotProduct(ballMovement.GetNormalized());
+  if (along <= 0.0f) return; // ball not closing on the wall yet (curl may still turn it in)
+
+  float timeToWall = along / speed;
+  if (timeToWall > freeKickWallJumpTime * 0.5f) return;
+
+  freeKickWallActive = false;
+  for (unsigned int i = 0; i < freeKickWallPlayers.size(); i++) {
+    freeKickWallPlayers.at(i)->TriggerFreeKickWallJump();
+  }
+}
+
 void TeamAIController::ApplyAttackingRun(Player *manualPlayer) {
   endApplyAttackingRun_ms = match->GetActualTime_ms() + 4000;//1500;
 
@@ -1054,6 +1141,10 @@ void TeamAIController::Reset() {
   taker = 0;
 
   setPieceType = e_SetPiece_None;
+
+  freeKickWallPlayers.clear();
+  freeKickWallCenter = Vector3(0);
+  freeKickWallActive = false;
 
   offsideTrapX = 0;
 

@@ -403,6 +403,7 @@ struct PlayerCommand {
     useSpecialVar2 = false;
     specialVar2 = 0;
     modifier = 0;
+    forceIncomingVelocityIdle = false;
   }
 
   e_FunctionType desiredFunctionType;
@@ -433,6 +434,10 @@ struct PlayerCommand {
   int            specialVar2;
 
   int            modifier;
+
+  // Forced off-ball Specials (free-kick wall jump, #34): treat the current velocity as idle when
+  // matching animation incoming velocity, so an idle-authored clip is selectable while running.
+  bool           forceIncomingVelocityIdle;
 };
 
 typedef std::vector<PlayerCommand> PlayerCommandQueue;
@@ -458,6 +463,29 @@ enum e_PlayerRole {
 // Distance (m) from the attacking goal below which a free kick counts as
 // "near" and uses the near free-kick taker; farther kicks use the far taker.
 const float freeKickNearDistance = 35.0f;
+
+// Free-kick defensive wall (spec 2026-09-29 §10, #34). The wall stays under AI: it is a row of
+// defenders on the ball->near-post line, count scaling with the distance to the goal. No human
+// control and no dedicated "jump height" constant -- the forced jump clip sets the height.
+const float freeKickWallDistance = 9.15f;  // metre law: wall stands this far from the ball (also the defenders' min distance)
+const float freeKickWallFarDist = 40.0f;   // beyond this distance to goal there is no wall
+const float freeKickWallNearDist = 25.0f;  // within this distance the wall is at its maximum
+const int   freeKickWallMinPlayers = 2;
+const int   freeKickWallMaxPlayers = 4;
+const float freeKickWallSpacing = 0.62f;   // shoulder-to-shoulder spacing along the row
+const float freeKickWallJumpTime = 0.5f;   // jump duration (s); the trigger fires half of it before arrival
+const float freeKickWallJumpMinSpeed = 1.0f; // ball must be moving at least this fast (m/s) to count as in flight
+const int   freeKickWallJumpSpecialVar1 = 4; // specialvar1 of the forced free-kick wall jump clip
+
+// Free-kick shot-lane clearing: keep a lane around the ball->goal axis free of everyone but the
+// taker, the keepers and the wall, so a teammate never stands in the kick line. The lane covers the
+// taker's run-up side behind the ball and the cone through the wall edges.
+const float _default_FreeKick_LaneMargin = 0.6f;         // extra clearance beyond the lane edge (m)
+const float _default_FreeKick_LanePushFactor = 0.5f;     // extra push = this fraction of the ball->wall distance (dimensionless)
+const float _default_FreeKick_LaneMinHalfWidth = 1.2f;   // floor so the lane is not razor-thin near the ball (m)
+const float _default_FreeKick_LaneRunupHalfWidth = 1.5f; // half width of the corridor behind the ball (m)
+const float _default_FreeKick_LaneRunupBack = 5.0f;      // clear this far behind the ball (taker side, m)
+const float _default_FreeKick_LaneForward = 30.0f;       // clear this far ahead toward the goal (m)
 
 enum e_TeamRole {
   e_TeamRole_Captain,
