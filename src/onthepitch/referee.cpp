@@ -298,60 +298,77 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
 
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
 
-  // FIFA/PES-like: keep the free-kick lane clear of everyone but the taker, the keepers and the
-  // wall, so nobody stands between the taker and the wall (or in the kick line). The lane is the
-  // run-up corridor behind the ball opening into the cone through the wall edges (spec §10, #34).
-  if (setPiece == e_SetPiece_FreeKick) {
-    Vector3 apex = match->GetBall()->Predict(0).Get2D();
-    Team *takerTeam = match->GetTeam(buffer.teamID);
-    Vector3 axis(-takerTeam->GetSide() * pitchHalfW, 0, 0); axis = axis - apex; axis.coords[2] = 0.0f;
-    if (axis.GetLength() >= 0.01f) {
-      axis.Normalize();
-      Vector3 perp(-axis.coords[1], axis.coords[0], 0.0f);
-      Team *defendingTeam = match->GetTeam(abs(buffer.teamID - 1));
-      const std::vector<Player*> &wall = defendingTeam->GetController()->GetFreeKickWallPlayers();
-      float slopePos = 0.0f;     // lane half width per metre ahead on the +perp side, from that wall edge
-      float slopeNeg = 0.0f;     // ... on the -perp side
-      float wallDist = 0.0f;     // ball -> wall distance along the axis (0 when there is no wall)
-      if (wall.size() >= 2) {
-        Vector3 a = wall.front()->GetPosition() - apex; a.coords[2] = 0.0f;
-        Vector3 b = wall.back()->GetPosition() - apex; b.coords[2] = 0.0f;
-        float dist = (a.GetDotProduct(axis) + b.GetDotProduct(axis)) * 0.5f;
-        if (dist < 0.01f) dist = 0.01f;
-        // each wall extreme bounds its own side of the cone, so the cleared cone is the one through
-        // both extremes (asymmetric when the near-post line is not centred on the goal)
-        Vector3 extremes[2] = { a, b };
-        for (int e = 0; e < 2; e++) {
-          float s = extremes[e].GetDotProduct(perp);
-          float slope = fabs(s) / dist;
-          if (s >= 0.0f) { if (slope > slopePos) slopePos = slope; }
-                    else { if (slope > slopeNeg) slopeNeg = slope; }
-        }
-        wallDist = dist;
-      }
-      // outside the lane, push a further half of the ball->wall distance sideways, so a player can
-      // not sit just at the lane edge and still get in the way
-      float extraPush = _default_FreeKick_LanePushFactor * wallDist;
-      for (int t = 0; t < 2; t++) {
-        std::vector<Player*> players;
-        match->GetTeam(t)->GetActivePlayers(players);
-        for (unsigned int i = 0; i < players.size(); i++) {
-          Player *p = players.at(i);
-          if (p == buffer.taker) continue;
-          if (p->GetFormationEntry().role == e_PlayerRole_GK) continue;
-          bool isWall = false;
-          for (unsigned int w = 0; w < wall.size(); w++) { if (wall.at(w) == p) { isWall = true; break; } }
-          if (isWall) continue;
+  if (setPiece == e_SetPiece_FreeKick) ClearFreeKickLane();
+}
 
-          Vector3 pushed = PushOutOfFreeKickLane(p->GetPosition(), apex, axis, perp, slopePos, slopeNeg, extraPush,
-                                                 _default_FreeKick_LaneRunupHalfWidth,
-                                                 _default_FreeKick_LaneMinHalfWidth,
-                                                 _default_FreeKick_LaneMargin,
-                                                 _default_FreeKick_LaneRunupBack,
-                                                 _default_FreeKick_LaneForward);
-          if ((pushed - p->GetPosition()).GetLength() > 0.001f) p->ResetPosition(pushed, apex);
-        }
-      }
+void Referee::ClearFreeKickLane() {
+  if (buffer.desiredSetPiece != e_SetPiece_FreeKick || !buffer.taker) return;
+
+  // Clear the run-up and the shot corridor from the ball through both wall extremes and on to the
+  // goalposts. This is rerun after a taker change because that recomputes the taking team's layout.
+  Vector3 apex = match->GetBall()->Predict(0).Get2D();
+  Team *takerTeam = match->GetTeam(buffer.teamID);
+  Vector3 goalCenter(-takerTeam->GetSide() * pitchHalfW, 0, 0);
+  Vector3 axis = goalCenter - apex;
+  axis.coords[2] = 0.0f;
+  if (axis.GetLength() < 0.01f) return;
+  axis.Normalize();
+  Vector3 perp(-axis.coords[1], axis.coords[0], 0.0f);
+
+  Team *defendingTeam = match->GetTeam(abs(buffer.teamID - 1));
+  const std::vector<Player*> &wall = defendingTeam->GetController()->GetFreeKickWallPlayers();
+  float slopePos = 0.0f;
+  float slopeNeg = 0.0f;
+  float wallDist = 0.0f;
+  if (wall.size() >= 2) {
+    Vector3 a = wall.front()->GetPosition() - apex; a.coords[2] = 0.0f;
+    Vector3 b = wall.back()->GetPosition() - apex; b.coords[2] = 0.0f;
+    float dist = (a.GetDotProduct(axis) + b.GetDotProduct(axis)) * 0.5f;
+    if (dist < 0.01f) dist = 0.01f;
+    Vector3 extremes[2] = { a, b };
+    for (int e = 0; e < 2; e++) {
+      float s = extremes[e].GetDotProduct(perp);
+      float slope = fabs(s) / dist;
+      if (s >= 0.0f) { if (slope > slopePos) slopePos = slope; }
+                else { if (slope > slopeNeg) slopeNeg = slope; }
+    }
+    wallDist = dist;
+  }
+
+  // The wall cone alone does not protect a shot aimed outside a wall extreme. Extend each side
+  // through its goalpost while retaining the wider wall-derived slope when it is larger.
+  Vector3 goalPosts[2] = { goalCenter + Vector3(0, -goalHalfWidth, 0),
+                           goalCenter + Vector3(0, goalHalfWidth, 0) };
+  for (int i = 0; i < 2; i++) {
+    Vector3 rel = goalPosts[i] - apex;
+    rel.coords[2] = 0.0f;
+    float d = rel.GetDotProduct(axis);
+    if (d <= 0.01f) continue;
+    float s = rel.GetDotProduct(perp);
+    float slope = fabs(s) / d;
+    if (s >= 0.0f) { if (slope > slopePos) slopePos = slope; }
+              else { if (slope > slopeNeg) slopeNeg = slope; }
+  }
+
+  float extraPush = _default_FreeKick_LanePushFactor * wallDist;
+  for (int t = 0; t < 2; t++) {
+    std::vector<Player*> players;
+    match->GetTeam(t)->GetActivePlayers(players);
+    for (unsigned int i = 0; i < players.size(); i++) {
+      Player *p = players.at(i);
+      if (p == buffer.taker) continue;
+      if (p->GetFormationEntry().role == e_PlayerRole_GK) continue;
+      bool isWall = false;
+      for (unsigned int w = 0; w < wall.size(); w++) { if (wall.at(w) == p) { isWall = true; break; } }
+      if (isWall) continue;
+
+      Vector3 pushed = PushOutOfFreeKickLane(p->GetPosition(), apex, axis, perp, slopePos, slopeNeg, extraPush,
+                                             _default_FreeKick_LaneRunupHalfWidth,
+                                             _default_FreeKick_LaneMinHalfWidth,
+                                             _default_FreeKick_LaneMargin,
+                                             _default_FreeKick_LaneRunupBack,
+                                             _default_FreeKick_LaneForward);
+      if ((pushed - p->GetPosition()).GetLength() > 0.001f) p->ResetPosition(pushed, apex);
     }
   }
 }

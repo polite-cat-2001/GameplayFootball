@@ -594,6 +594,7 @@ void Match::SetSetPieceTaker(Player *newTaker) {
   // Recompute the taking team's set-piece layout with the chosen taker: the new taker walks to the
   // ball, the old one returns to its slot (otherwise every change left another body behind the ball).
   team->GetController()->PrepareSetPiece(team->GetController()->GetSetPieceType(), newTaker->GetTeamID(), newTaker);
+  referee->ClearFreeKickLane();
   team->SelectPlayerForTakerChange(oldTaker, newTaker);
   designatedPossessionPlayer = newTaker;
 }

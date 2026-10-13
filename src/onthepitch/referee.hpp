@@ -46,6 +46,7 @@ class Referee {
     void Process();
 
     void PrepareSetPiece(e_SetPiece setPiece);
+    void ClearFreeKickLane();
 
     // Debug activation for manual testing (spec §11). Forces a set piece for the given team using
     // the normal timing (stop play, prepareTime, then the whistle at startTime); the taker, and the
