@@ -842,11 +842,8 @@ void AnimCollection::CrudeSelection(DataSet &dataSet, const CrudeSelectionQuery 
           std::string touchFoot = animations.at(i)->GetVariable("touchfoot");
           e_Foot animFoot = e_Foot_Right;
           if (touchFoot.compare("left") == 0) animFoot = e_Foot_Left;
-
-          // for mirrored anims that, therefore, don't start with right foot
-          if (animations.at(i)->GetCurrentFoot() == e_Foot_Left) {
-            if (animFoot == e_Foot_Left) animFoot = e_Foot_Right; else animFoot = e_Foot_Left;
-          }
+          else if (touchFoot.compare("right") == 0) animFoot = e_Foot_Right;
+          else animFoot = animations.at(i)->GetCurrentFoot();
 
           if (which == 1 && query.strongFoot != animFoot) selectAnim = false;
           if (which == 2 && query.strongFoot == animFoot) selectAnim = false;

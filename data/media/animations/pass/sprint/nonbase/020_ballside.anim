@@ -19,9 +19,15 @@ extension,football,26,0.698737,-1.482684,0.110000
 <outgoingballdirection_maxdeviation>
 	0.1
 </outgoingballdirection_maxdeviation>
+<forcedfoot>
+	strong
+</forcedfoot>
 <steps>
 	2
 </steps>
+<touchfoot>
+	left
+</touchfoot>
 <type>
 	shortpass
 </type>

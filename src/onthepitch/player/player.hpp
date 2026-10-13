@@ -97,6 +97,8 @@ class Player : public PlayerBase {
 
     float GetStaminaStat() const;
     virtual float GetStat(const char *name) const;
+    // Preferred kicking foot (players without DB data count as right-footed).
+    bool IsLeftFooted() { return GetPlayerData()->IsLeftFooted(); }
 
     virtual void ResetSituation(const Vector3 &focusPos);
 

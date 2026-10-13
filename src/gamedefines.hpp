@@ -138,6 +138,12 @@ const float _default_SetPiece_CurlScale = 1.0f;              // stick-X accumula
 const float _default_SetPiece_CurlMax = 1.0f;                // |curl| cap
 const float _default_SetPiece_CurlSpin = 220.0f;             // lateral spin (rad/s) a full curl puts on a pass/cross
 
+// Set-piece taker placement: how far behind the ball the taker stands, and the lateral offset to
+// the taker's kicking-foot side (right-footed -> left of the shooting line, left-footed -> right),
+// so the strong foot swings into the ball. Used on free kick, corner, goal kick and penalty.
+const float _default_SetPiece_RunupDist = 2.2f;          // taker stands this far behind the ball (m)
+const float _default_SetPiece_RunupFootLateral = 0.8f;   // lateral shift to the kicking-foot side (m)
+
 // Goalkeeper layer (spec 2026-09-29 §8, #31). The keeper is hard-clamped to his own penalty
 // area while he holds the ball (Hands): `keeperBoxDepth` metres from his goal line,
 // `keeperBoxHalfWidth` either side of the centre. Shared with the keeper deflect check

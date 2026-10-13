@@ -22,6 +22,12 @@ extension,football,31,-0.180000,-0.260000,0.110000
 <touch_maxpowerfactor>
 	0.7
 </touch_maxpowerfactor>
+<forcedfoot>
+	strong
+</forcedfoot>
+<touchfoot>
+	left
+</touchfoot>
 <type>
 	shortpass
 </type>

@@ -1313,8 +1313,18 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   query.byFoot = false;
   query.foot = spatialState.foot == e_Foot_Left ? e_Foot_Right : e_Foot_Left;
 
-  // query.heedForcedFoot = true;
-  // query.strongFoot = e_Foot_Right; // todo: take from player data
+  bool isKickingAction = command.desiredFunctionType == e_FunctionType_ShortPass ||
+                         command.desiredFunctionType == e_FunctionType_LongPass ||
+                         command.desiredFunctionType == e_FunctionType_HighPass ||
+                         command.desiredFunctionType == e_FunctionType_Shot;
+  e_SetPiece setPieceType = match->GetSetPieceType();
+  bool isFootedSetPiece = setPieceType == e_SetPiece_FreeKick || setPieceType == e_SetPiece_Penalty ||
+                          setPieceType == e_SetPiece_Corner || setPieceType == e_SetPiece_GoalKick;
+  bool forceStrongFoot = isKickingAction && isFootedSetPiece && match->IsInSetPiece() &&
+                         match->GetRefereeBuffer().taker == CastPlayer();
+
+  query.heedForcedFoot = forceStrongFoot;
+  query.strongFoot = CastPlayer()->IsLeftFooted() ? e_Foot_Left : e_Foot_Right;
 
   // hax: long pass uses same anims as short pass
   if (query.functionType == e_FunctionType_LongPass) query.functionType = e_FunctionType_ShortPass;
@@ -1421,6 +1431,20 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
 
   DataSet dataSet;
   anims->CrudeSelection(dataSet, query);
+
+  const e_Foot strongFoot = query.strongFoot;
+  auto compareStrongFoot = [this, strongFoot](int a, int b) {
+    auto usesStrongFoot = [this, strongFoot](int id) {
+      Animation *anim = anims->GetAnim(id);
+      e_Foot touchFoot = anim->GetCurrentFoot();
+      const std::string taggedFoot = anim->GetVariable("touchfoot");
+      if (taggedFoot == "left") touchFoot = e_Foot_Left;
+      else if (taggedFoot == "right") touchFoot = e_Foot_Right;
+      return touchFoot == strongFoot;
+    };
+    return usesStrongFoot(a) && !usesStrongFoot(b);
+  };
+
   //if (command.desiredFunctionType == e_FunctionType_Special) printf("size: %i\n", dataSet.size());
   if (dataSet.size() == 0) {
     if (command.desiredFunctionType == e_FunctionType_Movement) {
@@ -1637,6 +1661,15 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   std::stable_sort(dataSet.begin(), dataSet.end(), boost::bind(&Humanoid::CompareNumericVariable, this, _1, _2));
   #endif
 
+  if (isKickingAction && !forceStrongFoot) {
+    // Stable tie-break: the following locomotion-foot sort remains primary, so the strong foot
+    // never displaces a variant that better fits the current stride.
+    #ifdef dataSetSortable
+    dataSet.sort(compareStrongFoot);
+    #else
+    std::stable_sort(dataSet.begin(), dataSet.end(), compareStrongFoot);
+    #endif
+  }
   SetFootSimilarityPredicate(spatialState.foot);
   #ifdef dataSetSortable
   dataSet.sort(boost::bind(&Humanoid::CompareFootSimilarity, this, _1, _2));
@@ -1786,7 +1819,6 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
       }
     }
   }
-
 
   // check if we really want to requeue; if the anim we dug up is actually better than the current
 

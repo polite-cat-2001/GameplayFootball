@@ -96,6 +96,19 @@ Vector3 SetPieceBaseHeading(e_SetPiece type, const Vector3 &spot, int side) {
   return dir.Get2D().GetNormalized(forward);
 }
 
+Vector3 SetPieceTakerPosition(const Vector3 &spot, const Vector3 &heading, bool isLeftFooted,
+                              float runupDist, float footLateral) {
+  Vector3 dir = heading.Get2D().GetNormalized(Vector3(-1, 0, 0));
+  // Left normal of the heading (rotate +90 deg around z): the taker's left as seen from above.
+  Vector3 left(-dir.coords[1], dir.coords[0], 0.0f);
+  // A right-footed taker stands to the left of the shooting line so the right foot swings into the
+  // ball; a left-footed one mirrors to the right.
+  float side = isLeftFooted ? -1.0f : 1.0f;
+  Vector3 pos = spot - dir * runupDist + left * (side * footLateral);
+  pos.coords[2] = 0.0f;
+  return pos;
+}
+
 SetPieceAim RotateSetPieceAim(const SetPieceAim &aim, float stickX, float dt, e_SetPiece type) {
   // Turning right on screen (positive stick-X) rotates the heading clockwise from above, which is
   // a negative world angle in GF's x-y plane; the base heading already carries the team's side.

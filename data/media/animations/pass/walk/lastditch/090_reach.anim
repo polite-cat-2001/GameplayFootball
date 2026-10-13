@@ -19,6 +19,9 @@ extension,football,15,0.000000,-1.499999,0.110000
 <lastditch>
 	true
 </lastditch>
+<forcedfoot>
+	strong
+</forcedfoot>
 <steps>
 	1
 </steps>
@@ -28,6 +31,9 @@ extension,football,15,0.000000,-1.499999,0.110000
 <touch_maxpowerfactor>
 	0.1
 </touch_maxpowerfactor>
+<touchfoot>
+	right
+</touchfoot>
 <type>
 	shortpass
 </type>

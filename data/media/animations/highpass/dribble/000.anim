@@ -16,6 +16,12 @@ extension,football,27,0.090000,-1.469999,0.110000
 <balldirection>
 	0.000000,-1.000000,0.000000
 </balldirection>
+<forcedfoot>
+	strong
+</forcedfoot>
+<touchfoot>
+	left
+</touchfoot>
 <type>
 	highpass
 </type>

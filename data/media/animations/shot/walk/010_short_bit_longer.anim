@@ -16,9 +16,15 @@ extension,football,23,0.329070,-1.358741,0.110000
 <balldirection>
 	-0.196116,-0.980581,0.000000
 </balldirection>
+<forcedfoot>
+	strong
+</forcedfoot>
 <steps>
 	2
 </steps>
+<touchfoot>
+	left
+</touchfoot>
 <type>
 	shot
 </type>

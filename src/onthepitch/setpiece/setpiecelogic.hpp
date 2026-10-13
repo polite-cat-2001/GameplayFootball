@@ -64,6 +64,13 @@ float SetPieceAimArc(e_SetPiece type);
 // goal kick -> straight up the pitch. `side` is the taker's team side.
 Vector3 SetPieceBaseHeading(e_SetPiece type, const Vector3 &spot, int side);
 
+// Where the taker stands for a set piece: `runupDist` behind the ball along the kick heading
+// (`heading` points from the ball toward the target), offset laterally to the kicking-foot side so
+// the strong foot swings into the ball. A right-footed taker stands to the left of the shooting
+// line (world -left of heading), a left-footed one to the right. `heading` must be horizontal.
+Vector3 SetPieceTakerPosition(const Vector3 &spot, const Vector3 &heading, bool isLeftFooted,
+                              float runupDist, float footLateral);
+
 // Turns the aim by stick-X this tick. The window is clamped to the per-type arc, so the aim can
 // never leave it; released stick input simply stops turning (the aim is never reset).
 SetPieceAim RotateSetPieceAim(const SetPieceAim &aim, float stickX, float dt, e_SetPiece type);

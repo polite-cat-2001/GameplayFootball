@@ -16,12 +16,18 @@ extension,football,36,-0.050000,-1.209999,0.110000
 <balldirection>
 	0.196116,0.980581,0.000000
 </balldirection>
+<forcedfoot>
+	strong
+</forcedfoot>
 <steps>
 	2
 </steps>
 <touch_maxpowerfactor>
 	0.7
 </touch_maxpowerfactor>
+<touchfoot>
+	left
+</touchfoot>
 <type>
 	highpass
 </type>

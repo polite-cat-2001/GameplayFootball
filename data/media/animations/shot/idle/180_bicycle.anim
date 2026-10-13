@@ -19,6 +19,12 @@ extension,football,33,-0.020000,-0.230000,1.799999
 <outgoing_special_state>
         lay_back
 </outgoing_special_state>
+<forcedfoot>
+	strong
+</forcedfoot>
+<touchfoot>
+	left
+</touchfoot>
 <type>
         shot
 </type>

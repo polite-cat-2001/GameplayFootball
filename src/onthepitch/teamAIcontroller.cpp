@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include "AIsupport/AIfunctions.hpp"
+#include "setpiece/setpiecelogic.hpp"
 
 #include "team.hpp"
 #include "match.hpp"
@@ -1005,15 +1006,17 @@ void TeamAIController::PositionSetPieceTaker() {
   Vector3 ballPos = match->GetBall()->Predict(0).Get2D();
   if (setPieceType == e_SetPiece_ThrowIn || setPieceType == e_SetPiece_KickOff) {
     taker->ResetPosition(ballPos + ballPos.GetNormalized(Vector3(0, -team->GetSide(), 0)) * 0.3f, ballPos);
-  } else if (setPieceType == e_SetPiece_FreeKick) {
-    taker->ResetPosition(ballPos + Vector3(team->GetSide(), 0, 0) * 2.3f, ballPos);
   } else {
-    taker->ResetPosition(ballPos + ballPos.GetNormalized(Vector3(0, -team->GetSide(), 0)) * 2.3f, ballPos);
+    // Free kick, corner, goal kick and penalty: stand behind the ball along the kick heading,
+    // shifted laterally to the strong-foot side, so the taker's kicking foot swings into the ball
+    // (open_football run-up idea). The heading is the ball->target direction for the set-piece type.
+    e_SetPiece headingType = (setPieceType == e_SetPiece_Penalty) ? e_SetPiece_FreeKick : setPieceType;
+    Vector3 heading = setpiecelogic::SetPieceBaseHeading(headingType, ballPos, team->GetSide());
+    Vector3 pos = setpiecelogic::SetPieceTakerPosition(ballPos, heading, taker->IsLeftFooted(),
+                                                       _default_SetPiece_RunupDist, _default_SetPiece_RunupFootLateral);
+    taker->ResetPosition(pos, ballPos);
   }
   if (setPieceType == e_SetPiece_ThrowIn) taker->SelectRetainAnim();
-  if (setPieceType == e_SetPiece_Penalty) {
-    taker->ResetPosition(ballPos + Vector3(team->GetSide(), 0, 0) * 3.0f, ballPos);
-  }
 }
 
 bool TeamAIController::IsFreeKickWallPlayer(Player *player) const {

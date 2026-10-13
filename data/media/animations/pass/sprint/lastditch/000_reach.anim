@@ -16,9 +16,15 @@ extension,football,12,-0.060000,-1.779999,0.110000
 <balldirection>
 	0.000000,-1.000000,0.000000
 </balldirection>
+<forcedfoot>
+	strong
+</forcedfoot>
 <steps>
 	2
 </steps>
+<touchfoot>
+	right
+</touchfoot>
 <type>
 	shortpass
 </type>

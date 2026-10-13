@@ -16,6 +16,12 @@ extension,football,24,0.000000,-0.670000,0.110000
 <balldirection>
 	1.000000, 0.000000, 0.000000
 </balldirection>
+<forcedfoot>
+	strong
+</forcedfoot>
+<touchfoot>
+	right
+</touchfoot>
 <type>
 	shot
 </type>
