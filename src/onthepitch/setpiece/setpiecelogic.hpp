@@ -83,6 +83,13 @@ Vector3 SetPieceAimHeading(const Vector3 &base, const SetPieceAim &aim);
 // a short/long pass sits on the ground until the stick is pulled down.
 float SetPiecePassHeight(e_FunctionType functionType, float stickY);
 
+struct PenaltyAim;
+
+// Penalty target selection uses kicker-relative left/right, then maps that lateral aim into world
+// space using the taker's current side. Rolls are supplied by the caller for deterministic tests.
+PenaltyAim PlanAIPenaltyAim(bool isLeftFooted, int side, float sideRoll, float heightRoll);
+float PlanAIPenaltyPower(float powerRoll);
+
 // The planned set-piece kick, ready to be copied into the command's TouchInfo.
 struct SetPieceKickPlan {
   Vector3    desiredDirection; // world-space horizontal heading (free-kick shot: goal-magnet mix)
@@ -131,6 +138,10 @@ struct PenaltyShotPlan {
 };
 
 PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge);
+PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge,
+                                float spreadAngleRoll, float spreadRadiusRoll);
+PenaltyShotPlan PlanAIPenaltyShot(const PenaltyAim &aim, float charge,
+                                  float spreadAngleRoll, float spreadRadiusRoll);
 
 }
 

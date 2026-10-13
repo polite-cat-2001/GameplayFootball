@@ -15,6 +15,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
 
 project(GameplayFootball)
 
+enable_testing()
+
 # Build identifier shipped in the LAN handshake so peers with different binaries
 # (or different data) refuse to play together instead of desyncing silently.
 execute_process(
@@ -423,3 +425,11 @@ else()
   target_link_libraries(lanmatchtest PRIVATE ${LIBRARIES})
 endif()
 copy_data_post_build(lanmatchtest)
+
+# Headless behavior tests for the pure set-piece planners.
+add_executable(setpiecelogictest
+        tools/setpiecelogictest/main.cpp
+        src/onthepitch/setpiece/setpiecelogic.cpp)
+apply_common_includes(setpiecelogictest)
+target_link_libraries(setpiecelogictest PRIVATE blunted2)
+add_test(NAME setpiecelogictest COMMAND setpiecelogictest)

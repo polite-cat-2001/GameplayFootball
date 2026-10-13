@@ -470,6 +470,23 @@ enum e_PlayerRole {
 // "near" and uses the near free-kick taker; farther kicks use the far taker.
 const float freeKickNearDistance = 35.0f;
 
+// AI penalty execution (ticket #36).
+const unsigned int _default_AI_PenaltyThinkDelay_ms = 1500; // pause after the whistle before the run-up
+const float _default_AI_PenaltyCenterProbability = 0.20f;
+const float _default_AI_PenaltyRightFootLeftProbability = 0.45f;
+const float _default_AI_PenaltyLeftFootRightProbability = 0.51f;
+const float _default_AI_PenaltySideLowProbability = 0.55f;
+const float _default_AI_PenaltyCenterLowProbability = 0.70f;
+const float _default_AI_PenaltySideMiddleProbability = 0.35f;
+const float _default_AI_PenaltyCenterMiddleProbability = 0.25f;
+const float _default_AI_PenaltyLowAimY = 0.30f;
+const float _default_AI_PenaltyPowerThreeQuarterProbability = 0.70f;
+const float _default_AI_PenaltyPowerMaximumProbability = 0.18f;
+const float _default_AI_PenaltyPowerThreeQuarter = 0.75f;
+const float _default_AI_PenaltyPowerMaximum = 1.0f;
+const float _default_AI_PenaltyPowerHalf = 0.50f;
+const float _default_AI_PenaltySpreadScale = 0.35f;
+
 // Free-kick defensive wall (spec 2026-09-29 §10, #34). The wall stays under AI: it is a row of
 // defenders on the ball->near-post line, count scaling with the distance to the goal. No human
 // control and no dedicated "jump height" constant -- the forced jump clip sets the height.
@@ -538,6 +555,9 @@ const float lineHalfW = 0.06f;
 const float goalDepth = 2.55f;
 const float goalHeight = 2.5f;
 const float goalHalfWidth = 3.7f;
+const float _default_AI_PenaltyAimLateral = goalHalfWidth * 0.68f;
+const float _default_AI_PenaltyMiddleAimY = goalHeight * 0.50f;
+const float _default_AI_PenaltyHighAimY = goalHeight * 0.70f;
 
 enum e_DecayType {
   e_DecayType_Constant,

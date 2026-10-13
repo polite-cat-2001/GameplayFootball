@@ -134,6 +134,53 @@ float SetPiecePassHeight(e_FunctionType functionType, float stickY) {
   return clamp(lift, 0.0f, 1.0f) * _default_SetPiece_PassHeightMax;
 }
 
+PenaltyAim PlanAIPenaltyAim(bool isLeftFooted, int side, float sideRoll, float heightRoll) {
+  float directionRoll = clamp(sideRoll, 0.0f, 1.0f);
+  float heightChoice = clamp(heightRoll, 0.0f, 1.0f);
+  float centerCutoff = _default_AI_PenaltyCenterProbability;
+
+  PenaltyAim aim;
+  bool isCenter = directionRoll < centerCutoff;
+  if (isCenter) {
+    aim.lateral = 0.0f;
+  } else {
+    float preferredProbability = isLeftFooted
+                                     ? _default_AI_PenaltyLeftFootRightProbability
+                                     : _default_AI_PenaltyRightFootLeftProbability;
+    float preferredCutoff = centerCutoff + preferredProbability;
+    bool choosePreferredSide = directionRoll < preferredCutoff;
+    // Positive is screen-right from the taker's view. Team::GetSide maps that to the world
+    // lateral axis, so the same foot-relative tendency mirrors correctly after halftime.
+    float takerRelativeLateral = (isLeftFooted == choosePreferredSide) ? 1.0f : -1.0f;
+    aim.lateral = takerRelativeLateral * side * _default_AI_PenaltyAimLateral;
+  }
+
+  float lowProbability = isCenter ? _default_AI_PenaltyCenterLowProbability
+                                  : _default_AI_PenaltySideLowProbability;
+  float middleProbability = isCenter ? _default_AI_PenaltyCenterMiddleProbability
+                                     : _default_AI_PenaltySideMiddleProbability;
+  if (heightChoice < lowProbability) {
+    aim.height = _default_AI_PenaltyLowAimY;
+  } else if (heightChoice < lowProbability + middleProbability) {
+    aim.height = _default_AI_PenaltyMiddleAimY;
+  } else {
+    aim.height = _default_AI_PenaltyHighAimY;
+  }
+  return aim;
+}
+
+float PlanAIPenaltyPower(float powerRoll) {
+  float roll = clamp(powerRoll, 0.0f, 1.0f);
+  if (roll < _default_AI_PenaltyPowerThreeQuarterProbability) {
+    return _default_AI_PenaltyPowerThreeQuarter;
+  }
+  if (roll < _default_AI_PenaltyPowerThreeQuarterProbability +
+                 _default_AI_PenaltyPowerMaximumProbability) {
+    return _default_AI_PenaltyPowerMaximum;
+  }
+  return _default_AI_PenaltyPowerHalf;
+}
+
 SetPieceKickPlan PlanSetPieceKick(e_SetPiece type, const Vector3 &heading, const Vector3 &spot,
                                   int side, e_FunctionType functionType, float charge,
                                   float stickY, float curlAccum) {
@@ -184,11 +231,34 @@ PenaltyAim UpdatePenaltyAim(const PenaltyAim &aim, float stickLateral, float sti
   return result;
 }
 
+static PenaltyShotPlan PlanPenaltyShotWithSpread(const PenaltyAim &aim, float charge,
+                                                 float spreadAngleRoll, float spreadRadiusRoll,
+                                                 float spreadScale);
+
 PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge) {
+  float spreadAngleRoll = random(0.0f, 1.0f);
+  float spreadRadiusRoll = random(0.0f, 1.0f);
+  return PlanPenaltyShot(aim, charge, spreadAngleRoll, spreadRadiusRoll);
+}
+
+PenaltyShotPlan PlanPenaltyShot(const PenaltyAim &aim, float charge,
+                                float spreadAngleRoll, float spreadRadiusRoll) {
+  return PlanPenaltyShotWithSpread(aim, charge, spreadAngleRoll, spreadRadiusRoll, 1.0f);
+}
+
+PenaltyShotPlan PlanAIPenaltyShot(const PenaltyAim &aim, float charge,
+                                  float spreadAngleRoll, float spreadRadiusRoll) {
+  return PlanPenaltyShotWithSpread(aim, charge, spreadAngleRoll, spreadRadiusRoll,
+                                  _default_AI_PenaltySpreadScale);
+}
+
+static PenaltyShotPlan PlanPenaltyShotWithSpread(const PenaltyAim &aim, float charge,
+                                                 float spreadAngleRoll, float spreadRadiusRoll,
+                                                 float spreadScale) {
   float ratio = clamp(charge, 0.0f, 1.0f);
-  float spread = _default_Pen_SpreadMinR + (_default_Pen_SpreadMaxR - _default_Pen_SpreadMinR) * ratio;
-  float angle = random(0.0f, 2.0f * pi);
-  float radius = spread * std::sqrt(random(0.0f, 1.0f));
+  float spread = (_default_Pen_SpreadMinR + (_default_Pen_SpreadMaxR - _default_Pen_SpreadMinR) * ratio) * spreadScale;
+  float angle = clamp(spreadAngleRoll, 0.0f, 1.0f) * 2.0f * pi;
+  float radius = spread * std::sqrt(clamp(spreadRadiusRoll, 0.0f, 1.0f));
   PenaltyShotPlan plan;
   plan.lateral = aim.lateral + std::cos(angle) * radius;
   plan.height = clamp(aim.height + std::sin(angle) * radius, 0.0f, goalHeight + _default_Pen_AimOverhang);

@@ -39,6 +39,12 @@
 ElizaController::ElizaController(Match *match) : PlayerController(match) {
   lastDesiredDirection = Vector3(0);
   lastDesiredVelocity = 0;
+  penaltyPlanStartTime_ms = 0;
+  penaltyPlanReady = false;
+  penaltyCharge = 0.0f;
+  penaltyLateral = 0.0f;
+  penaltyHeight = 0.0f;
+  penaltySpeed = 0.0f;
 }
 
 ElizaController::~ElizaController() {
@@ -136,16 +142,57 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
   else if ((match->IsInSetPiece() && team->GetController()->GetPieceTaker() == player) || match->GetBallRetainer() == player) {
 
+    const e_SetPiece setPieceType = team->GetController()->GetSetPieceType();
+    if (match->IsInSetPiece() && setPieceType == e_SetPiece_Penalty &&
+        team->GetController()->GetPieceTaker() == player) {
+      const unsigned long thinkUntil_ms = match->GetRefereeBuffer().startTime + _default_AI_PenaltyThinkDelay_ms;
+      if (match->GetActualTime_ms() < thinkUntil_ms) {
+        PlayerCommand waitCommand;
+        waitCommand.desiredFunctionType = e_FunctionType_Movement;
+        waitCommand.useDesiredMovement = true;
+        waitCommand.desiredDirection = player->GetDirectionVec();
+        waitCommand.desiredVelocityFloat = idleVelocity;
+        waitCommand.useDesiredLookAt = false;
+        commandQueue.push_back(waitCommand);
+        return;
+      }
+    }
+
     PlayerCommand actionCommand;
 
-    if (team->GetController()->GetSetPieceType() == e_SetPiece_Penalty) {
+    if (setPieceType == e_SetPiece_Penalty) {
 
       actionCommand.desiredFunctionType = e_FunctionType_Shot;
       actionCommand.useDesiredMovement = false;
       actionCommand.useDesiredLookAt = false;
-      actionCommand.touchInfo.desiredDirection = (Vector3(-team->GetSide() * pitchHalfW, random(-5, 5), 0) - CastPlayer()->GetPosition()).GetNormalized(Vector3(-team->GetSide(), 0, 0));
-      actionCommand.touchInfo.desiredPower = random(0.4f, 1.0f);
-      setpiecelogic::ApplyShotPlan(actionCommand.touchInfo, setpiecelogic::PlanShot(match->GetBall()->Predict(0), team->GetSide(), actionCommand.touchInfo.desiredDirection, actionCommand.touchInfo.desiredPower, e_ShotType_Normal));
+      int side = team->GetSide();
+      unsigned long penaltyStartTime_ms = match->GetRefereeBuffer().startTime;
+      if (!penaltyPlanReady || penaltyPlanStartTime_ms != penaltyStartTime_ms) {
+        float powerRoll = random(0.0f, 1.0f);
+        float sideRoll = random(0.0f, 1.0f);
+        float heightRoll = random(0.0f, 1.0f);
+        float spreadAngleRoll = random(0.0f, 1.0f);
+        float spreadRadiusRoll = random(0.0f, 1.0f);
+        penaltyCharge = setpiecelogic::PlanAIPenaltyPower(powerRoll);
+        setpiecelogic::PenaltyAim aim = setpiecelogic::PlanAIPenaltyAim(
+            CastPlayer()->IsLeftFooted(), side, sideRoll, heightRoll);
+        setpiecelogic::PenaltyShotPlan plan = setpiecelogic::PlanAIPenaltyShot(
+            aim, penaltyCharge, spreadAngleRoll, spreadRadiusRoll);
+        penaltyLateral = plan.lateral;
+        penaltyHeight = plan.height;
+        penaltySpeed = plan.speed;
+        penaltyPlanStartTime_ms = penaltyStartTime_ms;
+        penaltyPlanReady = true;
+      }
+      Vector3 target(-side * pitchHalfW, penaltyLateral, penaltyHeight);
+      actionCommand.touchInfo.desiredPower = penaltyCharge;
+      actionCommand.touchInfo.desiredDirection =
+          (target - CastPlayer()->GetPosition()).GetNormalized(CastPlayer()->GetDirectionVec());
+      actionCommand.touchInfo.useAimTarget = true;
+      actionCommand.touchInfo.aimLateral = penaltyLateral;
+      actionCommand.touchInfo.aimHeight = penaltyHeight;
+      actionCommand.touchInfo.useAimHeight = true;
+      actionCommand.touchInfo.aimSpeed = penaltySpeed;
 
       commandQueue.push_back(actionCommand);
 
@@ -177,7 +224,7 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
         actionCommand.desiredFunctionType = e_FunctionType_ShortPass;
         desiredTargetPosition = player->GetPosition() + player->GetDirectionVec() * 1.0f;
 
-      } else if (team->GetController()->GetSetPieceType() == e_SetPiece_FreeKick) {
+      } else if (setPieceType == e_SetPiece_FreeKick) {
         if (random(0.0f, 1.0f) > 0.5f) {
           actionCommand.desiredFunctionType = e_FunctionType_HighPass;
           desiredTargetPosition = Vector3(pitchHalfW * -team->GetSide(), random(-10.0f, 10.0f), 0.0f);
@@ -822,6 +869,8 @@ Vector3 ElizaController::GetSupportPosition_ForceField(const MentalImage *mental
 void ElizaController::Reset() {
   lastDesiredDirection = Vector3(0);
   lastDesiredVelocity = 0;
+  penaltyPlanStartTime_ms = 0;
+  penaltyPlanReady = false;
 }
 
 void ElizaController::GetOnTheBallCommands(std::vector<PlayerCommand> &commandQueue, Vector3 &rawInputDirection, float &rawInputVelocityFloat) {

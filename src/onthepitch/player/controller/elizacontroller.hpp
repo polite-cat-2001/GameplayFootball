@@ -66,6 +66,12 @@ class ElizaController : public PlayerController {
 
     Vector3 lastDesiredDirection;
     float lastDesiredVelocity;
+    unsigned long penaltyPlanStartTime_ms;
+    bool penaltyPlanReady;
+    float penaltyCharge;
+    float penaltyLateral;
+    float penaltyHeight;
+    float penaltySpeed;
 
 };
 
