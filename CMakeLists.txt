@@ -259,6 +259,7 @@ add_library(gamelib STATIC
         src/onthepitch/setpiece/setpiecelogic.cpp
         src/onthepitch/setpiece/setpiecepresentation.cpp
         src/onthepitch/keeper/keeperlogic.cpp
+        src/onthepitch/net/netsim.cpp
         src/onthepitch/AIsupport/mentalimage.cpp
         src/onthepitch/AIsupport/AIfunctions.cpp
         src/onthepitch/proceduralpitch.cpp
@@ -433,3 +434,11 @@ add_executable(setpiecelogictest
 apply_common_includes(setpiecelogictest)
 target_link_libraries(setpiecelogictest PRIVATE blunted2)
 add_test(NAME setpiecelogictest COMMAND setpiecelogictest)
+
+# Headless tests for the pure goal-net soft-body (NetSim): counts and reproducibility.
+add_executable(netsimtest
+        tools/netsimtest/main.cpp
+        src/onthepitch/net/netsim.cpp)
+apply_common_includes(netsimtest)
+target_link_libraries(netsimtest PRIVATE blunted2)
+add_test(NAME netsimtest COMMAND netsimtest)
