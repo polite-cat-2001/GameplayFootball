@@ -609,6 +609,8 @@ class Match {
     bool goalNetReady;
     // Ball velocity during a replay, derived from the recorded frames (the live momentum is stale).
     Vector3 replayBallVel;
+    // Ball position at the previous net step, so the ball is swept (fast balls cannot skip the net).
+    Vector3 goalNetPrevBallPos;
 
     //boost::intrusive_ptr<Light> lightTest[100];
 

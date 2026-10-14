@@ -25,6 +25,16 @@ float Length(const Vector3 &v) {
   return std::sqrt(v.GetSquaredLength());
 }
 
+// Closest point on segment [a, b] to p (used to sweep the ball across a frame).
+Vector3 ClosestPointOnSegment(const Vector3 &a, const Vector3 &b, const Vector3 &p) {
+  const Vector3 ab = b - a;
+  const float lengthSq = ab.GetSquaredLength();
+  if (lengthSq < 0.0000001f) return a;
+  float t = (p - a).GetDotProduct(ab) / lengthSq;
+  t = std::max(0.0f, std::min(1.0f, t));
+  return a + ab * t;
+}
+
 void AddEdge(Net &net, int a, int b) {
   net.edges.push_back(a);
   net.edges.push_back(b);
@@ -88,7 +98,7 @@ Net BuildBoxNet(float width, float height, float depth, int wDiv, int hDiv, int 
   return net;
 }
 
-void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballVelocity, const Params &p, float dt) {
+void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballPrevPos, const Vector3 &ballVelocity, const Params &p, float dt) {
   const int n = static_cast<int>(net.pos.size());
   const int e = static_cast<int>(net.edges.size()) / 2;
 
@@ -102,8 +112,10 @@ void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballVelocity, co
     // The ball presses a panel only while it approaches it: its normal velocity points at the
     // panel from whichever side the ball is on (vn and signedDist have opposite signs). The push
     // is an impulse scaled by the normal speed and capped, so grazing/through balls barely move
-    // the net while a head-on shot punches a proportionate pocket.
-    const Vector3 rel = ballPos - net.pos[i];
+    // the net while a head-on shot punches a proportionate pocket. The ball is swept along the
+    // frame so a fast ball cannot skip past the influence radius between frames.
+    const Vector3 closest = ClosestPointOnSegment(ballPrevPos, ballPos, net.pos[i]);
+    const Vector3 rel = closest - net.pos[i];
     const float vn = ballVelocity.GetDotProduct(net.normal[i]);
     const float signedDist = rel.GetDotProduct(net.normal[i]);
     const float distance = Length(rel);

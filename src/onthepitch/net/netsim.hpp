@@ -53,9 +53,10 @@ Net BuildBoxNet(float width, float height, float depth, int wDiv, int hDiv, int 
 
 // Advances the net by one step. The ball presses a panel only while it approaches it: on the side
 // the ball is on, its normal velocity must point at the panel (impulse, not a constant force),
-// scaled by the normal speed and capped by `ballMaxImpact`. `ballPos`/`ballVelocity` are in the
-// net's local frame. Mutates `net.pos` / `net.prev`.
-void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballVelocity, const Params &params, float dt);
+// scaled by the normal speed and capped by `ballMaxImpact`. The ball is swept from `ballPrevPos` to
+// `ballPos`, so a fast ball cannot skip past the influence radius between frames. Positions are in
+// the net's local frame. Mutates `net.pos` / `net.prev`.
+void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballPrevPos, const Vector3 &ballVelocity, const Params &params, float dt);
 
 // Largest |len - restLen| / restLen over the edges (a wobble/tension readout).
 float MaxStrain(const Net &net);

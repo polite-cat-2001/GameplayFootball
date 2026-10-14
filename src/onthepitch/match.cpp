@@ -186,6 +186,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   goalNetMeshVertices[1] = 0;
   goalNetReady = false;
   replayBallVel = Vector3(0);
+  goalNetPrevBallPos = Vector3(0);
 
   remotePresentation = false;
   remoteAnimTableReady = false;
@@ -3329,10 +3330,14 @@ void Match::UpdateGoalNetting(const Vector3 &ballVelocity) {
   // Presentation-only, one-way: the ball pose drives the net; nothing feeds back (spec §13.4).
   // Constant simulation, so a cross or a touch of the net from outside also ripples it.
   const Vector3 ballWorld = ball->GetBallGeom()->GetPosition();
+  // Sweep the ball across the frame; ignore a teleport (e.g. the post-goal kickoff reset).
+  const Vector3 ballPrev = ((ballWorld - goalNetPrevBallPos).GetLength() > 2.0f) ? ballWorld : goalNetPrevBallPos;
+  goalNetPrevBallPos = ballWorld;
 
   for (int goal = 0; goal < 2; goal++) {
     netsim::Integrate(goalNets[goal], GoalNetBallToLocal(goal, ballWorld),
-                      GoalNetDirToLocal(goal, ballVelocity), goalNetParams, NET_SIM_STEP);
+                      GoalNetBallToLocal(goal, ballPrev), GoalNetDirToLocal(goal, ballVelocity),
+                      goalNetParams, NET_SIM_STEP);
     float *pos = goalNetMeshVertices[goal];
     for (unsigned int v = 0; v < goalNetNodeIndices.size(); v++) {
       const Vector3 wp = GoalNetLocalToWorld(goal, goalNets[goal].pos[goalNetNodeIndices[v]]);
