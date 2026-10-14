@@ -323,74 +323,75 @@ BallSpatialInfo Ball::CalculatePrediction() {
     }
 
 
-    // netting (two-sided): the ball is caught by / bounces off the goal-net planes, whether it
-    // comes from inside the goal or from outside. The ball is held with its SURFACE on the net
-    // (not its centre), so it never renders past it (spec §13 findings, #38). Absorbs the normal
-    // velocity (NET_BOUNCE); runs on the first prediction step only.
+    // netting (two-sided, swept): the ball cannot cross a goal-net plane within a step - it is
+    // placed on the surface and its normal velocity is absorbed (NET_BOUNCE). Works from inside
+    // the goal and from outside, so the ball never tunnels through or renders past the net
+    // (spec §13 findings, #38). Runs on the first prediction step only.
 
     if (predictTime_ms <= 10 && netting_enabled) {
 
       const float r = ballRadius;
       const signed int side = signSide(nextPos.coords[0]);
-      float ax = side * nextPos.coords[0]; // distance out from the pitch centre line, >= 0
-      const float ay = nextPos.coords[1];
-      float az = nextPos.coords[2];
-
       const float hw = goalHalfWidth;
-      const float back = pitchHalfW + goalDepth;
-      const bool nearGoalLine = ax > pitchHalfW - r; // net region starts at the goal line
-      const bool withinDepth = ax < back + r;
+      const float gh = goalHeight;
+      const float line = pitchHalfW;
+      const float back = line + goalDepth;
+      const float ax0 = side * nextPos.coords[0];
+      const float ay0 = nextPos.coords[1];
+      const float az0 = nextPos.coords[2];
+      const bool netZoneX = ax0 > line - r && ax0 < back + r; // behind the goal line, up to the net
+      const bool frameYZ = fabs(ay0) < hw + r && az0 < gh + r;
       bool hit = false;
 
-      // rear net (plane x = back), anywhere within the goal frame
-      if (nearGoalLine && fabs(ay) < hw + r && az < goalHeight + r) {
-        const float d = ax - back; // signed distance to the plane; > 0 == behind it
-        if (d > -r && d < r) {
-          const bool inside = d < 0.0f;
-          const float nv = momentumPredict.coords[0] * side; // > 0 == moving into the net
-          if ((inside && nv > 0.0f) || (!inside && nv < 0.0f)) {
-            momentumPredict.coords[0] = -momentumPredict.coords[0] * NET_BOUNCE;
-          }
-          ax = inside ? back - r : back + r;
+      // rear net (x = back): keep the ball on whichever side it is on
+      if (frameYZ) {
+        const float vOut = momentumPredict.coords[0] * side;
+        const float axEnd = ax0 + vOut * timeStep;
+        if (ax0 < back && axEnd > back - r) {
+          nextPos.coords[0] = side * (back - r);
+          momentumPredict.coords[0] = -momentumPredict.coords[0] * NET_BOUNCE;
+          hit = true;
+        } else if (ax0 >= back && axEnd < back + r) {
+          nextPos.coords[0] = side * (back + r);
+          momentumPredict.coords[0] = -momentumPredict.coords[0] * NET_BOUNCE;
           hit = true;
         }
       }
 
-      // side nets (planes y = +-hw), behind the goal line within depth and height
-      if (nearGoalLine && withinDepth && az < goalHeight + r) {
+      // side nets (y = +-hw)
+      if (netZoneX && az0 < gh + r) {
         for (int s = -1; s <= 1; s += 2) {
-          const float plane = s * hw;
-          const float d = ay - plane;
-          if (fabs(d) < r) {
-            const bool inside = d * s < 0.0f; // ball between the centre line and the plane
-            const float nv = momentumPredict.coords[1] * s;
-            if ((inside && nv > 0.0f) || (!inside && nv < 0.0f)) {
-              momentumPredict.coords[1] = -momentumPredict.coords[1] * NET_BOUNCE;
-            }
-            nextPos.coords[1] = inside ? plane - s * r : plane + s * r;
+          const float ays = ay0 * s;
+          const float vOut = momentumPredict.coords[1] * s;
+          const float ayEnd = ays + vOut * timeStep;
+          if (ays < hw && ayEnd > hw - r) {
+            nextPos.coords[1] = s * (hw - r);
+            momentumPredict.coords[1] = -momentumPredict.coords[1] * NET_BOUNCE;
+            hit = true;
+          } else if (ays >= hw && ayEnd < hw + r) {
+            nextPos.coords[1] = s * (hw + r);
+            momentumPredict.coords[1] = -momentumPredict.coords[1] * NET_BOUNCE;
             hit = true;
           }
         }
       }
 
-      // top net (plane z = goalHeight), behind the goal line within depth and width
-      if (nearGoalLine && withinDepth && fabs(ay) < hw + r) {
-        const float d = az - goalHeight;
-        if (fabs(d) < r) {
-          const bool inside = d < 0.0f;
-          if ((inside && momentumPredict.coords[2] > 0.0f) || (!inside && momentumPredict.coords[2] < 0.0f)) {
-            momentumPredict.coords[2] = -momentumPredict.coords[2] * NET_BOUNCE;
-          }
-          az = inside ? goalHeight - r : goalHeight + r;
+      // top net (z = gh)
+      if (netZoneX && fabs(ay0) < hw + r) {
+        const float vz = momentumPredict.coords[2];
+        const float azEnd = az0 + vz * timeStep;
+        if (az0 < gh && azEnd > gh - r) {
+          nextPos.coords[2] = gh - r;
+          momentumPredict.coords[2] = -momentumPredict.coords[2] * NET_BOUNCE;
+          hit = true;
+        } else if (az0 >= gh && azEnd < gh + r) {
+          nextPos.coords[2] = gh + r;
+          momentumPredict.coords[2] = -momentumPredict.coords[2] * NET_BOUNCE;
           hit = true;
         }
       }
 
-      if (hit) {
-        nextPos.coords[0] = side * ax;
-        nextPos.coords[2] = az;
-        ballTouchesNet = true;
-      }
+      if (hit) ballTouchesNet = true;
 
     } // </goal collisions>
 
