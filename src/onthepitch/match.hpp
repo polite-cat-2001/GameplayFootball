@@ -16,6 +16,7 @@
 #include "player/humanoid/animcollection.hpp"
 #include "AIsupport/mentalimage.hpp"
 #include "keeper/keeperlogic.hpp"
+#include "net/netsim.hpp"
 
 #include "../menu/menutask.hpp"
 
@@ -41,11 +42,6 @@ struct ReplaySpatialFrame {
   unsigned long frameTime_ms;
   Vector3 position;
   Quaternion orientation;
-};
-
-struct ReplayBallTouchesNetFrame {
-  unsigned long frameTime_ms;
-  bool ballTouchesNet;
 };
 
 class NetBuffer;
@@ -431,8 +427,10 @@ class Match {
     void CheckHumanoidCollision(Player *p1, Player *p2, std::vector<PlayerBounce> &p1Bounce, std::vector<PlayerBounce> &p2Bounce);
     void CheckBallCollisions();
 
+    // Procedural goal net (spec §13, #38): build the NetSim soft bodies + their dynamic meshes
+    // (once), advance them from the ball pose each tick, and re-upload the vertices.
     void PrepareGoalNetting();
-    void UpdateGoalNetting(bool ballTouchesNet = false);
+    void UpdateGoalNetting();
 
     // for stuff like animation smoothing, we could need the time elapsed since last Put() and such
     unsigned long previousProcessTime_ms;
@@ -589,8 +587,6 @@ class Match {
     boost::intrusive_ptr<Sound> crowd02;
 
     std::vector<ReplaySpatial*> replay;
-    boost::circular_buffer<ReplayBallTouchesNetFrame> replayBallTouchesNetFrames;
-    bool resetNetting;
     bool nettingHasChanged;
 
     float excitement;
@@ -601,8 +597,14 @@ class Match {
 
     std::map < Animation*, std::vector<Vector3> > animPositionCache;
 
-    std::vector<Vector3> nettingMeshesSrc[2];
-    std::vector<float*> nettingMeshes[2];
+    // Procedural goal net (spec §13, #38). One NetSim soft body per goal; `goalNetMeshVertices`
+    // point at the position block of each goal's dynamic mesh in the goals GeometryData, and
+    // `goalNetNodeIndices[v]` maps triangle-soup vertex v to its NetSim node.
+    netsim::Net goalNets[2];
+    netsim::Params goalNetParams;
+    float *goalNetMeshVertices[2];
+    std::vector<int> goalNetNodeIndices;
+    bool goalNetReady;
 
     //boost::intrusive_ptr<Light> lightTest[100];
 

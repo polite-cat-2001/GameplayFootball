@@ -81,7 +81,6 @@ class Ball {
       momentum = Vector3(0);
     }
 
-    bool BallTouchesNet() { return ballTouchesNet; }
     Vector3 GetAveragePosition(unsigned int duration_ms) const;
 
     void TriggerBallTouchSound(float gain);

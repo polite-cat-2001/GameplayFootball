@@ -38,6 +38,125 @@
 const unsigned int replaySize_ms = 10000;
 const unsigned int camPosSize = 150;//180; //130
 
+namespace {
+
+// Procedural goal-net mesh (spec §13, #38). The NetSim box is built in goal-local coordinates
+// (back panel at z=depth, +z points away from the pitch); these map it to GF world space, where
+// goal 0 sits at x = -pitchHalfW and goal 1 at x = +pitchHalfW.
+
+Vector3 GoalNetLocalToWorld(int goal, const Vector3 &p) {
+  return (goal == 0) ? Vector3(-(pitchHalfW + p.coords[2]), p.coords[0], p.coords[1])
+                     : Vector3( pitchHalfW + p.coords[2], p.coords[0], p.coords[1]);
+}
+
+Vector3 GoalNetDirToWorld(int goal, const Vector3 &d) {
+  return (goal == 0) ? Vector3(-d.coords[2], d.coords[0], d.coords[1])
+                     : Vector3( d.coords[2], d.coords[0], d.coords[1]);
+}
+
+// World ball position in the net's local frame (z = 0 at the goal line, growing into the box).
+Vector3 GoalNetBallToLocal(int goal, const Vector3 &world) {
+  return (goal == 0) ? Vector3(world.coords[1], world.coords[2], -world.coords[0] - pitchHalfW)
+                     : Vector3(world.coords[1], world.coords[2],  world.coords[0] - pitchHalfW);
+}
+
+struct GoalNetVertex {
+  int node;          // NetSim node index
+  float u, v;        // texture coords (one tile per grid cell)
+  Vector3 tangent;   // goal-local
+  Vector3 bitangent; // goal-local
+};
+
+// Triangulate the four NetSim panels (back / top / left / right) into a double-sided triangle
+// soup (no indices, matching the ASE loader). Emitting both windings keeps the net visible from
+// either side under backface culling.
+void BuildGoalNetVertices(const netsim::Net &net, std::vector<GoalNetVertex> &verts) {
+  const int uDiv[4] = { NET_WIDTH_DIV, NET_WIDTH_DIV, NET_DEPTH_DIV, NET_DEPTH_DIV };
+  const int vDiv[4] = { NET_HEIGHT_DIV, NET_DEPTH_DIV, NET_HEIGHT_DIV, NET_HEIGHT_DIV };
+  const Vector3 tangent[4] = { Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, 1) };
+  const Vector3 bitangent[4] = { Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(0, 1, 0), Vector3(0, 1, 0) };
+
+  verts.clear();
+  int base = 0;
+  for (int p = 0; p < 4; p++) {
+    const int cols = uDiv[p] + 1;
+    for (int j = 0; j < vDiv[p]; j++) {
+      for (int i = 0; i < uDiv[p]; i++) {
+        const int a = base + j * cols + i;
+        const int b = a + 1;
+        const int c = a + cols;
+        const int d = a + cols + 1;
+        const int tris[2][3] = { { a, b, d }, { a, d, c } };
+        const int triUV[2][6] = { { i, j, i + 1, j, i + 1, j + 1 }, { i, j, i + 1, j + 1, i, j + 1 } };
+        for (int t = 0; t < 2; t++) {
+          for (int side = 0; side < 2; side++) { // front then back winding
+            for (int k = 0; k < 3; k++) {
+              const int idx = (side == 0) ? k : 2 - k;
+              GoalNetVertex gv;
+              gv.node = tris[t][idx];
+              gv.u = static_cast<float>(triUV[t][idx * 2]);
+              gv.v = static_cast<float>(triUV[t][idx * 2 + 1]);
+              gv.tangent = tangent[p];
+              gv.bitangent = bitangent[p];
+              verts.push_back(gv);
+            }
+          }
+        }
+      }
+    }
+    base += cols * (vDiv[p] + 1);
+  }
+}
+
+// Fill one goal mesh's 5-block vertex array: position, normal, uv, tangent, bitangent. Normals are
+// derived from the emitted world positions per triangle, so they stay correct under the goal-0
+// mirror (a reflection flips a triangle's geometric normal relative to its winding).
+void WriteGoalNetMesh(int goal, const netsim::Net &net, const std::vector<GoalNetVertex> &verts, float *out) {
+  const int count = static_cast<int>(verts.size());
+  const int block = count * 3;
+  float *pos = out;
+  float *nor = out + block;
+  float *uv = out + block * 2;
+  float *tan = out + block * 3;
+  float *bit = out + block * 4;
+  for (int i = 0; i < count; i++) {
+    const GoalNetVertex &gv = verts[i];
+    const Vector3 wp = GoalNetLocalToWorld(goal, net.pos[gv.node]);
+    const Vector3 wt = GoalNetDirToWorld(goal, gv.tangent);
+    const Vector3 wb = GoalNetDirToWorld(goal, gv.bitangent);
+    pos[i * 3 + 0] = wp.coords[0]; pos[i * 3 + 1] = wp.coords[1]; pos[i * 3 + 2] = wp.coords[2];
+    uv[i * 3 + 0] = gv.u; uv[i * 3 + 1] = gv.v; uv[i * 3 + 2] = 0.0f;
+    tan[i * 3 + 0] = wt.coords[0]; tan[i * 3 + 1] = wt.coords[1]; tan[i * 3 + 2] = wt.coords[2];
+    bit[i * 3 + 0] = wb.coords[0]; bit[i * 3 + 1] = wb.coords[1]; bit[i * 3 + 2] = wb.coords[2];
+  }
+  for (int t = 0; t + 2 < count; t += 3) {
+    const Vector3 p0(pos[t * 3], pos[t * 3 + 1], pos[t * 3 + 2]);
+    const Vector3 p1( pos[(t + 1) * 3], pos[(t + 1) * 3 + 1], pos[(t + 1) * 3 + 2]);
+    const Vector3 p2( pos[(t + 2) * 3], pos[(t + 2) * 3 + 1], pos[(t + 2) * 3 + 2]);
+    const Vector3 n = (p1 - p0).GetCrossProduct(p2 - p0).GetNormalized(Vector3(0, 0, 1));
+    for (int k = 0; k < 3; k++) {
+      nor[(t + k) * 3 + 0] = n.coords[0]; nor[(t + k) * 3 + 1] = n.coords[1]; nor[(t + k) * 3 + 2] = n.coords[2];
+    }
+  }
+}
+
+netsim::Params DefaultGoalNetParams() {
+  netsim::Params p;
+  p.gravity = NET_GRAVITY;
+  p.damping = NET_DAMPING;
+  p.stiffness = NET_SPRING_STIFFNESS;
+  p.shapeReturn = NET_SHAPE_RETURN;
+  p.ballRadius = NET_BALL_RADIUS;
+  p.ballVelScale = NET_BALL_VEL_SCALE;
+  p.ballForce = NET_BALL_FORCE;
+  p.ballMinSpeed = NET_BALL_MIN_SPEED;
+  p.constraintIterations = NET_CONSTRAINT_ITERATIONS;
+  p.constraintStiffness = NET_STIFFNESS;
+  return p;
+}
+
+} // namespace
+
 Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) : matchData(matchData), controllers(controllers) {
 
   Log(e_Notice, "Match", "Match", "Starting Match");
@@ -55,8 +174,10 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   replayState->dirty = false;
 
-  resetNetting = false;
   nettingHasChanged = false;
+  goalNetMeshVertices[0] = 0;
+  goalNetMeshVertices[1] = 0;
+  goalNetReady = false;
 
   remotePresentation = false;
   remoteAnimTableReady = false;
@@ -423,7 +544,6 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
     replay.push_back(spatial);
     spatialIter++;
   }
-  replayBallTouchesNetFrames = boost::circular_buffer<ReplayBallTouchesNetFrame>(GetReplaySize_ms() / 10);
 
   excitement = 0.0f;
 
@@ -2055,7 +2175,9 @@ void Match::Put() {
     }
 
 
-    if (!remotePresentation) UpdateGoalNetting(GetBall()->BallTouchesNet());
+    // Goal net is presentation-only and driven locally on every peer from the ball pose
+    // (interpolated on a thin client, replay pose during a replay): spec §13.3/§13.4.
+    UpdateGoalNetting();
 
     // Record replay frames on every peer. A thin client records its own
     // snapshot-driven motion so it can play the (goal) replay locally; the
@@ -2123,16 +2245,6 @@ void Match::ApplyReplayFrame(unsigned long replayTime_ms) {
   for (unsigned int i = 0; i < playerOfficials.size(); i++) {
     playerOfficials.at(i)->UpdateFullbodyNodes();
   }
-
-  boost::circular_buffer<ReplayBallTouchesNetFrame>::iterator iter = replayBallTouchesNetFrames.begin();
-  while (iter != replayBallTouchesNetFrames.end()) {
-    if (iter->frameTime_ms >= replayTime_ms) {
-      bool ballTouchesNet = (*iter).ballTouchesNet;
-      UpdateGoalNetting(ballTouchesNet);
-      break;
-    }
-    iter++;
-  }
 }
 
 void Match::GetReplaySpatials(std::list < boost::intrusive_ptr<Spatial> > &spatials) {
@@ -2181,11 +2293,6 @@ void Match::CaptureReplayFrame(unsigned long replayTime_ms) {
     replay.at(i)->frames.push_back(frame);
 
   }
-
-  ReplayBallTouchesNetFrame ballTouchesNetFrame;
-  ballTouchesNetFrame.frameTime_ms = replayTime_ms;
-  ballTouchesNetFrame.ballTouchesNet = GetBall()->BallTouchesNet();
-  replayBallTouchesNetFrames.push_back(ballTouchesNetFrame);
 }
 
 bool Match::CheckForGoal(signed int side) {
@@ -3152,72 +3259,77 @@ void Match::ProcessReplayMessages() {
 
 void Match::PrepareGoalNetting() {
 
-  // collect vertices into nettingMeshes[0..1]
-  std::vector < MaterializedTriangleMesh > &triangleMesh = boost::static_pointer_cast<Geometry>(goalsNode->GetObject("goals"))->GetGeometryData()->GetResource()->GetTriangleMeshesRef();
+  boost::intrusive_ptr<Geometry> goalsGeom = boost::static_pointer_cast<Geometry>(goalsNode->GetObject("goals"));
+  boost::intrusive_ptr < Resource<GeometryData> > geometry = goalsGeom->GetGeometryData();
 
-  for (unsigned int m = 0; m < triangleMesh.size(); m++) {
-    for (int i = 0; i < triangleMesh.at(m).verticesDataSize / GetTriangleMeshElementCount(); i+= 3) {
-      int goalID = -1;
-      if (triangleMesh.at(m).vertices[i + 0] < -pitchHalfW - 0.06f) goalID = 0; // don't catch woodwork, only netting.. DIRTY HAXX
-      if (triangleMesh.at(m).vertices[i + 0] >  pitchHalfW + 0.06f) goalID = 1;
-      if (goalID >= 0) {
-        nettingMeshesSrc[goalID].push_back(Vector3(triangleMesh.at(m).vertices[i + 0], triangleMesh.at(m).vertices[i + 1], triangleMesh.at(m).vertices[i + 2]));
-        nettingMeshes[goalID].push_back(&(triangleMesh.at(m).vertices[i]));
-      }
+  // Replace the imported .ase netting with a procedural NetSim grid (spec §13): drop the netting
+  // meshes (identified by their material), remembering the material for the new mesh.
+  Material netMaterial;
+  bool haveMaterial = false;
+  geometry->resourceMutex.lock();
+  std::vector < MaterializedTriangleMesh > &meshes = geometry->GetResource()->GetTriangleMeshesRef();
+  for (int i = (signed int)meshes.size() - 1; i >= 0; i--) {
+    boost::intrusive_ptr < Resource<Surface> > texture = meshes[i].material.diffuseTexture;
+    const std::string ident = texture ? texture->GetIdentString() : std::string();
+    if (ident.find("goalnetting") != std::string::npos) {
+      if (!haveMaterial) { netMaterial = meshes[i].material; haveMaterial = true; }
+      delete [] meshes[i].vertices;
+      meshes.erase(meshes.begin() + i);
     }
   }
+  geometry->resourceMutex.unlock();
+  if (!haveMaterial) return; // no imported netting to replace; leave the goals untouched
+
+  goalNetParams = DefaultGoalNetParams();
+  for (int goal = 0; goal < 2; goal++) {
+    goalNets[goal] = netsim::BuildBoxNet(goalHalfWidth * 2.0f, goalHeight, NET_DEPTH,
+                                         NET_WIDTH_DIV, NET_HEIGHT_DIV, NET_DEPTH_DIV, NET_SLACK);
+  }
+
+  std::vector<GoalNetVertex> verts;
+  BuildGoalNetVertices(goalNets[0], verts);
+  goalNetNodeIndices.resize(verts.size());
+  for (unsigned int i = 0; i < verts.size(); i++) goalNetNodeIndices[i] = verts[i].node;
+
+  geometry->resourceMutex.lock();
+  for (int goal = 0; goal < 2; goal++) {
+    const int dataSize = static_cast<int>(verts.size()) * 3 * GetTriangleMeshElementCount();
+    float *meshVertices = new float[dataSize];
+    WriteGoalNetMesh(goal, goalNets[goal], verts, meshVertices);
+    geometry->GetResource()->AddTriangleMesh(netMaterial, meshVertices, dataSize, std::vector<unsigned int>());
+    goalNetMeshVertices[goal] = meshVertices;
+  }
+  geometry->GetResource()->InvalidateAABB();
+  geometry->resourceMutex.unlock();
+
+  goalNetReady = true;
+  goalsGeom->OnUpdateGeometryData(false);
 
 }
 
-void Match::UpdateGoalNetting(bool ballTouchesNet) {
+void Match::UpdateGoalNetting() {
 
   nettingHasChanged = false;
-  int sideID = (ball->GetBallGeom()->GetPosition().coords[0] < 0) ? 0 : 1;
-  if (ballTouchesNet) {
-    // find vertex closest to ball
-    float shortestDistance = 100000.0f;
-    //int shortestDistanceID = 0;
-    for (unsigned int i = 0; i < nettingMeshes[sideID].size(); i++) {
-      Vector3 vertex = nettingMeshesSrc[sideID][i];
-      float distance = vertex.GetDistance(ball->GetBallGeom()->GetPosition());
-      if (distance < shortestDistance) {
-        shortestDistance = distance;
-        //shortestDistanceID = i;
-      }
-    }
+  if (!goalNetReady) return;
 
-    // pull vertices towards ball - the closer, the more intense
-    for (unsigned int i = 0; i < nettingMeshes[sideID].size(); i++) {
-      const Vector3 &vertex = nettingMeshesSrc[sideID][i];
-      float falloffDistance = 4.0f;
-      //float influenceBias = clamp(1.0f - (vertex.GetDistance(ball->GetBallGeom()->GetPosition()) - shortestDistance) / falloffDistance, 0.0f, 1.0f);
-      float influenceBias = pow(clamp((shortestDistance + 0.0001f) / (vertex.GetDistance(ball->GetBallGeom()->GetPosition()) + 0.0001f), 0.0f, 1.0f), 1.5f);
-      // net is stuck to woodwork so lay off there
-      float woodworkTensionBiasInv = clamp((fabs(ball->GetBallGeom()->GetPosition().coords[0]) - pitchHalfW) * 2.0f, 0.0f, 1.0f);
-      influenceBias *= woodworkTensionBiasInv;
-      // http://www.wolframalpha.com/input/?i=sin%28x+*+pi+-+0.5+*+pi%29+*+0.5+%2B+0.5+from+x+%3D+0+to+1
-      influenceBias = sin(influenceBias * pi - 0.5f * pi) * 0.5f + 0.5f;
-      if (influenceBias > 0.0f) {
-        Vector3 result = vertex * (1.0f - influenceBias) + ball->GetBallGeom()->GetPosition() * influenceBias;
-        static_cast<float*>(nettingMeshes[sideID][i])[0] = result.coords[0];
-        static_cast<float*>(nettingMeshes[sideID][i])[1] = result.coords[1];
-        static_cast<float*>(nettingMeshes[sideID][i])[2] = result.coords[2];
-      }
-    }
-    resetNetting = true; // make sure to reset next time
-    nettingHasChanged = true;
+  // Presentation-only, one-way: the ball pose drives the net; nothing feeds back (spec §13.4).
+  // Constant simulation, so a cross or a touch of the net from outside also ripples it.
+  const Vector3 ballWorld = ball->GetBallGeom()->GetPosition();
+  const float ballSpeed = ball->GetMovement().GetLength();
 
-  } else if (resetNetting) { // ball doesn't touch net (anymore), reset
-    for (int sideID = 0; sideID < 2; sideID++) {
-      for (unsigned int i = 0; i < nettingMeshes[sideID].size(); i++) {
-        static_cast<float*>(nettingMeshes[sideID][i])[0] = nettingMeshesSrc[sideID][i].coords[0];
-        static_cast<float*>(nettingMeshes[sideID][i])[1] = nettingMeshesSrc[sideID][i].coords[1];
-        static_cast<float*>(nettingMeshes[sideID][i])[2] = nettingMeshesSrc[sideID][i].coords[2];
-      }
+  for (int goal = 0; goal < 2; goal++) {
+    netsim::Integrate(goalNets[goal], GoalNetBallToLocal(goal, ballWorld), ballSpeed,
+                      goalNetParams, NET_SIM_STEP);
+    float *pos = goalNetMeshVertices[goal];
+    for (unsigned int v = 0; v < goalNetNodeIndices.size(); v++) {
+      const Vector3 wp = GoalNetLocalToWorld(goal, goalNets[goal].pos[goalNetNodeIndices[v]]);
+      pos[v * 3 + 0] = wp.coords[0];
+      pos[v * 3 + 1] = wp.coords[1];
+      pos[v * 3 + 2] = wp.coords[2];
     }
-    resetNetting = false;
-    nettingHasChanged = true;
   }
+
+  nettingHasChanged = true;
 
 }
 
