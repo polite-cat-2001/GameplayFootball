@@ -178,6 +178,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   goalNetMeshVertices[0] = 0;
   goalNetMeshVertices[1] = 0;
   goalNetReady = false;
+  replayBallSpeed = 0.0f;
 
   remotePresentation = false;
   remoteAnimTableReady = false;
@@ -2176,8 +2177,8 @@ void Match::Put() {
 
 
     // Goal net is presentation-only and driven locally on every peer from the ball pose
-    // (interpolated on a thin client, replay pose during a replay): spec §13.3/§13.4.
-    UpdateGoalNetting();
+    // (interpolated on a thin client): spec §13.3/§13.4.
+    UpdateGoalNetting(ball->GetMovement().GetLength());
 
     // Record replay frames on every peer. A thin client records its own
     // snapshot-driven motion so it can play the (goal) replay locally; the
@@ -2189,6 +2190,9 @@ void Match::Put() {
   } else {
     teams[0]->Hide2D();
     teams[1]->Hide2D();
+    // During a replay the ball pose comes from the recorded frames, so drive the net from those
+    // (see ApplyReplayFrame) instead of the live momentum.
+    UpdateGoalNetting(replayBallSpeed);
   }
 
   UpdateSetPieceTakerHint();
@@ -2227,6 +2231,9 @@ void Match::ApplyReplayFrame(unsigned long replayTime_ms) {
         //frame1.orientation.MakeSameNeighborhood(frame2.orientation); only needed for Lerp
         replay.at(i)->spatial->SetRotation(frame1.orientation.GetSlerped(bias, frame2.orientation).GetNormalized(), false);
         replay.at(i)->spatial->RecursiveUpdateSpatialData(e_SpatialDataType_Both);
+        if (replay.at(i)->spatial == ball->GetBallGeom()) {
+          replayBallSpeed = (frame2.position - frame1.position).GetLength() * 1000.0f / count;
+        }
         break;
       }
       iter++;
@@ -3307,7 +3314,7 @@ void Match::PrepareGoalNetting() {
 
 }
 
-void Match::UpdateGoalNetting() {
+void Match::UpdateGoalNetting(float ballSpeed) {
 
   nettingHasChanged = false;
   if (!goalNetReady) return;
@@ -3315,7 +3322,6 @@ void Match::UpdateGoalNetting() {
   // Presentation-only, one-way: the ball pose drives the net; nothing feeds back (spec §13.4).
   // Constant simulation, so a cross or a touch of the net from outside also ripples it.
   const Vector3 ballWorld = ball->GetBallGeom()->GetPosition();
-  const float ballSpeed = ball->GetMovement().GetLength();
 
   for (int goal = 0; goal < 2; goal++) {
     netsim::Integrate(goalNets[goal], GoalNetBallToLocal(goal, ballWorld), ballSpeed,
