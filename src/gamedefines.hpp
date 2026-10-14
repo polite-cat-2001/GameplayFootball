@@ -562,24 +562,25 @@ const float _default_AI_PenaltyHighAimY = goalHeight * 0.70f;
 // Goal net (NetSim, spec 2026-09-29 §13/#37). Presentation-only: the ball drives the net and
 // nothing is fed back. The pure module (src/onthepitch/net/netsim.*) takes these as parameters
 // and never reads them itself, so it can run headless. Box dims mirror the GF goal: width 7.4
-// (goalHalfWidth * 2), height 2.5, depth 2.55; the 24x12x5 grid yields 631 nodes / 1155 edges /
-// 198 pins.
+// (goalHalfWidth * 2), height 2.5, depth 2.55. The divisions are chosen so the cells are square
+// (width/35 = 0.211, height/12 = 0.208, depth/12 = 0.213 m), yielding 1274 nodes / 2398 edges /
+// 284 pins.
 const float NET_DEPTH = 2.55f;
-const int NET_WIDTH_DIV = 24;
+const int NET_WIDTH_DIV = 35;
 const int NET_HEIGHT_DIV = 12;
-const int NET_DEPTH_DIV = 5;
-const float NET_STIFFNESS = 0.2f;
+const int NET_DEPTH_DIV = 12;
+const float NET_STIFFNESS = 0.12f;
 const int NET_CONSTRAINT_ITERATIONS = 2;
 const float NET_DAMPING = 0.98f;
-const float NET_SHAPE_RETURN = 3.0f;
+const float NET_SHAPE_RETURN = 1.8f;
 const float NET_SLACK = 0.9f;
 const float NET_GRAVITY = 9.8f;
 const float NET_SPRING_STIFFNESS = 400.0f;
 const float NET_SIM_STEP = 0.016f;
-const float NET_BALL_RADIUS = 0.6f;
-const float NET_BALL_VEL_SCALE = 0.4f;
+const float NET_BALL_RADIUS = 0.9f;
+const float NET_BALL_VEL_SCALE = 0.6f;
 const float NET_BALL_MIN_SPEED = 1.5f;
-const float NET_BALL_FORCE = 120.0f;
+const float NET_BALL_FORCE = 260.0f;
 const float NET_BOUNCE = 0.1f;
 const float NET_FRICTION = 1.0f;
 const float NET_CELEBRATION_TIME = 5.0f;

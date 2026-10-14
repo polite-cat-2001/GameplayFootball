@@ -40,11 +40,11 @@ netsim::Net BuildDefaultNet() {
 
 void BoxNetCountsMatchTheReference() {
   netsim::Net net = BuildDefaultNet();
-  Check(net.pos.size() == 631, "expected 631 nodes");
-  Check(net.edges.size() == 1155 * 2, "expected 1155 edges (two indices each)");
+  Check(net.pos.size() == 1274, "expected 1274 nodes");
+  Check(net.edges.size() == 2398 * 2, "expected 2398 edges (two indices each)");
   int pins = 0;
   for (unsigned char pinned : net.pinned) pins += pinned ? 1 : 0;
-  Check(pins == 198, "expected 198 pinned nodes");
+  Check(pins == 284, "expected 284 pinned nodes");
 }
 
 void PinnedOuterRingNeverLeavesTheFrame() {
