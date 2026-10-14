@@ -430,9 +430,9 @@ class Match {
     // Procedural goal net (spec §13, #38): build the NetSim soft bodies + their dynamic meshes
     // (once), advance them from the ball pose each tick, and re-upload the vertices.
     void PrepareGoalNetting();
-    // Advance the net from a ball position/velocity; the velocity is passed so the replay can
-    // supply the recorded ball motion instead of the live momentum.
-    void UpdateGoalNetting(const Vector3 &ballVelocity);
+    // Advance the net from the ball's motion over the frame (position delta), so a fast shot that
+    // is stopped by the net in one tick still presses it.
+    void UpdateGoalNetting();
 
     // for stuff like animation smoothing, we could need the time elapsed since last Put() and such
     unsigned long previousProcessTime_ms;
@@ -607,10 +607,9 @@ class Match {
     float *goalNetMeshVertices[2];
     std::vector<int> goalNetNodeIndices;
     bool goalNetReady;
-    // Ball velocity during a replay, derived from the recorded frames (the live momentum is stale).
-    Vector3 replayBallVel;
-    // Ball position at the previous net step, so the ball is swept (fast balls cannot skip the net).
+    // Ball position at the previous net step (sweep) and its wall-clock time (frame delta).
     Vector3 goalNetPrevBallPos;
+    unsigned long goalNetPrevTime_ms;
 
     //boost::intrusive_ptr<Light> lightTest[100];
 
