@@ -88,22 +88,30 @@ Net BuildBoxNet(float width, float height, float depth, int wDiv, int hDiv, int 
   return net;
 }
 
-void Integrate(Net &net, const Vector3 &ballPos, float ballSpeed, const Params &p, float dt) {
+void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballVelocity, const Params &p, float dt) {
   const int n = static_cast<int>(net.pos.size());
   const int e = static_cast<int>(net.edges.size()) / 2;
 
   std::vector<Vector3> force(n, Vector3(0));
 
-  // Per-node forces: gravity, pull back to the rest shape, and the ball push.
+  // Per-node forces: gravity, pull back to the rest shape, and the ball impulse.
   for (int i = 0; i < n; ++i) {
     if (net.pinned[i]) continue;
     Vector3 f(0.0f, -p.gravity, 0.0f);
     f += (net.rest[i] - net.pos[i]) * p.shapeReturn;
-    const float distance = Length(net.pos[i] - ballPos);
+    // The ball presses a panel only while it approaches it: its normal velocity points at the
+    // panel from whichever side the ball is on (vn and signedDist have opposite signs). The push
+    // is an impulse scaled by the normal speed and capped, so grazing/through balls barely move
+    // the net while a head-on shot punches a proportionate pocket.
+    const Vector3 rel = ballPos - net.pos[i];
+    const float vn = ballVelocity.GetDotProduct(net.normal[i]);
+    const float signedDist = rel.GetDotProduct(net.normal[i]);
+    const float distance = Length(rel);
     const float prox = 1.0f - SmoothStep(p.ballRadius, p.ballRadius * 1.15f, distance);
-    const float pushSpeed = std::max(0.0f, ballSpeed - p.ballMinSpeed);
-    if (prox > 0.0f && pushSpeed > 0.0f) {
-      f += net.normal[i] * (prox * pushSpeed * p.ballVelScale * p.ballForce);
+    if (prox > 0.0f && vn * signedDist < 0.0f && std::fabs(vn) > p.ballMinSpeed) {
+      const float impact = std::min(std::fabs(vn), p.ballMaxImpact);
+      const float dir = (vn > 0.0f) ? 1.0f : -1.0f;
+      f += net.normal[i] * (dir * prox * impact * p.ballVelScale * p.ballForce);
     }
     force[i] = f;
   }

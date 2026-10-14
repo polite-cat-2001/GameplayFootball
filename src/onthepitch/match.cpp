@@ -60,6 +60,12 @@ Vector3 GoalNetBallToLocal(int goal, const Vector3 &world) {
                      : Vector3(world.coords[1], world.coords[2],  world.coords[0] - pitchHalfW);
 }
 
+// World direction -> net-local direction (same rotation as the position map, no translation).
+Vector3 GoalNetDirToLocal(int goal, const Vector3 &world) {
+  return (goal == 0) ? Vector3(world.coords[1], world.coords[2], -world.coords[0])
+                     : Vector3(world.coords[1], world.coords[2],  world.coords[0]);
+}
+
 struct GoalNetVertex {
   int node;          // NetSim node index
   float u, v;        // texture coords (one tile per grid cell)
@@ -150,6 +156,7 @@ netsim::Params DefaultGoalNetParams() {
   p.ballVelScale = NET_BALL_VEL_SCALE;
   p.ballForce = NET_BALL_FORCE;
   p.ballMinSpeed = NET_BALL_MIN_SPEED;
+  p.ballMaxImpact = NET_BALL_MAX_IMPACT;
   p.constraintIterations = NET_CONSTRAINT_ITERATIONS;
   p.constraintStiffness = NET_STIFFNESS;
   return p;
@@ -178,7 +185,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   goalNetMeshVertices[0] = 0;
   goalNetMeshVertices[1] = 0;
   goalNetReady = false;
-  replayBallSpeed = 0.0f;
+  replayBallVel = Vector3(0);
 
   remotePresentation = false;
   remoteAnimTableReady = false;
@@ -2178,7 +2185,7 @@ void Match::Put() {
 
     // Goal net is presentation-only and driven locally on every peer from the ball pose
     // (interpolated on a thin client): spec §13.3/§13.4.
-    UpdateGoalNetting(ball->GetMovement().GetLength());
+    UpdateGoalNetting(ball->GetMovement());
 
     // Record replay frames on every peer. A thin client records its own
     // snapshot-driven motion so it can play the (goal) replay locally; the
@@ -2192,7 +2199,7 @@ void Match::Put() {
     teams[1]->Hide2D();
     // During a replay the ball pose comes from the recorded frames, so drive the net from those
     // (see ApplyReplayFrame) instead of the live momentum.
-    UpdateGoalNetting(replayBallSpeed);
+    UpdateGoalNetting(replayBallVel);
   }
 
   UpdateSetPieceTakerHint();
@@ -2232,7 +2239,7 @@ void Match::ApplyReplayFrame(unsigned long replayTime_ms) {
         replay.at(i)->spatial->SetRotation(frame1.orientation.GetSlerped(bias, frame2.orientation).GetNormalized(), false);
         replay.at(i)->spatial->RecursiveUpdateSpatialData(e_SpatialDataType_Both);
         if (replay.at(i)->spatial == ball->GetBallGeom()) {
-          replayBallSpeed = (frame2.position - frame1.position).GetLength() * 1000.0f / count;
+          replayBallVel = (frame2.position - frame1.position) / (count * 0.001f);
         }
         break;
       }
@@ -3314,7 +3321,7 @@ void Match::PrepareGoalNetting() {
 
 }
 
-void Match::UpdateGoalNetting(float ballSpeed) {
+void Match::UpdateGoalNetting(const Vector3 &ballVelocity) {
 
   nettingHasChanged = false;
   if (!goalNetReady) return;
@@ -3324,8 +3331,8 @@ void Match::UpdateGoalNetting(float ballSpeed) {
   const Vector3 ballWorld = ball->GetBallGeom()->GetPosition();
 
   for (int goal = 0; goal < 2; goal++) {
-    netsim::Integrate(goalNets[goal], GoalNetBallToLocal(goal, ballWorld), ballSpeed,
-                      goalNetParams, NET_SIM_STEP);
+    netsim::Integrate(goalNets[goal], GoalNetBallToLocal(goal, ballWorld),
+                      GoalNetDirToLocal(goal, ballVelocity), goalNetParams, NET_SIM_STEP);
     float *pos = goalNetMeshVertices[goal];
     for (unsigned int v = 0; v < goalNetNodeIndices.size(); v++) {
       const Vector3 wp = GoalNetLocalToWorld(goal, goalNets[goal].pos[goalNetNodeIndices[v]]);

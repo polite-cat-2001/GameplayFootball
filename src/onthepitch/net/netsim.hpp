@@ -28,7 +28,8 @@ struct Params {
   float ballRadius;          // NET_BALL_RADIUS (influence radius, not the ball's own radius)
   float ballVelScale;        // NET_BALL_VEL_SCALE
   float ballForce;           // NET_BALL_FORCE
-  float ballMinSpeed;        // NET_BALL_MIN_SPEED (velocity gate)
+  float ballMinSpeed;        // NET_BALL_MIN_SPEED (velocity gate on the normal speed)
+  float ballMaxImpact;       // NET_BALL_MAX_IMPACT (cap on the normal speed)
   int constraintIterations;  // NET_CONSTRAINT_ITERATIONS
   float constraintStiffness; // NET_STIFFNESS (PBD stiffness, the main knob)
 };
@@ -50,10 +51,11 @@ struct Net {
 // so the cloth has spare material and sags/wobbles; rest positions stay taut (the idle look).
 Net BuildBoxNet(float width, float height, float depth, int wDiv, int hDiv, int dDiv, float slack);
 
-// Advances the net by one step. `ballPos`/`ballSpeed` are the ball's current position and speed;
-// the ball pushes nearby nodes along their panel normals (velocity-gated, no feedback). Mutates
-// `net.pos` / `net.prev`.
-void Integrate(Net &net, const Vector3 &ballPos, float ballSpeed, const Params &params, float dt);
+// Advances the net by one step. The ball presses a panel only while it approaches it: on the side
+// the ball is on, its normal velocity must point at the panel (impulse, not a constant force),
+// scaled by the normal speed and capped by `ballMaxImpact`. `ballPos`/`ballVelocity` are in the
+// net's local frame. Mutates `net.pos` / `net.prev`.
+void Integrate(Net &net, const Vector3 &ballPos, const Vector3 &ballVelocity, const Params &params, float dt);
 
 // Largest |len - restLen| / restLen over the edges (a wobble/tension readout).
 float MaxStrain(const Net &net);

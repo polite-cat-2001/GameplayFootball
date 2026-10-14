@@ -580,6 +580,7 @@ const float NET_SIM_STEP = 0.016f;
 const float NET_BALL_RADIUS = 0.7f;
 const float NET_BALL_VEL_SCALE = 0.45f;
 const float NET_BALL_MIN_SPEED = 1.5f;
+const float NET_BALL_MAX_IMPACT = 12.0f;
 const float NET_BALL_FORCE = 150.0f;
 const float NET_BOUNCE = 0.1f;
 const float NET_FRICTION = 1.0f;

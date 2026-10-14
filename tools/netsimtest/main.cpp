@@ -28,6 +28,7 @@ netsim::Params DefaultParams() {
   p.ballVelScale = NET_BALL_VEL_SCALE;
   p.ballForce = NET_BALL_FORCE;
   p.ballMinSpeed = NET_BALL_MIN_SPEED;
+  p.ballMaxImpact = NET_BALL_MAX_IMPACT;
   p.constraintIterations = NET_CONSTRAINT_ITERATIONS;
   p.constraintStiffness = NET_STIFFNESS;
   return p;
@@ -51,7 +52,7 @@ void PinnedOuterRingNeverLeavesTheFrame() {
   netsim::Net net = BuildDefaultNet();
   const netsim::Params p = DefaultParams();
   for (int step = 0; step < 60; ++step) {
-    netsim::Integrate(net, Vector3(0.0f, 1.2f, 1.0f), 30.0f, p, NET_SIM_STEP);
+    netsim::Integrate(net, Vector3(0.0f, 1.2f, 1.0f), Vector3(0.0f, 0.0f, 30.0f), p, NET_SIM_STEP);
   }
   for (std::size_t i = 0; i < net.pos.size(); ++i) {
     if (!net.pinned[i]) continue;
@@ -66,9 +67,9 @@ void SimulationIsReproducibleAtFixedDt() {
   for (int step = 0; step < 90; ++step) {
     const float t = static_cast<float>(step) * NET_SIM_STEP;
     const Vector3 ball(std::sin(t) * 2.0f, 0.6f + 0.5f * std::cos(t), 1.5f);
-    const float speed = 12.0f + 8.0f * std::cos(t);
-    netsim::Integrate(a, ball, speed, p, NET_SIM_STEP);
-    netsim::Integrate(b, ball, speed, p, NET_SIM_STEP);
+    const Vector3 vel(0.0f, 0.0f, 12.0f + 8.0f * std::cos(t));
+    netsim::Integrate(a, ball, vel, p, NET_SIM_STEP);
+    netsim::Integrate(b, ball, vel, p, NET_SIM_STEP);
   }
   for (std::size_t i = 0; i < a.pos.size(); ++i) {
     Check(a.pos[i] == b.pos[i], "two identical runs diverged");
@@ -81,10 +82,10 @@ void FastBallPushesTheNetButAVelocityGatedBallDoesNot() {
   const netsim::Params p = DefaultParams();
   const Vector3 ball(0.0f, 1.2f, NET_DEPTH - 0.1f);
   for (int step = 0; step < 20; ++step) {
-    netsim::Integrate(gated, ball, NET_BALL_MIN_SPEED, p, NET_SIM_STEP);
-    netsim::Integrate(fast, ball, 30.0f, p, NET_SIM_STEP);
+    netsim::Integrate(gated, ball, Vector3(0.0f, 0.0f, NET_BALL_MIN_SPEED), p, NET_SIM_STEP);
+    netsim::Integrate(fast, ball, Vector3(0.0f, 0.0f, 30.0f), p, NET_SIM_STEP);
   }
-  // The back panel is built first: 25 columns x 13 rows; node (12, 6) sits under the ball.
+  // The back panel is built first: 36 columns x 13 rows; node (17, 6) sits under the ball.
   const std::size_t centre = 6 * (NET_WIDTH_DIV + 1) + (NET_WIDTH_DIV / 2);
   const float pushed = (fast.pos[centre] - gated.pos[centre]).GetLength();
   Check(pushed > 0.05f, "a fast ball should push the net; a velocity-gated ball should not");
