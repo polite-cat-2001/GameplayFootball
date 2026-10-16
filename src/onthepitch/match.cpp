@@ -32,6 +32,7 @@
 
 #include "../net/matchsnapshot.hpp"
 #include "../net/netclient.hpp"
+#include "../net/delayedhiddevice.hpp"
 #include "../net/netmessages.hpp"
 #include "../net/netserver.hpp"
 
@@ -924,11 +925,19 @@ void Match::UpdateSetPieceTakerMenuRelease() {
   if (!setPieceTakerMenuSwallow) return;
   IHIDevice *device = setPiecePresentation->LocalKickerDevice();
   if (!device) { setPieceTakerMenuSwallow = false; return; }
-  if (!SetPiecePresentation::IsKickButtonPressed(device) &&
-      !device->GetButton(e_ButtonFunction_Select) &&
-      !device->GetButton(e_ButtonFunction_Start)) {
-    setPieceTakerMenuSwallow = false;
+
+  // On a network host this is a DelayedHIDDevice: the GUI sees its source immediately, but gameplay
+  // sees it later. Keep the latch until both the source and every buffered/current sample are idle.
+  DelayedHIDDevice *delayedDevice = dynamic_cast<DelayedHIDDevice*>(device);
+  if (delayedDevice) {
+    if (!delayedDevice->IsInputDrained()) return;
+  } else if (SetPiecePresentation::IsKickButtonPressed(device) ||
+             device->GetButton(e_ButtonFunction_Select) ||
+             device->GetButton(e_ButtonFunction_Start)) {
+    return;
   }
+
+  setPieceTakerMenuSwallow = false;
 }
 
 void Match::UpdateSetPieceTakerHint() {

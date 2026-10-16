@@ -442,3 +442,9 @@ add_executable(netsimtest
 apply_common_includes(netsimtest)
 target_link_libraries(netsimtest PRIVATE blunted2)
 add_test(NAME netsimtest COMMAND netsimtest)
+
+# The delayed host HID must not expose a menu confirm press after the physical button is released.
+add_executable(delayedhidtest tools/delayedhidtest.cpp)
+apply_common_includes(delayedhidtest)
+target_link_libraries(delayedhidtest PRIVATE netlib blunted2)
+add_test(NAME delayedhidtest COMMAND delayedhidtest)

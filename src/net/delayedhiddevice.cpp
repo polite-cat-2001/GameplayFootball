@@ -51,3 +51,21 @@ bool DelayedHIDDevice::GetPreviousButtonState(e_ButtonFunction buttonFunction) {
 Vector3 DelayedHIDDevice::GetDirection() {
   return direction;
 }
+
+bool DelayedHIDDevice::IsInputDrained() const {
+  if (source->GetDirection().GetLength() > 0.001f || direction.GetLength() > 0.001f) return false;
+
+  for (int i = 0; i < e_ButtonFunction_Size; ++i) {
+    const e_ButtonFunction function = (e_ButtonFunction)i;
+    if (source->GetButton(function) || current[i] || previous[i]) return false;
+  }
+
+  for (std::deque<Sample>::const_iterator sample = history.begin(); sample != history.end(); ++sample) {
+    if (sample->direction.GetLength() > 0.001f) return false;
+    for (int i = 0; i < e_ButtonFunction_Size; ++i) {
+      if (sample->buttons[i]) return false;
+    }
+  }
+
+  return true;
+}

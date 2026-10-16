@@ -219,12 +219,15 @@ class Match {
     bool GetSetPieceTakerMenuRequested() const { return setPieceTakerMenuRequested; }
     void RequestSetPieceTakerMenu() { if (!IsSetPieceTakerMenuInputBlocked()) setPieceTakerMenuRequested = true; }
     bool IsSetPieceTakerMenuOpen() const { return setPieceTakerMenuOpen; }
-    // Gameplay input for the taker is frozen while the overlay is up and until the button that
-    // closed it (confirm / back / kick) is released, so that same press cannot leak into a kick.
+    // Gameplay input for the taker is frozen while the overlay is up and until its closing input is
+    // released (and drained through any host-side input delay), so it cannot leak into a kick.
     bool IsSetPieceTakerMenuInputBlocked() const { return setPieceTakerMenuOpen || setPieceTakerMenuSwallow; }
     void SetSetPieceTakerMenuOpen(bool open) {
       setPieceTakerMenuOpen = open;
-      if (!open) { setPieceTakerMenuRequested = false; setPieceTakerMenuSwallow = true; }
+      if (!open) {
+        setPieceTakerMenuRequested = false;
+        setPieceTakerMenuSwallow = true;
+      }
     }
     // Clears the post-close input latch once the local taker's device has released its buttons.
     void UpdateSetPieceTakerMenuRelease();

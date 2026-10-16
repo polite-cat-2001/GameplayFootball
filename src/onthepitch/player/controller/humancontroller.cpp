@@ -31,6 +31,16 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
 
   CastPlayer()->SetDesiredTimeToBall_ms(0);
 
+  // The taker-menu button is also a gameplay action (A = ShortPass). Suppress input at
+  // command generation too: this runs from Humanoid::Process separately from Process().
+  if (match->IsSetPieceTakerMenuInputBlocked()) {
+    actionMode = 0;
+    gauge_ms = 0;
+    actionBufferTime_ms = 0;
+    _SetPieceCommand(commandQueue);
+    return;
+  }
+
   _Preprocess(); // calculate some variables
 
 

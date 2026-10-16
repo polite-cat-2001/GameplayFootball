@@ -20,6 +20,7 @@ class DelayedHIDDevice : public IHIDevice {
 
     void SetDelayTicks(int ticks) { delayTicks = ticks < 0 ? 0 : ticks; }
     int GetDelayTicks() const { return delayTicks; }
+    bool IsInputDrained() const;
 
     // The wrapped device (owned by the global controllers list).
     IHIDevice *GetSource() const { return source; }

@@ -1329,7 +1329,12 @@ bool Humanoid::SelectAnim(const PlayerCommand &command, e_InterruptAnim localInt
   // hax: long pass uses same anims as short pass
   if (query.functionType == e_FunctionType_LongPass) query.functionType = e_FunctionType_ShortPass;
 
-  if (command.touchInfo.desiredPower != 0.0f) {
+  // A set-piece kick's direction is planned by the taker (TouchInfo::desiredDirection is used
+  // directly by the touch branch), not authored by the clip, so do not filter clips by their own
+  // recorded ball direction: the taker's body angle relative to the planned heading would otherwise
+  // drop every foot clip (a corner low pass was left with header-only candidates, so no touch fired
+  // and the set piece could not be taken).
+  if (command.touchInfo.desiredPower != 0.0f && !forceStrongFoot) {
     query.byOutgoingBallDirection = true;
     query.outgoingBallDirection = command.touchInfo.desiredDirection.GetRotated2D(-spatialState.angle);
   }
