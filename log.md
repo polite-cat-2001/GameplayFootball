@@ -3394,3 +3394,12 @@ UTF-16LE; wiki вдобавок прошла через CP866 (UTF-8-байты 
 backtick в тексте → escape-последовательность. Добавлены `.editorconfig`, правило
 `*.md text eol=lf`, `tools/check_md_encoding.py` и `.githooks/pre-commit`; локально включён
 `core.hooksPath`.
+
+## [2026-10-19] session | вики сверена с кодом
+
+- Актуализированы [[константы]], [[матч]], [[база-данных]], [[данные-из-transfermarkt]],
+  [[открытые-вопросы]]: номера строк после переездов кода; `net_protocolVersion` 15 → 16
+  (+ назначение v16); добавлен `databaseSchemaVersion` (3); поправлены ссылки на загрузку БД
+  (`gamecontext.cpp:227`), дефолтные формацию/тактику (`mainmenu.cpp:511/569`), `GetLastName`
+  (`playerdata.hpp:45`) и `dataSetSortable` (`gamedefines.hpp:229`).
+- Содержательных изменений кода не было; `python tools/check_md_encoding.py` проходит.

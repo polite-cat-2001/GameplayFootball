@@ -114,8 +114,8 @@ data/
 | `players.weight` | эвристика (рост + позиция), TM вес не даёт |
 | `players.formationorder` | **слот расстановки XI** (`tm-gf-import/builders/lineup.py`): игра ставит игрока с индексом i в слот `p(i+1)` формирования, поэтому порядок кодирует расстановку (GK→LB→CB→CB→RB→CM→CM→LM→AM→RM→CF), а не рейтинг; XI выбирается по `base_stat` в пределах роли слота, бенч 11+ |
 | `players.nationalteam_id` | из состава сборной; `nationalteamformationorder` — аналогично (слоты той же расстановки) |
-| `teams.formation_xml` | дефолт игры 4-2-3-1 — байт-в-байт `defaultFormation` из `mainmenu.cpp:492` (`DEFAULT_FORMATION` в `tm-gf-import/schema.py`; пишет `builders/teams.py`) |
-| `teams.tactics_xml` | дефолт `defaultTactics` из `mainmenu.cpp:551` (`DEFAULT_TACTICS` в `tm-gf-import/schema.py`; стили possession/counter… в импорте не реализованы) |
+| `teams.formation_xml` | дефолт игры 4-2-3-1 — байт-в-байт `defaultFormation` из `mainmenu.cpp:511` (`DEFAULT_FORMATION` в `tm-gf-import/schema.py`; пишет `builders/teams.py`) |
+| `teams.tactics_xml` | дефолт `defaultTactics` из `mainmenu.cpp:569` (`DEFAULT_TACTICS` в `tm-gf-import/schema.py`; стили possession/counter… в импорте не реализованы) |
 | `teams.color1/color2` | `clubs.colors` HEX → «R, G, B» |
 | `teams.shortname` | первые 3 буквы (или ручной маппинг топ-клубов) |
 | `teams.kit_url` | `images_teams/<лига>/<клуб>` + генератор китов по `template_kit.png` |
@@ -227,11 +227,11 @@ data/
 ## Изменения в коде GF
 
 1. **Сборные по лиге «National Teams»** (починено 2026-09-08): колонки `teams.national` в схеме
-   импорта и в игре нет и не нужна — в SELECT `teamdata.cpp:61` добавлен `leagues.name as
+   импорта и в игре нет и не нужна — в SELECT `teamdata.cpp:95` добавлен `leagues.name as
    league_name`, и `national` определяется по имени лиги (`== "National Teams"`), строка 74.
 2. Сборные — строки в `teams` (league_id → синтетическая лига «National Teams», id 280,
    `country_id = NULL`), игроки — с `nationalteam_id` + `nationalteamformationorder`.
-   Запрос `teamdata.cpp:251` выбирает по `team_id` **или** `nationalteam_id`; сортировка — по
+   Запрос `teamdata.cpp:139` выбирает по `team_id` **или** `nationalteam_id`; сортировка — по
    `nationalteamformationorder` (строка 249; раньше был несуществующий `nationalformationorder`, а
    флаг `national` никогда не выставлялся — состав сборной шёл в порядке вставки).
 3. Реальные имена — осознанное решение (личный проект; в `master` остаются фейковые).
@@ -328,7 +328,7 @@ data/
   `last_name` в каноне пустой. В GF SQLite таких ~2.1 тыс. (844 клуба, 26 сборных). Подписи над
   игроками, меню расстановки и сообщения о голах показывали только `GetLastName()`, поэтому над
   таким игроком имя не появлялось вообще (в т.ч. при ручном выборе). Фолбэк — `PlayerData::GetLastName()`
-  возвращает имя, если фамилия пустая (`src/data/playerdata.hpp:23`). Конвертеру при желании можно
+   возвращает имя, если фамилия пустая (`src/data/playerdata.hpp:45`). Конвертеру при желании можно
   выставлять в `last_name` одно имя, но код должен переживать и пустую фамилию.
 - **Лимит запросов**: дефолты `config.py` скрейпера — HTML 2.0 rps (burst 2), CDN 15 rps
   (burst 6); при 403-волнах адаптивный рейт (AIMD) сам режется до минимума (`HTML_RPS_MIN` 0.5,
