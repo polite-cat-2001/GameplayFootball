@@ -1,0 +1,15 @@
+#!/bin/sh
+# Reject Markdown that is not UTF-8 without BOM (see AGENTS.md).
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+# Prefer `python`: on Windows `python3` may be the Store stub.
+for py in python python3; do
+  if command -v "$py" >/dev/null 2>&1 \
+     && "$py" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
+    exec "$py" tools/check_md_encoding.py --staged
+  fi
+done
+
+echo "pre-commit: no working python found; skipping markdown encoding check" >&2
+exit 0

@@ -65,6 +65,11 @@ Get/Process/Put и буферами (см. `docs/wiki/матч`). AI игрок�
   — `Contents/MacOS/gameplayfootball-bin`, а `gameplayfootball` — launcher, chdir'ящий в
   `Contents/Resources/data` (иначе из Finder фатальная ошибка `file not found or empty:
   football.config`). Детали и ловушки — см. [[релиз]].
+- **Документация (`*.md`) — только UTF-8 без BOM.** PowerShell 5.1 (`Out-File`, `>`) пишет
+  UTF-16LE, а вывод native-команд декодирует OEM-кодировкой (CP866) — получаются `FF FE` и
+  псевдографика вместо кириллицы. Не пересохраняй вики/лог такими пайплайнами. Проверка —
+  `python tools/check_md_encoding.py`; pre-commit hook `.githooks/pre-commit` включается
+  через `git config core.hooksPath .githooks` (на Unix — ещё `chmod +x .githooks/pre-commit`).
 
 ## Сборка / запуск
 

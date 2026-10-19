@@ -1,3 +1,7 @@
 # Shell scripts must keep LF line endings even when checked out on Windows,
 # otherwise the shebang/commands break on Linux and macOS.
 *.sh text eol=lf
+.githooks/* text eol=lf
+
+# Docs are UTF-8 text, never binary/UTF-16.
+*.md text eol=lf
