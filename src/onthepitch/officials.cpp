@@ -18,6 +18,9 @@
 #include "../main.hpp"
 
 Officials::Officials(Match *match, boost::intrusive_ptr<Node> fullbodySourceNode, std::map<Vector3, Vector3> &colorCoords, boost::intrusive_ptr < Resource<Surface> > kit, boost::shared_ptr<AnimCollection> animCollection) : match(match) {
+  remoteCardType = 0;
+  remoteCardMirror = false;
+
   ObjectLoader loader;
   boost::intrusive_ptr<Node> playerNode = loader.LoadObject(GetScene3D(), "media/objects/players/player.object");
   playerNode->SetName("player");
@@ -89,22 +92,40 @@ void Officials::FetchPutBuffers(unsigned long putTime_ms) {
   linesmen[1]->FetchPutBuffers(putTime_ms);
 }
 
+void Officials::GetCurrentCardState(int &cardType, bool &mirror) {
+  cardType = 0;
+  mirror = false;
+  if (referee->GetCurrentFunctionType() == e_FunctionType_Special &&
+      (match->GetReferee()->GetCurrentFoulType() == 2 || match->GetReferee()->GetCurrentFoulType() == 3)) {
+    cardType = match->GetReferee()->GetCurrentFoulType();
+    mirror = referee->GetCurrentAnim()->anim->GetName().find("mirror") != std::string::npos;
+  }
+}
+
 void Officials::Put() {
   referee->Put();
   linesmen[0]->Put();
   linesmen[1]->Put();
 
   // todo: I don't think it's legal to use all those unbuffered (unmutex'ed) Getters here
-  if (referee->GetCurrentFunctionType() == e_FunctionType_Special && (match->GetReferee()->GetCurrentFoulType() == 2 || match->GetReferee()->GetCurrentFoulType() == 3)) {
-    std::string bodyPartName = "right_elbow";
-    if (referee->GetCurrentAnim()->anim->GetName().find("mirror") != std::string::npos) bodyPartName = "left_elbow";
+  int cardType = 0;
+  bool mirror = false;
+  if (match->IsRemotePresentation()) {
+    cardType = remoteCardType;
+    mirror = remoteCardMirror;
+  } else {
+    GetCurrentCardState(cardType, mirror);
+  }
+
+  if (cardType != 0) {
+    std::string bodyPartName = mirror ? "left_elbow" : "right_elbow";
 
     const NodeMap &nodeMap = referee->GetNodeMap();
     std::map < const std::string, boost::intrusive_ptr<Node> >::const_iterator bodyPartIter = nodeMap.find(bodyPartName);
     if (bodyPartIter != nodeMap.end()) {
       boost::intrusive_ptr<Spatial> bodyPart = bodyPartIter->second;
       Vector3 position = bodyPart->GetDerivedPosition() + bodyPart->GetDerivedRotation() * Vector3(0.04, 0, -0.25); // -0.4
-      if (match->GetReferee()->GetCurrentFoulType() == 2) {
+      if (cardType == 2) {
         yellowCard->SetPosition(position);
         yellowCard->SetRotation(bodyPart->GetDerivedRotation());
       } else {
@@ -112,7 +133,7 @@ void Officials::Put() {
         redCard->SetRotation(bodyPart->GetDerivedRotation());
       }
     }
-  } else if (referee->GetPreviousFunctionType() == e_FunctionType_Special) {
+  } else {
     yellowCard->SetPosition(Vector3(0, 0, -10));
     redCard->SetPosition(Vector3(0, 0, -10));
   }

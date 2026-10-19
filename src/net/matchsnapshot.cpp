@@ -57,6 +57,12 @@ Snapshot CaptureSnapshot(Match *match) {
   snapshot.messageTime_ms = match->GetSpamMessageTime_ms();
   snapshot.messageCounter = match->GetSpamMessageCounter();
 
+  snapshot.refereeCardType = 0;
+  snapshot.refereeCardMirror = false;
+  if (!match->IsRemotePresentation() && match->GetOfficials()) {
+    match->GetOfficials()->GetCurrentCardState(snapshot.refereeCardType, snapshot.refereeCardMirror);
+  }
+
   snapshot.substitutionCounter = match->GetSubstitutionNoticeCounter();
   const std::vector<SubstitutionNotice> &notices = match->GetSubstitutionNotices();
   for (unsigned int i = 0; i < notices.size(); i++) {
@@ -157,6 +163,9 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutU32((uint32_t)snapshot.messageTime_ms);
   buffer.PutU32((uint32_t)snapshot.messageCounter);
 
+  buffer.PutU32((uint32_t)snapshot.refereeCardType);
+  buffer.PutBool(snapshot.refereeCardMirror);
+
   buffer.PutU32((uint32_t)snapshot.substitutionCounter);
   buffer.PutU32((uint32_t)snapshot.substitutions.size());
   for (unsigned int i = 0; i < snapshot.substitutions.size(); i++) {
@@ -209,6 +218,9 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
   snapshot.message = buffer.GetString();
   snapshot.messageTime_ms = (int)buffer.GetU32();
   snapshot.messageCounter = buffer.GetU32();
+
+  snapshot.refereeCardType = (int)buffer.GetU32();
+  snapshot.refereeCardMirror = buffer.GetBool();
 
   snapshot.substitutionCounter = buffer.GetU32();
   uint32_t substitutionCount = buffer.GetU32();

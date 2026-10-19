@@ -28,7 +28,8 @@
 //      team/slot) instead of the inSetPiece bool, which is now derived.
 // v16: input frame carries the set-piece taker-menu choice (squad slot, -1 none)
 //      so a thin client's taker change reaches the host over the input channel.
-const int net_protocolVersion = 16;
+// v17: referee card state (type + mirror) in snapshots.
+const int net_protocolVersion = 17;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

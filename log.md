@@ -3403,3 +3403,14 @@ backtick в тексте → escape-последовательность. Доб
   (`gamecontext.cpp:227`), дефолтные формацию/тактику (`mainmenu.cpp:511/569`), `GetLastName`
   (`playerdata.hpp:45`) и `dataSetSortable` (`gamedefines.hpp:229`).
 - Содержательных изменений кода не было; `python tools/check_md_encoding.py` проходит.
+
+## [2026-10-19] fix | карточка судьи на тонком LAN-клиенте
+
+Полевой баг: на клиенте судья показывал карточку пустой рукой. Причина —
+`Officials::Put` решал видимость по локальным `Referee::foulType` и
+`currentAnim->functionType`, но тонкий клиент не симулирует матч, а снапшот нёс только
+позы судей. В снапшот добавлены `refereeCardType`/`refereeCardMirror` (протокол v17);
+хост считает их в `Officials::GetCurrentCardState`, клиент применяет через
+`SetRemoteCardState`. `lanmatchtest` зелёный (44 проверки, включая round-trip и
+клиентскую установку карточки), полевой тест на двух инстансах ещё нужен.
+

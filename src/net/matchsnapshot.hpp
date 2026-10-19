@@ -73,6 +73,8 @@ struct Snapshot {
     messageTime_ms = 0;
     messageCounter = 0;
     substitutionCounter = 0;
+    refereeCardType = 0;
+    refereeCardMirror = false;
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
@@ -114,6 +116,12 @@ struct Snapshot {
   // joining or reconnecting mid-match reconciles the host's assignments instead
   // of showing the auto-suggested fallback. -1 = unassigned.
   int roles[2][e_TeamRole_SIZE];
+
+  // Referee card presentation: 0 = none, 2 = yellow, 3 = red. The host's card
+  // geometry follows the simulated Special animation, which a thin client never
+  // runs, so relay the decision (including the mirrored arm choice).
+  int refereeCardType;
+  bool refereeCardMirror;
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

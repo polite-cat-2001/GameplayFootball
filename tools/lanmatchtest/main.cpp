@@ -204,6 +204,8 @@ int main(int argc, char **argv) {
     p.noPos = true;
     p.position = Vector3(1, 2, 3);
     s.players.push_back(p);
+    s.refereeCardType = 2;
+    s.refereeCardMirror = true;
 
     NetBuffer buffer;
     WriteSnapshot(buffer, s);
@@ -215,6 +217,8 @@ int main(int argc, char **argv) {
           restored.players.at(0).smoothFactor == 0.6f &&
           restored.players.at(0).noPos == true,
           "snapshot blend-state round-trip mismatch");
+    CHECK(restored.refereeCardType == 2 && restored.refereeCardMirror == true,
+          "snapshot referee card round-trip mismatch");
 
     Snapshot older = s;
     older.players.at(0).position = Vector3(-5, 0, 0);
@@ -376,6 +380,23 @@ int main(int argc, char **argv) {
   session.StopMatch();
   client.Disconnect();
   server->Stop();
+
+  // --- 6. thin-client card presentation -------------------------------------
+  // The client never runs Referee::Process, so the card decision arrives in the
+  // snapshot; Officials::Put must still place the geometry from the remote state.
+  {
+    match->SetRemotePresentation(true);
+    Snapshot cardSnapshot;
+    cardSnapshot.refereeCardType = 2;
+    cardSnapshot.refereeCardMirror = false;
+    match->ApplyRemoteSnapshot(cardSnapshot);
+    match->ApplyRemoteSnapshot(cardSnapshot);
+    match->PreparePutBuffers();
+    match->FetchPutBuffers();
+    match->Put();
+    CHECK(match->GetOfficials()->GetYellowCardGeom()->GetPosition().GetDistance(Vector3(0, 0, -10)) > 0.1f,
+          "remote yellow card should be placed");
+  }
 
   if (g_failures == 0) {
     std::printf("PASS (%d checks)\n", g_checks);

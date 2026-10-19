@@ -1880,6 +1880,7 @@ void Match::ApplyRemoteSnapshot(NetBuffer &buffer) {
 
 void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   remoteMaxRtt_ms = snapshot.maxRtt_ms;
+  if (officials) officials->SetRemoteCardState(snapshot.refereeCardType, snapshot.refereeCardMirror);
 
   matchTime_ms = snapshot.matchTime_ms;
   actualTime_ms = snapshot.actualTime_ms;

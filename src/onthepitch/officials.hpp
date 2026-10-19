@@ -22,6 +22,12 @@ class Officials {
     PlayerOfficial *GetLinesmanNorth() { return linesmen[0]; }
     PlayerOfficial *GetLinesmanSouth() { return linesmen[1]; }
 
+    // Host simulation state: card to show (0 none, 2 yellow, 3 red) and whether
+    // the referee's Special animation is mirrored. The thin client receives the
+    // same decision in snapshots instead of deriving it from Referee.
+    void GetCurrentCardState(int &cardType, bool &mirror);
+    void SetRemoteCardState(int cardType, bool mirror) { remoteCardType = cardType; remoteCardMirror = mirror; }
+
     virtual void Process();
     virtual void PreparePutBuffers(unsigned long snapshotTime_ms);
     virtual void FetchPutBuffers(unsigned long putTime_ms);
@@ -39,6 +45,9 @@ class Officials {
 
     boost::intrusive_ptr<Geometry> yellowCard;
     boost::intrusive_ptr<Geometry> redCard;
+
+    int remoteCardType;
+    bool remoteCardMirror;
 
 };
 
