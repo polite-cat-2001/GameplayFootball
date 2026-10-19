@@ -25,7 +25,7 @@ IngamePage::IngamePage(Gui2WindowManager *windowManager, const Gui2PageData &pag
 
   teamID = pageData.properties->GetInt("teamID", 0);
   buttonContinue = 0;
-  localTwoPlayers = !IsNetworkMatch() && GetMenuTask()->HasTwoLocalPlayers();
+  localTwoPlayers = !GetMenuTask()->IsNetworkMatch() && GetMenuTask()->HasTwoLocalPlayers();
 
   // Only the peer that opened the menu initiates the pause; peers that open it
   // because a PauseState arrived are already paused.
@@ -91,19 +91,33 @@ IngamePage::IngamePage(Gui2WindowManager *windowManager, const Gui2PageData &pag
 IngamePage::~IngamePage() {
 }
 
+void IngamePage::CancelResumeVote() {
+  // The match must not resume behind a sub-screen: leaving the pause menu
+  // withdraws this peer's Continue vote. Local two-player votes are per device.
+  if (GetMenuTask()->IsNetworkMatch()) {
+    if (GetMenuTask()->LocalResumeReady()) GetMenuTask()->SetLocalResumeReady(false);
+  } else if (localTwoPlayers && !localResumeVotes.empty()) {
+    localResumeVotes.clear();
+    UpdateContinueCaption();
+  }
+}
+
 void IngamePage::GoGamePlan() {
+  CancelResumeVote();
   Properties properties;
   properties.Set("teamID", teamID);
   CreatePage(e_PageID_GamePlan, properties);
 }
 
 void IngamePage::GoControllerSelect() {
+  CancelResumeVote();
   Properties properties;
   properties.SetBool("isInGame", true);
   CreatePage(e_PageID_SideSelect, properties);
 }
 
 void IngamePage::GoSideSelect() {
+  CancelResumeVote();
   // Network matches re-select sides live (mirrored); the host also re-binds the
   // input devices and AI takes over any freed side. A client asks the host.
   boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
@@ -123,69 +137,28 @@ void IngamePage::GoSideSelect() {
 }
 
 void IngamePage::GoCameraSettings() {
+  CancelResumeVote();
   CreatePage(e_PageID_Camera);
 }
 
 void IngamePage::GoVisualOptions() {
+  CancelResumeVote();
   CreatePage(e_PageID_VisualOptions);
 }
 
 void IngamePage::GoSystemSettings() {
+  CancelResumeVote();
   CreatePage(e_PageID_Settings);
 }
 
 void IngamePage::GoReplay() {
+  CancelResumeVote();
   CreatePage(e_PageID_Replay);
 }
 
 void IngamePage::GoPreQuit() {
+  CancelResumeVote();
   CreatePage(e_PageID_PreQuit);
-}
-
-
-bool IngamePage::IsNetworkMatch() {
-  return GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0;
-}
-
-bool IngamePage::LocalResumeReady() {
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (server) {
-    NetLobbyState state = server->GetLobbyState();
-    for (unsigned int i = 0; i < state.players.size(); i++) {
-      if (state.players.at(i).isHost) return state.players.at(i).resumeReady;
-    }
-    return false;
-  }
-  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-  if (client) {
-    NetLobbyState state = client->GetLobbyState();
-    uint32_t localId = client->GetPlayerId();
-    for (unsigned int i = 0; i < state.players.size(); i++) {
-      if (state.players.at(i).id == localId) return state.players.at(i).resumeReady;
-    }
-  }
-  return false;
-}
-
-int IngamePage::GetResumeReadyCount() {
-  NetLobbyState state;
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-  if (server) state = server->GetLobbyState();
-  else if (client) state = client->GetLobbyState();
-  int ready = 0;
-  for (unsigned int i = 0; i < state.players.size(); i++) {
-    if (state.players.at(i).resumeReady) ready++;
-  }
-  return ready;
-}
-
-int IngamePage::GetPeerCount() {
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-  if (server) return (int)server->GetLobbyState().players.size();
-  if (client) return (int)client->GetLobbyState().players.size();
-  return 0;
 }
 
 void IngamePage::VoteResume() {
@@ -198,7 +171,7 @@ void IngamePage::VoteResume() {
   if (localTwoPlayers) return;
 
   // Single player / local game: resume immediately.
-  if (!IsNetworkMatch()) {
+  if (!GetMenuTask()->IsNetworkMatch()) {
     match->Pause(false);
     return;
   }
@@ -206,17 +179,7 @@ void IngamePage::VoteResume() {
   // Network: cast (or retract) this peer's resume vote; the host resumes once
   // every peer has voted. Sub-screens are personal, but leaving the pause menu
   // is a group decision.
-  NetLobbyAction action;
-  action.type = e_NetLobbyAction_SetResumeReady;
-  action.value = LocalResumeReady() ? 0 : 1;
-  boost::shared_ptr<NetServer> server = GetMenuTask()->GetNetServer();
-  if (server) {
-    action.playerId = 0;
-    server->ApplyLobbyAction(action);
-  } else {
-    boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
-    if (client) client->SendLobbyAction(action);
-  }
+  GetMenuTask()->SetLocalResumeReady(!GetMenuTask()->LocalResumeReady());
 }
 
 bool IngamePage::ContinueButtonFocused() {
@@ -298,10 +261,10 @@ void IngamePage::Process() {
   Gui2Page::Process();
 
   if (buttonContinue) {
-    if (IsNetworkMatch()) {
+    if (GetMenuTask()->IsNetworkMatch()) {
       // Group decision: show how many peers already want to continue.
-      std::string caption = "Continue (" + int_to_str(GetResumeReadyCount()) + "/" + int_to_str(GetPeerCount()) + ")";
-      if (LocalResumeReady()) caption += " - waiting for others";
+      std::string caption = "Continue (" + int_to_str(GetMenuTask()->GetResumeReadyCount()) + "/" + int_to_str(GetMenuTask()->GetPeerCount()) + ")";
+      if (GetMenuTask()->LocalResumeReady()) caption += " - waiting for others";
       buttonContinue->SetCaption(caption);
     } else if (localTwoPlayers) {
       UpdateContinueCaption();

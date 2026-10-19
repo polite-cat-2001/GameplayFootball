@@ -3414,3 +3414,39 @@ backtick в тексте → escape-последовательность. Доб
 `SetRemoteCardState`. `lanmatchtest` зелёный (44 проверки, включая round-trip и
 клиентскую установку карточки), полевой тест на двух инстансах ещё нужен.
 
+## [2026-10-19] fix | #48: клиент в плане игры при возобновлении с хоста
+
+Причина краша: хост в перерыве (`MatchPhasePage`) снимал паузу напрямую, минуя
+голосование; клиент оставался в `GamePlanPage`, матч уже шёл, и `Match::Put`
+(графический поток) начинал обновлять табло через SDL_ttf одновременно с отрисовкой
+подписей меню (игровой поток). SDL_ttf не потокобезопасен — падение в
+`Render_Line_64_Blended_Opaque` (стек в `build/Release/crash.txt`).
+`MatchPhasePage` теперь голосует как пауза (кнопка/Back), экран закрывается по
+снятию паузы; уход в подэкран (`IngamePage`/`MatchPhasePage`) снимает свой голос.
+Гонка текста закрыта общим `GetTTFMutex()` (`src/utils/ttfmutex.hpp`) вокруг
+`TTF_RenderText_Blended`/`TTF_GetStringSize`/`TTF_GetFontOutline` в `Gui2Caption`
+и `Image2D::DrawSimpleText`. Сборка Release + `ctest` (3/3), `nettest` (60) и
+`lanmatchtest` (44) зелёные; полевой тест на двух машинах — в [[открытые-вопросы]].
+
+## [2026-10-19] change | #48: одинаковый экран перерыва у хоста и клиента
+
+Раньше `MatchPhasePage` открывался только у хоста: сигнал `sig_OnMatchPhaseChange`
+эмитит `Referee`, которого на тонком клиенте нет. Клиент получал только `PauseState`
+и показывал обычное пауза-меню. Добавлен `Match::phaseBreak`: хост ставит его при
+открытии страницы перерыва, клиент — из снапшота при смене периода (и только если
+хост на паузе); снимается на `Pause(false)`/`SetPauseFromNetwork(false)`.
+`MenuTask::UpdateNetworkBreakOverlay` в сети заменяет обычное `IngamePage` на
+`MatchPhasePage` (через `GoBack` и пересоздание `GamePage`, чтобы не портить путь
+навигации), а личные подэкраны не трогает. Вики [[сеть]], [[матч]],
+[[открытые-вопросы]] обновлены.
+
+## [2026-10-19] fix | #48: причина паузы едет в PauseState (v18)
+
+Полевой тест показал, что клиент всё ещё открывал обычное пауза-меню: deriving
+`phaseBreak` из снапшота оказался ненадёжным (порядок снапшотов и поля `pause`).
+Протокол 17 → 18: `PauseState` теперь несёт второй bool `phaseBreak`; хост берёт его
+из `Match::phaseBreak` (ставится при открытии `MatchPhasePage`), клиент применяет
+через `SetPauseFromNetwork(paused, phaseBreak)`. `ConsumePauseState` и явный
+`PauseState` новичку тоже обновлены. Сборка Release + `ctest` (3/3), `nettest` (60),
+`lanmatchtest` (44) зелёные; полевой тест — за пользователем.
+

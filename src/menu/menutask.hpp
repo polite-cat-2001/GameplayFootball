@@ -76,6 +76,15 @@ class MenuTask : public Gui2Task {
     // which group decisions (start, resume) are voted per side like over LAN.
     void GetLocalSideDevices(int device[2]);
     bool HasTwoLocalPlayers();
+    bool IsNetworkMatch();
+
+    // Network resume vote: every peer marks itself ready; the host unpauses once
+    // all have. Shared by the pause menu and the between-halves page.
+    bool LocalResumeReady();
+    int GetResumeReadyCount();
+    int GetPeerCount();
+    void SetLocalResumeReady(bool ready);
+
     void SetMatchData(MatchData *matchData) { queuedFixture.Lock(); queuedFixture->matchData = matchData; queuedFixture.Unlock(); }
     MatchData *GetMatchData() { return queuedFixture.GetData().matchData; } // hint: this lock is useless, since we are returning the pointer and not a copy
 
@@ -106,6 +115,10 @@ class MenuTask : public Gui2Task {
     // Menu-layer reaction to the network match state: opens the mirrored side
     // selection overlay. GameTask no longer touches the GUI.
     void UpdateNetworkOverlay();
+
+    // Network: show the same between-halves screen on every peer (the thin
+    // client has no Referee signal), replacing the regular pause menu.
+    void UpdateNetworkBreakOverlay();
 
     // Menu-layer reaction to a local gamepad disappearing mid-match: pause and
     // open the side/device selection overlay. GameTask no longer touches the GUI.

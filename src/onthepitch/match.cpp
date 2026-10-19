@@ -444,6 +444,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
 
   matchTime_ms = 0;
   pause = false;
+  phaseBreak = false;
   inPlay = false;
   setPieceType = e_SetPiece_None;
   goalScored = false;
@@ -697,16 +698,18 @@ void Match::Pause(bool doPause) {
     if (client) client->SendPauseRequest(doPause);
     pause = doPause;
     pauseMenuRequested = doPause;
+    if (!doPause) phaseBreak = false;
     return;
   }
 
   pause = doPause;
   pauseMenuRequested = doPause;
+  if (!doPause) phaseBreak = false;
   boost::shared_ptr<NetServer> server = menuTask->GetNetServer();
   if (server) {
     // Resume votes only matter while paused; clear them on any pause change.
     server->ResetResumeVotes();
-    server->BroadcastPause(doPause);
+    server->BroadcastPause(doPause, phaseBreak);
   }
 }
 

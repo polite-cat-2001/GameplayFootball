@@ -217,6 +217,7 @@ void NetMatchSession::HandleRosterChanges(Match *match) {
     for (unsigned int i = 0; i < joinedIds.size(); i++) {
       NetBuffer pauseBuffer;
       pauseBuffer.PutBool(match->GetPause());
+      pauseBuffer.PutBool(match->IsPhaseBreak());
       server->SendToPlayer(joinedIds.at(i), e_NetMessage_PauseState, pauseBuffer);
     }
     // Drop bindings to devices that no longer exist (a disconnected client) and
@@ -336,7 +337,10 @@ void NetMatchSession::ProcessClient(Match *match) {
   }
 
   bool networkPaused = false;
-  if (client->ConsumePauseState(networkPaused)) match->SetPauseFromNetwork(networkPaused);
+  bool networkPhaseBreak = false;
+  if (client->ConsumePauseState(networkPaused, networkPhaseBreak)) {
+    match->SetPauseFromNetwork(networkPaused, networkPhaseBreak);
+  }
 
   // Sample the local device, delay by (2U - own one-way delay + B) and ship it
   // to the host, so every peer's input reaches the simulation at the same moment

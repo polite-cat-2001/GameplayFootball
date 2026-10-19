@@ -49,7 +49,7 @@ class NetClient {
     // carries the local steady-clock arrival time for interpolation.
     void DrainSnapshots(std::deque<NetRawSnapshot> &out);
     bool ConsumeEnvironment(NetMatchEnvironment &environment);
-    bool ConsumePauseState(bool &paused);
+    bool ConsumePauseState(bool &paused, bool &phaseBreak);
     bool ConsumeReplayStop();
     // Authoritative pre-match lineup swaps relayed by the host (host-applied
     // client edits). One-shot reads, applied to the local MatchData.
@@ -131,6 +131,7 @@ class NetClient {
     NetMatchEnvironment environment;
     bool pauseStatePending;
     bool pauseState;
+    bool pauseStatePhaseBreak;
     bool replayStopPending;
     std::deque<NetPlanSwap> planSwaps; // guarded by pendingMutex
     std::deque<NetPlanScheme> planSchemes; // guarded by pendingMutex

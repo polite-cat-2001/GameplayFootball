@@ -29,11 +29,13 @@ class MatchPhasePage : public Gui2Page {
     Gui2Button *buttonNext;
 
     void ContinueGame();
+    virtual void Process();
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
     Gui2Grid *grid;
     e_MatchPhase nextPhase;
+    std::string phaseName;
 
 };
 

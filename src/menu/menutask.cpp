@@ -151,6 +151,7 @@ void MenuTask::ProcessPhase() {
   }
 
   UpdateNetworkOverlay();
+  UpdateNetworkBreakOverlay();
   UpdateGamepadMissingOverlay();
   ProcessNetworkPlanEdits();
   ProcessNetworkHubVotes();
@@ -183,6 +184,41 @@ void MenuTask::UpdateNetworkOverlay() {
   } else {
     windowManager->GetPageFactory()->CreatePage((int)e_PageID_SideSelect, properties, 0);
   }
+}
+
+void MenuTask::UpdateNetworkBreakOverlay() {
+  // The host opens the break screen from Referee's phase-change signal. A thin
+  // client never runs Referee; Match marks phaseBreak from the snapshot instead,
+  // and this turns it into the same screen instead of the regular pause menu.
+  boost::shared_ptr<GameTask> gameTask = GetGameTask();
+  if (!gameTask || !IsNetworkMatch()) return;
+  Match *match = gameTask->GetMatch();
+  if (!match || !match->IsPhaseBreak() || !match->GetPause()) return;
+
+  const std::vector<Gui2PageData> &pageStack = windowManager->GetPagePath()->GetPath();
+  if (!pageStack.empty() && pageStack.back().pageID == e_PageID_MatchPhase) return;
+
+  Gui2Page *topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
+  if (!topPage) return;
+
+  const int topPageID = pageStack.empty() ? -1 : pageStack.back().pageID;
+  if (topPageID == e_PageID_Ingame) {
+    // Drop the regular pause menu; GoBack recreates GamePage, which is the
+    // proper parent for the break page in the navigation path.
+    topPage->GoBack();
+    const std::vector<Gui2PageData> &afterClose = windowManager->GetPagePath()->GetPath();
+    if (afterClose.empty() || afterClose.back().pageID != e_PageID_Game) return;
+    topPage = windowManager->GetPageFactory()->GetMostRecentlyCreatedPage();
+    if (!topPage) return;
+  } else if (topPageID != e_PageID_Game) {
+    // The peer is on a personal pause sub-screen (plan, settings, side select).
+    // Leave it open; once it closes, the next tick shows the break screen.
+    return;
+  }
+
+  Properties properties;
+  properties.Set("nextphase", (int)match->GetMatchPhase());
+  topPage->CreatePage((int)e_PageID_MatchPhase, properties, 0);
 }
 
 int MenuTask::GetLocalNetworkTeamID() {
@@ -228,6 +264,58 @@ bool MenuTask::HasTwoLocalPlayers() {
   if (controllers.at(device[0])->GetDeviceType() == e_HIDeviceType_Keyboard &&
       controllers.at(device[1])->GetDeviceType() == e_HIDeviceType_Keyboard) return false;
   return true;
+}
+
+bool MenuTask::IsNetworkMatch() {
+  return netServer != 0 || netClient != 0;
+}
+
+bool MenuTask::LocalResumeReady() {
+  NetLobbyState state;
+  int localId = 0;
+  if (netServer) {
+    state = netServer->GetLobbyState();
+  } else if (netClient) {
+    state = netClient->GetLobbyState();
+    localId = (int)netClient->GetPlayerId();
+  } else {
+    return false;
+  }
+
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (netServer && state.players.at(i).isHost) return state.players.at(i).resumeReady;
+    if (netClient && (int)state.players.at(i).id == localId) return state.players.at(i).resumeReady;
+  }
+  return false;
+}
+
+int MenuTask::GetResumeReadyCount() {
+  NetLobbyState state;
+  if (netServer) state = netServer->GetLobbyState();
+  else if (netClient) state = netClient->GetLobbyState();
+  int ready = 0;
+  for (unsigned int i = 0; i < state.players.size(); i++) {
+    if (state.players.at(i).resumeReady) ready++;
+  }
+  return ready;
+}
+
+int MenuTask::GetPeerCount() {
+  if (netServer) return (int)netServer->GetLobbyState().players.size();
+  if (netClient) return (int)netClient->GetLobbyState().players.size();
+  return 0;
+}
+
+void MenuTask::SetLocalResumeReady(bool ready) {
+  NetLobbyAction action;
+  action.type = e_NetLobbyAction_SetResumeReady;
+  action.value = ready ? 1 : 0;
+  if (netServer) {
+    action.playerId = 0;
+    netServer->ApplyLobbyAction(action);
+  } else if (netClient) {
+    netClient->SendLobbyAction(action);
+  }
 }
 
 bool MenuTask::PlayerOwnsSide(uint32_t playerId, int side) {

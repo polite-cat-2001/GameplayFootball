@@ -5,6 +5,7 @@
 #include "caption.hpp"
 
 #include "../windowmanager.hpp"
+#include "utils/ttfmutex.hpp"
 
 namespace blunted {
 
@@ -56,18 +57,23 @@ namespace blunted {
     windowManager->GetCoordinates(x_percent, y_percent, width_percent, height_percent, x, y, w, h);
     int x_margin = 0;
     int y_margin = 0;
-    int outlineWidth = TTF_GetFontOutline(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline));
 
     Vector3 textColor = color;
     SDL_Color textColorSDL = { Uint8(textColor.coords[0]), Uint8(textColor.coords[1]), Uint8(textColor.coords[2]) };
     Vector3 textOutlineColor = outlineColor;
     SDL_Color textOutlineColorSDL = { Uint8(textOutlineColor.coords[0]), Uint8(textOutlineColor.coords[1]), Uint8(textOutlineColor.coords[2]) };
 
-    SDL_Surface *textSurfTmp = TTF_RenderText_Blended(windowManager->GetStyle()->GetFont(e_TextType_Caption), caption.c_str(), caption.length(), textColorSDL);
-    SDL_Surface *textOutlineSurfTmp = TTF_RenderText_Blended(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline), caption.c_str(), caption.length(), textOutlineColorSDL);
-
+    int outlineWidth;
+    SDL_Surface *textSurfTmp;
+    SDL_Surface *textOutlineSurfTmp;
     int resW, resH;
-    TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline), caption.c_str(), caption.length(), &resW, &resH);
+    {
+      boost::mutex::scoped_lock ttfLock(GetTTFMutex());
+      outlineWidth = TTF_GetFontOutline(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline));
+      textSurfTmp = TTF_RenderText_Blended(windowManager->GetStyle()->GetFont(e_TextType_Caption), caption.c_str(), caption.length(), textColorSDL);
+      textOutlineSurfTmp = TTF_RenderText_Blended(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline), caption.c_str(), caption.length(), textOutlineColorSDL);
+      TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline), caption.c_str(), caption.length(), &resW, &resH);
+    }
 
     float zoomy;
     renderedTextHeightPix = (float)textOutlineSurfTmp->h;
@@ -142,14 +148,17 @@ namespace blunted {
     // font: the outline font is padded on both sides, which pushed callers (the
     // edit-line cursor) ~one outline width into the next glyph.
     int resW, resH;
-    TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_Caption), caption.substr(0, subStrLength).c_str(), subStrLength, &resW, &resH);
+    int outlineWidth;
+    {
+      boost::mutex::scoped_lock ttfLock(GetTTFMutex());
+      TTF_GetStringSize(windowManager->GetStyle()->GetFont(e_TextType_Caption), caption.substr(0, subStrLength).c_str(), subStrLength, &resW, &resH);
+      // Redraw() blits the fill text shifted right by the outline width; add the
+      // same offset so the returned position matches the rendered glyph edge.
+      outlineWidth = TTF_GetFontOutline(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline));
+    }
 
     float zoomy;
     zoomy = (float)h / (float)renderedTextHeightPix;
-
-    // Redraw() blits the fill text shifted right by the outline width; add the
-    // same offset so the returned position matches the rendered glyph edge.
-    int outlineWidth = TTF_GetFontOutline(windowManager->GetStyle()->GetFont(e_TextType_DefaultOutline));
 
     return windowManager->GetWidthPercent((resW + outlineWidth) * zoomy);
   }

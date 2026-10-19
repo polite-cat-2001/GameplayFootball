@@ -697,9 +697,10 @@ bool NetServer::ConsumePauseRequest(bool &paused) {
   return true;
 }
 
-void NetServer::BroadcastPause(bool paused) {
+void NetServer::BroadcastPause(bool paused, bool phaseBreak) {
   NetBuffer buffer;
   buffer.PutBool(paused);
+  buffer.PutBool(phaseBreak);
   BroadcastMessage(e_NetMessage_PauseState, buffer);
 }
 

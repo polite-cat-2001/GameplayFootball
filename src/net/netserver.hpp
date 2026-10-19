@@ -95,7 +95,7 @@ class NetServer {
     std::vector<boost::shared_ptr<NetHIDDevice> > GetHIDevices();
 
     // Any peer may request pause; the host applies and broadcasts the state.
-    void BroadcastPause(bool paused);
+    void BroadcastPause(bool paused, bool phaseBreak);
     bool ConsumePauseRequest(bool &paused);
 
     // Any peer skipping a replay tells the host, which broadcasts it to all.

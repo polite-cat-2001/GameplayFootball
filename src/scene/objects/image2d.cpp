@@ -6,6 +6,8 @@
 
 #include "base/log.hpp"
 
+#include "utils/ttfmutex.hpp"
+
 #include "systems/isystemobject.hpp"
 
 
@@ -280,7 +282,11 @@ namespace blunted {
   void Image2D::DrawSimpleText(const std::string &caption, int x, int y, TTF_Font *font, const Vector3 &color, int alpha) { // todo: alpha doesn't work properly yet
 
     SDL_Color sdlColor = { (unsigned char)(color.coords[0]), (unsigned char)(color.coords[1]), (unsigned char)(color.coords[2]), 0 };
-    SDL_Surface *sdlText = TTF_RenderText_Blended(font, caption.c_str(), caption.length(), sdlColor);
+    SDL_Surface *sdlText;
+    {
+      boost::mutex::scoped_lock ttfLock(GetTTFMutex());
+      sdlText = TTF_RenderText_Blended(font, caption.c_str(), caption.length(), sdlColor);
+    }
     if (alpha != 255) sdl_setsurfacealpha(sdlText, alpha);
 
     assert(sdlText);

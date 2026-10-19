@@ -42,10 +42,9 @@ class IngamePage : public Gui2Page {
     virtual void ProcessWindowingEvent(WindowingEvent *event);
 
   protected:
-    bool IsNetworkMatch();
-    bool LocalResumeReady();
-    int GetResumeReadyCount();
-    int GetPeerCount();
+    // Leaving the pause menu for any sub-screen retracts this peer's resume
+    // vote, so the match cannot resume behind an open sub-screen.
+    void CancelResumeVote();
 
     // Local two-player: "Continue" is a per-side vote, like the LAN resume.
     bool localTwoPlayers;

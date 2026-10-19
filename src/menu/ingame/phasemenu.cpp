@@ -13,11 +13,14 @@ using namespace blunted;
 
 MatchPhasePage::MatchPhasePage(Gui2WindowManager *windowManager, const Gui2PageData &pageData) : Gui2Page(windowManager, pageData) {
 
-  GetGameTask()->GetMatch()->Pause(true);
+  // Opening the break screen pauses; returning here from a sub-screen keeps the
+  // existing pause (and the peers' votes) intact.
+  Match *match = GetGameTask()->GetMatch();
+  if (match) match->SetPhaseBreak(true);
+  if (match && !match->GetPause()) match->Pause(true);
 
   nextPhase = (e_MatchPhase)pageData.properties->GetInt("nextphase");
 
-  std::string phaseName;
   if (nextPhase == e_MatchPhase_2ndHalf) phaseName = "second half";
   else if (nextPhase == e_MatchPhase_1stExtraTime) phaseName = "1st extra time";
   else if (nextPhase == e_MatchPhase_2ndExtraTime) phaseName = "2nd extra time";
@@ -48,6 +51,11 @@ MatchPhasePage::~MatchPhasePage() {
 }
 
 void MatchPhasePage::GoGamePlan() {
+  // Leaving for a sub-screen withdraws this peer's Continue vote: the match
+  // must not resume while the plan is still open.
+  if (GetMenuTask()->IsNetworkMatch() && GetMenuTask()->LocalResumeReady()) {
+    GetMenuTask()->SetLocalResumeReady(false);
+  }
 
   Properties properties;
   //properties.SetInt("teamID", );
@@ -56,8 +64,36 @@ void MatchPhasePage::GoGamePlan() {
 
 void MatchPhasePage::ContinueGame() {
   GetMenuTask()->ReleaseAllButtons();
-  GetGameTask()->GetMatch()->Pause(false);
+  Match *match = GetGameTask()->GetMatch();
+  if (!match) return;
+
+  // Network: every peer votes; the host resumes once all agreed.
+  if (GetMenuTask()->IsNetworkMatch()) {
+    GetMenuTask()->SetLocalResumeReady(!GetMenuTask()->LocalResumeReady());
+    return;
+  }
+
+  match->Pause(false);
   GoBack(); // back to gamepage
+}
+
+void MatchPhasePage::Process() {
+  Gui2Page::Process();
+
+  Match *match = GetGameTask()->GetMatch();
+  if (!match) return;
+
+  if (buttonNext && GetMenuTask()->IsNetworkMatch()) {
+    std::string caption = "begin " + phaseName + " (" +
+                          int_to_str(GetMenuTask()->GetResumeReadyCount()) + "/" +
+                          int_to_str(GetMenuTask()->GetPeerCount()) + ")";
+    if (GetMenuTask()->LocalResumeReady()) caption += " - waiting for others";
+    buttonNext->SetCaption(caption);
+  }
+
+  // All peers agreed (or the match was resumed elsewhere): close this page so
+  // the break screen disappears on every PC.
+  if (!match->GetPause()) GoBack();
 }
 
 void MatchPhasePage::ProcessWindowingEvent(WindowingEvent *event) {

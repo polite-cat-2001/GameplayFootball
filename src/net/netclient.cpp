@@ -29,6 +29,7 @@ NetClient::NetClient()
       environmentPending(false),
       pauseStatePending(false),
       pauseState(false),
+      pauseStatePhaseBreak(false),
       replayStopPending(false) {
 }
 
@@ -360,6 +361,7 @@ void NetClient::Dispatch(e_NetMessageType type, NetBuffer &buffer) {
   } else if (type == e_NetMessage_PauseState) {
     boost::mutex::scoped_lock lock(pendingMutex);
     pauseState = buffer.GetBool();
+    pauseStatePhaseBreak = buffer.GetBool();
     pauseStatePending = true;
   } else if (type == e_NetMessage_ReplayStop) {
     boost::mutex::scoped_lock lock(pendingMutex);
@@ -408,10 +410,11 @@ bool NetClient::ConsumeEnvironment(NetMatchEnvironment &out) {
   return true;
 }
 
-bool NetClient::ConsumePauseState(bool &out) {
+bool NetClient::ConsumePauseState(bool &out, bool &phaseBreak) {
   boost::mutex::scoped_lock lock(pendingMutex);
   if (!pauseStatePending) return false;
   out = pauseState;
+  phaseBreak = pauseStatePhaseBreak;
   pauseStatePending = false;
   return true;
 }

@@ -29,7 +29,9 @@
 // v16: input frame carries the set-piece taker-menu choice (squad slot, -1 none)
 //      so a thin client's taker change reaches the host over the input channel.
 // v17: referee card state (type + mirror) in snapshots.
-const int net_protocolVersion = 17;
+// v18: PauseState carries whether the pause is a between-periods break, so the
+//      thin client shows the same break screen as the host.
+const int net_protocolVersion = 18;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

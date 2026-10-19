@@ -206,11 +206,19 @@ class Match {
     void ResetSituation(const Vector3 &focusPos);
 
     void Pause(bool doPause);
-    void SetPauseFromNetwork(bool doPause) { pause = doPause; pauseMenuRequested = doPause; }
+    void SetPauseFromNetwork(bool doPause, bool phaseBreakState) {
+      pause = doPause;
+      pauseMenuRequested = doPause;
+      phaseBreak = doPause && phaseBreakState;
+    }
     bool GetPause() { return pause; }
     // True when the game should show the in-game pause menu on this peer (manual
     // or peer-requested pause; not set by automatic goal replays).
     bool GetPauseMenuRequested() const { return pauseMenuRequested; }
+    // True from the end of a half until the next resume: both peers show the
+    // between-halves screen (not the regular pause menu) while this is set.
+    bool IsPhaseBreak() const { return phaseBreak; }
+    void SetPhaseBreak(bool value) { phaseBreak = value; }
 
     // Set-piece taker menu (#30). `...Requested` is a one-shot the menu layer consumes to open the
     // overlay; `...Open` makes HumanController suppress the taker's own input while it is up. Raised
@@ -502,6 +510,7 @@ class Match {
     unsigned long goalScoredTimer;
 
     bool pause;
+    bool phaseBreak; // between halves/periods until the next resume
     e_MatchPhase matchPhase; // 0 - first half; 1 - second half; 2 - 1st extra time; 3 - 2nd extra time; 4 - penalties
     bool inPlay;
     bool debugRemoveOpponents; // F2 debug: non-human outfield players parked off the pitch
