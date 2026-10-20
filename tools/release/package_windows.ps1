@@ -92,5 +92,9 @@ $zipName = "GameplayFootball-v$Version-win32-$Arch.zip"
 $zipPath = Join-Path $OutDir $zipName
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath }
-Compress-Archive -Path "$stage\*" -DestinationPath $zipPath
+# .NET zip instead of Compress-Archive: the data tree is ~33k files, where
+# Compress-Archive spends tens of minutes on per-file overhead.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+  $stage, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 Write-Output "Created $zipPath ($([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB)"

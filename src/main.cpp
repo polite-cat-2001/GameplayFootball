@@ -76,15 +76,23 @@ static LONG WINAPI GameplayFootballCrashFilter(EXCEPTION_POINTERS *info) {
       CONTEXT context = *info->ContextRecord;
       STACKFRAME64 frame;
       memset(&frame, 0, sizeof(frame));
+#if defined(_M_X64)
+      frame.AddrPC.Offset = context.Rip;
+      frame.AddrFrame.Offset = context.Rbp;
+      frame.AddrStack.Offset = context.Rsp;
+      const DWORD machineType = IMAGE_FILE_MACHINE_AMD64;
+#else
       frame.AddrPC.Offset = context.Eip;
-      frame.AddrPC.Mode = AddrModeFlat;
       frame.AddrFrame.Offset = context.Ebp;
-      frame.AddrFrame.Mode = AddrModeFlat;
       frame.AddrStack.Offset = context.Esp;
+      const DWORD machineType = IMAGE_FILE_MACHINE_I386;
+#endif
+      frame.AddrPC.Mode = AddrModeFlat;
+      frame.AddrFrame.Mode = AddrModeFlat;
       frame.AddrStack.Mode = AddrModeFlat;
 
       int depth = 0;
-      while (depth < 64 && StackWalk64(IMAGE_FILE_MACHINE_I386, process, thread, &frame, &context, NULL,
+      while (depth < 64 && StackWalk64(machineType, process, thread, &frame, &context, NULL,
                                        SymFunctionTableAccess64, SymGetModuleBase64, NULL)) {
         DWORD64 addr = frame.AddrPC.Offset;
         if (addr == 0) break;
