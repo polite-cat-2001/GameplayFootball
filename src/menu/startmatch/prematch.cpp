@@ -543,24 +543,6 @@ void PreMatchPage::ProcessKeyboardEvent(KeyboardEvent *event) {
     }
   }
 
-  // The content grids accept the up-direction windowing event and never let it
-  // bubble (they have no selectable rows above the focused button), so the tab
-  // strip would be unreachable. Handle the key here: up from content returns
-  // focus to the tab strip.
-  if (event->GetKeyRepeated(SDLK_UP)) {
-    Gui2View *focus = windowManager->GetFocus();
-    bool onTab = false;
-    for (unsigned int i = 0; i < tabButtons.size(); i++) {
-      if (tabButtons.at(i) == focus) { onTab = true; break; }
-    }
-    // An open pulldown is an overlay: let it handle up/down itself, or the
-    // entry list would be unreachable.
-    if (!onTab && !IsInOverlay(focus) && !AnyKitPulldownOpen() && IsInContent(focus)) {
-      tabButtons.at(activeTab)->SetFocus();
-      event->Accept();
-      return;
-    }
-  }
   Gui2Page::ProcessKeyboardEvent(event);
 }
 
