@@ -338,7 +338,7 @@ void MenuTask::ApplyPlanSwap(int side, int dbA, int dbB) {
   TeamData *teamData = matchData->GetTeamData(side);
   if (!teamData) return;
   teamData->SwitchPlayers(dbA, dbB);
-  planRevision++;
+  BumpPlanRevision(side);
 }
 
 void MenuTask::ApplyPlanScheme(int side, int scheme) {
@@ -355,7 +355,7 @@ void MenuTask::ApplyPlanScheme(int side, int scheme) {
     if (!teamData) return;
     ApplySchemeToTeamData(teamData, scheme);
   }
-  planRevision++;
+  BumpPlanRevision(side);
 }
 
 void MenuTask::ApplyPlanRole(int side, int role, int slot) {
@@ -373,7 +373,7 @@ void MenuTask::ApplyPlanRole(int side, int role, int slot) {
     if (!matchData) return;
     matchData->SetRolePlayer(side, (e_TeamRole)role, slot);
   }
-  planRevision++;
+  BumpPlanRevision(side);
 }
 
 void MenuTask::ProcessNetworkPlanEdits() {

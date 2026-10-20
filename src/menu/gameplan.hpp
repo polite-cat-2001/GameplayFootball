@@ -151,8 +151,11 @@ class GamePlanPage : public Gui2Page {
     void BuildPanel(PlanPanel &panel);
     void BuildOpponent(int teamID, float x, float y, float w, float h);
     void ClearEntries();
+    void ClearOpponent();
     void LayoutBench(PlanPanel &panel);
     void Rebuild(int focusTeam, int focusSlot);
+    void RebuildKeepingSelection(int focusTeam);
+    void RebuildOpponent();
 
     int FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction, bool onlyPitch = false);
     void SelectCursor(PlanPanel &panel, int entryPosition);
@@ -247,11 +250,11 @@ class GamePlanPage : public Gui2Page {
     int rebuildFocusTeam;
     int rebuildFocusSlot;
 
-    // Pre-match network plan: each peer opens it locally and edits only its own
-    // team; edits are relayed through the host and the page rebuilds when the
-    // shared MatchData changes.
+    // Network plan: each peer opens it locally and edits only its own team;
+    // edits are relayed through the host and the page rebuilds the changed side
+    // when the shared MatchData changes. The local panel keeps its selection.
     bool networkPrematch;
-    unsigned int seenPlanRevision;
+    unsigned int seenPlanRevision[2];
 
     // Single-panel placement of the read-only opponent (mirrored when the peer's
     // team is the away side, so own team sits on the right).

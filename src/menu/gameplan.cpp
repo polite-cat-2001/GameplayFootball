@@ -206,7 +206,8 @@ GamePlanPage::GamePlanPage(Gui2WindowManager *windowManager, const Gui2PageData 
   opponentReady = 0;
 
   networkPrematch = !InMatch() && (GetMenuTask()->GetNetServer() != 0 || GetMenuTask()->GetNetClient() != 0);
-  seenPlanRevision = GetMenuTask()->GetPlanRevision();
+  seenPlanRevision[0] = GetMenuTask()->GetPlanRevision(0);
+  seenPlanRevision[1] = GetMenuTask()->GetPlanRevision(1);
 
   SetupPanels();
 
@@ -1319,6 +1320,10 @@ void GamePlanPage::ClearEntries() {
   }
   entries.clear();
 
+  ClearOpponent();
+}
+
+void GamePlanPage::ClearOpponent() {
   for (unsigned int i = 0; i < opponentViews.size(); i++) {
     opponentViews.at(i)->Exit();
     delete opponentViews.at(i);
@@ -1405,6 +1410,42 @@ void GamePlanPage::Rebuild(int focusTeam, int focusSlot) {
     SelectCursor(panel, focus);
   }
   Refresh();
+}
+
+void GamePlanPage::RebuildKeepingSelection(int focusTeam) {
+  // Entries are recreated by slot, so remember the selected slots (player ids
+  // are -1 in the pre-match plan) and restore them after the rebuild.
+  std::vector<int> cursorSlots(panels.size(), -1);
+  std::vector<int> heldSlots(panels.size(), -1);
+  for (unsigned int p = 0; p < panels.size(); p++) {
+    PlanPanel &panel = panels.at(p);
+    if (panel.cursorIndex >= 0 && panel.cursorIndex < (int)entries.size())
+      cursorSlots.at(p) = entries.at(panel.cursorIndex).index;
+    if (panel.heldIndex >= 0 && panel.heldIndex < (int)entries.size())
+      heldSlots.at(p) = entries.at(panel.heldIndex).index;
+  }
+
+  Rebuild(focusTeam, -1);
+
+  for (unsigned int p = 0; p < panels.size(); p++) {
+    PlanPanel &panel = panels.at(p);
+    int cursorPos = -1;
+    int heldPos = -1;
+    for (unsigned int k = 0; k < panel.entryIndices.size(); k++) {
+      int pos = panel.entryIndices.at(k);
+      if (entries.at(pos).index == cursorSlots.at(p)) cursorPos = pos;
+      if (entries.at(pos).index == heldSlots.at(p)) heldPos = pos;
+    }
+    if (heldPos >= 0) panel.heldIndex = heldPos;
+    if (cursorPos >= 0) SelectCursor(panel, cursorPos);
+    else if (heldPos >= 0) { RefreshPanel(panel); UpdateInfo(); }
+  }
+}
+
+void GamePlanPage::RebuildOpponent() {
+  ClearOpponent();
+  if (!dualPanel && !panels.empty())
+    BuildOpponent(abs(panels.at(0).teamID - 1), oppX, pitchY, oppW, pitchH);
 }
 
 int GamePlanPage::FindNextEntry(PlanPanel &panel, int from, const Vector3 &direction, bool onlyPitch) {
@@ -2098,11 +2139,22 @@ void GamePlanPage::ProcessWindowingEvent(WindowingEvent *event) {
 }
 
 void GamePlanPage::Process() {
-  // Each peer owns their local plan screen; rebuild when the host relays an
-  // authoritative edit (lineup swap or tactical scheme, own or the other peer's).
-  if (GetMenuTask()->GetPlanRevision() != seenPlanRevision) {
-    seenPlanRevision = GetMenuTask()->GetPlanRevision();
-    if (!panels.empty()) Rebuild(panels.at(0).teamID, -1);
+  // Each peer owns their local plan screen; rebuild only the side the host
+  // relayed an edit for. A remote edit must not recreate the local cards: that
+  // made the screen flicker and dropped the player held for a swap. A local
+  // edit rebuilds the local panel but keeps its cursor and held player.
+  for (int side = 0; side < 2; side++) {
+    unsigned int revision = GetMenuTask()->GetPlanRevision(side);
+    if (revision == seenPlanRevision[side]) continue;
+    seenPlanRevision[side] = revision;
+    if (panels.empty()) continue;
+
+    bool localSide = false;
+    for (unsigned int p = 0; p < panels.size(); p++) {
+      if (panels.at(p).teamID == side) { localSide = true; break; }
+    }
+    if (localSide) RebuildKeepingSelection(side);
+    else RebuildOpponent();
   }
 
   if (rebuildPending) {

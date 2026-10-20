@@ -102,10 +102,12 @@ class MenuTask : public Gui2Task {
     // in a network match or when this peer is a spectator.
     int GetLocalNetworkTeamID();
 
-    // Pre-match plan sync: bumped whenever a lineup swap is applied (local host
-    // edit relayed to clients, or an authoritative swap received from the host).
-    // GamePlanPage watches it to rebuild.
-    unsigned int GetPlanRevision() const { return planRevision; }
+    // Game plan sync: bumped per side whenever a lineup swap, scheme or role is
+    // applied (local host edit relayed to clients, or an authoritative edit
+    // received from the host). GamePlanPage watches a side to rebuild only that
+    // side; the local editable panel keeps its cursor and held player.
+    unsigned int GetPlanRevision(int side) const { return (side == 0 || side == 1) ? planRevision[side] : 0; }
+    void BumpPlanRevision(int side) { if (side == 0 || side == 1) planRevision[side]++; }
 
     // Host only: set once all peers agreed to start the match; PreMatchPage
     // consumes it and performs the actual kickoff.
@@ -135,7 +137,7 @@ class MenuTask : public Gui2Task {
     // Pre-match: host consumes the agreed hub action (leave hub / start).
     void ProcessNetworkHubVotes();
 
-    unsigned int planRevision = 0;
+    unsigned int planRevision[2] = {0, 0};
     bool hubStartRequested = false;
 
     unsigned long lastGamepadCheckTime_ms = 0; // rate-limit mid-match unplug detection
