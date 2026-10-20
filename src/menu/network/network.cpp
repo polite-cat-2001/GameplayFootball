@@ -111,7 +111,7 @@ void NetworkMenuPage::GoJoin() {
 }
 
 void NetworkMenuPage::GoBack() {
-  CreatePage(e_PageID_MainMenu);
+  Gui2Page::GoBack();
 }
 
 
@@ -203,7 +203,7 @@ void NetworkHostPage::OpenLobby() {
 }
 
 void NetworkHostPage::GoBack() {
-  CreatePage(e_PageID_NetworkMenu);
+  Gui2Page::GoBack();
 }
 
 
@@ -296,7 +296,7 @@ void NetworkJoinPage::Connect() {
 
 void NetworkJoinPage::GoBack() {
   GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
-  CreatePage(e_PageID_NetworkMenu);
+  Gui2Page::GoBack();
 }
 
 void NetworkJoinPage::Process() {

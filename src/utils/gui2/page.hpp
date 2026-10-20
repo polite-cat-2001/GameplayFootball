@@ -26,6 +26,9 @@ namespace blunted {
       virtual ~Gui2Page();
 
       void GoBack();
+      // Like GoBack, but unwinds to the nearest page with this id instead of
+      // stepping one level back (network session screens live on a long path).
+      void GoBackTo(int pageID);
       virtual void ProcessWindowingEvent(WindowingEvent *event);
 
       // moved to View class: boost::signal<void()> sig_OnClose;

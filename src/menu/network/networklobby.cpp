@@ -57,6 +57,10 @@ NetworkLobbyPage::NetworkLobbyPage(Gui2WindowManager *windowManager, const Gui2P
 }
 
 NetworkLobbyPage::~NetworkLobbyPage() {
+  // ConfigureTeamsInput narrows menu input to the device the peer picked; that
+  // applies to the team phase only. Without this the restriction leaked into
+  // the pre-match hub and back into the main menu.
+  RestoreInput();
 }
 
 bool NetworkLobbyPage::IsHost() {
@@ -389,7 +393,7 @@ void NetworkLobbyPage::Process() {
     boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
     if (!client || client->GetState() == e_NetConnectionState_Disconnected) {
       GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
-      CreatePage(e_PageID_NetworkMenu);
+      GoBackTo(e_PageID_NetworkMenu);
       return;
     }
   }
@@ -504,5 +508,7 @@ void NetworkLobbyPage::Leave() {
     if (client) client->Disconnect();
     GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
   }
-  CreatePage(e_PageID_NetworkMenu);
+  // Close the lobby by unwinding to the network menu; pushing a new copy leaves
+  // the phase screens underneath and Esc would step back into them.
+  GoBackTo(e_PageID_NetworkMenu);
 }

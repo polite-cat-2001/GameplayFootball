@@ -287,7 +287,7 @@ void PreMatchPage::Process() {
     boost::shared_ptr<NetClient> client = GetMenuTask()->GetNetClient();
     if (!client || client->GetState() == e_NetConnectionState_Disconnected) {
       GetMenuTask()->SetNetClient(boost::shared_ptr<NetClient>());
-      CreatePage(e_PageID_NetworkMenu);
+      GoBackTo(e_PageID_NetworkMenu);
       return;
     }
   }

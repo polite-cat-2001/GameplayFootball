@@ -137,6 +137,7 @@ class SideSelectPage : public Gui2Page {
     void ChangeSide(int participantId, int delta);
     bool CheckAllConfirmed(); // returns true if the page navigated away
     void Leave();
+    void UpdateHelpCaption(int device); // keyboard/gamepad key hints
 
     SideSelectBackend *backend;
     bool inGame;
@@ -144,6 +145,7 @@ class SideSelectPage : public Gui2Page {
     bool committed;
 
     int sentDevice;
+    int helpDevice; // last device whose key hints are shown, -1 = not set
     unsigned long lastGamepadSideChange_ms;
 
     std::vector<SideSelectParticipant> participants;

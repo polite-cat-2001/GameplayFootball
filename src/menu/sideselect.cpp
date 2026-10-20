@@ -354,6 +354,7 @@ SideSelectPage::SideSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   resumeOnClose = pageData.properties && pageData.properties->GetBool("resumeOnClose");
   committed = false;
   sentDevice = -1;
+  helpDevice = -1;
   lastGamepadSideChange_ms = 0;
 
   const bool network = GetMenuTask()->GetNetServer() || GetMenuTask()->GetNetClient();
@@ -387,12 +388,30 @@ SideSelectPage::SideSelectPage(Gui2WindowManager *windowManager, const Gui2PageD
   RebuildRows();
   SetImagePositions();
 
+  // Hint the keys of the device this screen is driven with: the local peer's
+  // chosen device over the network, keyboard until a local device is used.
+  int initialDevice = 0;
+  if (!backend->IsLocal()) {
+    for (unsigned int i = 0; i < participants.size(); i++) {
+      if (participants.at(i).isLocalPeer) { initialDevice = participants.at(i).device; break; }
+    }
+  }
+  UpdateHelpCaption(initialDevice);
+
   this->SetFocus();
   this->Show();
 }
 
 SideSelectPage::~SideSelectPage() {
   delete backend;
+}
+
+void SideSelectPage::UpdateHelpCaption(int device) {
+  if (device == helpDevice) return;
+  helpDevice = device;
+  helpCaption->SetCaption(device == 1
+      ? "Left/Right: side    A: ready    B: leave"
+      : "Left/Right: side    Enter: ready    Esc: leave");
 }
 
 void SideSelectPage::DrawPixelLine(boost::intrusive_ptr<Image2D> img, int x0, int y0, int x1, int y1, const Vector3 &color) {
@@ -581,8 +600,11 @@ void SideSelectPage::Leave() {
     return;
   }
 
+  // Pre-match: leaving cancels the hosted/joined session. Unwind to the network
+  // menu instead of pushing a second copy onto the page path (otherwise Esc
+  // there walks back into this stale side-select page).
   backend->Cancel();
-  CreatePage(e_PageID_NetworkMenu);
+  GoBackTo(e_PageID_NetworkMenu);
 }
 
 void SideSelectPage::Process() {
@@ -591,7 +613,12 @@ void SideSelectPage::Process() {
   backend->Process();
 
   int next = backend->PollTransition();
-  if (next >= 0) { CreatePage(next); return; }
+  if (next >= 0) {
+    // A lost connection returns to the network menu through the same unwinding
+    // path as Leave(), not by stacking another menu page.
+    if (next == e_PageID_NetworkMenu) GoBackTo(next); else CreatePage(next);
+    return;
+  }
 
   if (backend->PollClosed()) { GoBack(); return; }
 
@@ -608,10 +635,17 @@ void SideSelectPage::Process() {
   }
   SetImagePositions();
 
+  if (!backend->IsLocal()) {
+    for (unsigned int i = 0; i < participants.size(); i++) {
+      if (participants.at(i).isLocalPeer) { UpdateHelpCaption(participants.at(i).device); break; }
+    }
+  }
+
   if (!backend->IsLocal()) CheckAllConfirmed();
 }
 
 void SideSelectPage::ProcessKeyboardEvent(KeyboardEvent *event) {
+  UpdateHelpCaption(0);
   if (!backend->IsLocal() && sentDevice != 0) {
     sentDevice = 0;
     backend->SetDevice(0);
@@ -657,6 +691,7 @@ void SideSelectPage::ProcessKeyboardEvent(KeyboardEvent *event) {
 }
 
 void SideSelectPage::ProcessJoystickEvent(JoystickEvent *event) {
+  UpdateHelpCaption(1);
   if (!backend->IsLocal() && sentDevice != 1) {
     sentDevice = 1;
     backend->SetDevice(1);
@@ -708,11 +743,18 @@ void SideSelectPage::ProcessJoystickEvent(JoystickEvent *event) {
         else if (gamepad->GetButtonValue(e_ButtonFunction_Right) > 0.5f) { ChangeSide(localId, 1); lastGamepadSideChange_ms = now_ms; }
       }
 
+      bool ready = false;
+      for (unsigned int i = 0; i < participants.size(); i++) {
+        if (participants.at(i).isLocalPeer) { ready = participants.at(i).ready; break; }
+      }
+
+      // Back mirrors Esc: leave the side screen (pre-match lobby cancels).
+      if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_B))) {
+        Leave();
+        return;
+      }
+
       if (event->GetButton(joyID, gamepad->GetControllerMapping(e_ControllerButton_A))) {
-        bool ready = false;
-        for (unsigned int i = 0; i < participants.size(); i++) {
-          if (participants.at(i).isLocalPeer) { ready = participants.at(i).ready; break; }
-        }
         backend->SetReady(localId, !ready);
         if (CheckAllConfirmed()) return;
       }

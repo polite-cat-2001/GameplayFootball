@@ -37,6 +37,29 @@ namespace blunted {
     return;
   }
 
+  void Gui2Page::GoBackTo(int pageID) {
+    const std::vector<Gui2PageData> &path = windowManager->GetPagePath()->GetPath();
+    bool found = false;
+    for (unsigned int i = 0; i < path.size(); i++) {
+      if (path.at(i).pageID == pageID) { found = true; break; }
+    }
+    if (!found) { GoBack(); return; }
+
+    this->Exit();
+    windowManager->GetPagePath()->Pop(); // current page
+    while (windowManager->GetPagePath()->GetLast().pageID != pageID) {
+      windowManager->GetPagePath()->Pop(); // drop screens above the target
+    }
+
+    Gui2PageData targetPage = windowManager->GetPagePath()->GetLast();
+    windowManager->GetPagePath()->Pop(); // re-added by CreatePage below
+    Properties emptyProperties;
+    const Properties &properties = targetPage.properties ? *targetPage.properties : emptyProperties;
+    windowManager->GetPageFactory()->CreatePage(targetPage.pageID, properties, targetPage.data);
+
+    delete this;
+  }
+
   void Gui2Page::ProcessWindowingEvent(WindowingEvent *event) {
     if (event->IsEscape()) {
       GoBack();
