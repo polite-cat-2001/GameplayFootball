@@ -599,32 +599,38 @@ void PreMatchPage::ProcessWindowingEvent(WindowingEvent *event) {
     return;
   }
 
-  if (networkMatch && event->IsEscape()) {
-    // Esc is layered: it first withdraws an agreed start (returning to the
-    // Kick-off tab), then proposes leaving the hub, then withdraws that too.
-    bool wasStart = (localVote == e_NetHubVote_StartMatch);
-    if (localVote == e_NetHubVote_StartMatch || localVote == e_NetHubVote_BackToTeams) localVote = e_NetHubVote_None;
-    else localVote = e_NetHubVote_BackToTeams;
-    SendHubVote(localVote);
-    if (wasStart) FocusKickOffTab();
-    event->Accept();
-    return;
-  }
-
   Gui2View *focus = windowManager->GetFocus();
   bool onTab = false;
   for (unsigned int i = 0; i < tabButtons.size(); i++) {
     if (tabButtons.at(i) == focus) { onTab = true; break; }
   }
+  bool inContent = !onTab && IsInContent(focus);
+  bool inOverlay = IsInOverlay(focus);
 
   // Back is two-level: from a tab's content it returns to the tab strip (still
   // in the hub); from the tab strip it leaves the hub back to team selection.
   if (event->IsEscape()) {
-    if (!onTab && IsInContent(focus)) {
+    if (inContent && !inOverlay) {
       tabButtons.at(activeTab)->SetFocus();
-    } else {
-      GoBack();
+      event->Accept();
+      return;
     }
+
+    if (networkMatch) {
+      // Leaving the hub is a vote, so it is only cast from the tab strip (a
+      // Back inside a tab's content must first climb back out). On the strip
+      // Esc is layered: it first withdraws an agreed start (returning to the
+      // Kick-off tab), then proposes leaving the hub, then withdraws that too.
+      bool wasStart = (localVote == e_NetHubVote_StartMatch);
+      if (localVote == e_NetHubVote_StartMatch || localVote == e_NetHubVote_BackToTeams) localVote = e_NetHubVote_None;
+      else localVote = e_NetHubVote_BackToTeams;
+      SendHubVote(localVote);
+      if (wasStart) FocusKickOffTab();
+      event->Accept();
+      return;
+    }
+
+    GoBack();
     event->Accept();
     return;
   }
@@ -636,7 +642,7 @@ void PreMatchPage::ProcessWindowingEvent(WindowingEvent *event) {
     event->Accept();
     return;
   }
-  if (!onTab && direction.coords[1] < -0.75 && !IsInOverlay(focus) && !AnyKitPulldownOpen() && IsInContent(focus)) {
+  if (inContent && direction.coords[1] < -0.75 && !inOverlay && !AnyKitPulldownOpen()) {
     tabButtons.at(activeTab)->SetFocus();
     event->Accept();
     return;
