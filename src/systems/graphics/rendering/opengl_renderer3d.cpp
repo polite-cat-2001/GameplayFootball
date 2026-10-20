@@ -452,6 +452,26 @@ struct GLfunctions {
     return true;
   }
 
+  void OpenGLRenderer3D::SetContextSize(int width, int height, bool fullscreen) {
+    // SDL3's default fullscreen is borderless at desktop resolution, so the
+    // window size only follows the requested one in windowed mode. Keep the
+    // requested size as the logical context size to match CreateContext().
+    SDL_SetWindowFullscreen(window, fullscreen);
+    if (!fullscreen) SDL_SetWindowSize(window, width, height);
+    SDL_SyncWindow(window);
+
+    context_width = width;
+    context_height = height;
+
+    for (unsigned int i = 0; i < views.size(); i++) {
+      View &view = views.at(i);
+      if (!view.active) continue;
+      DeleteViewBuffers(view);
+      UpdateViewDimensions(view);
+      CreateViewBuffers(view);
+    }
+  }
+
   void OpenGLRenderer3D::Exit() {
     DeleteTexture(noiseTexID);
 
@@ -472,6 +492,13 @@ struct GLfunctions {
     // (actually, erasion 'works', but it does leave 'empty' records in the views vector, which is ugly and memory-leaky)
   }
 
+  void OpenGLRenderer3D::UpdateViewDimensions(View &view) {
+    view.x = int(floor(view.x_percent * 0.01 * context_width));
+    view.y = int(floor(view.y_percent * 0.01 * context_height));
+    view.width = int(floor(view.width_percent * 0.01 * context_width));
+    view.height = int(floor(view.height_percent * 0.01 * context_height));
+  }
+
   int OpenGLRenderer3D::CreateView(float x_percent, float y_percent, float width_percent, float height_percent) {
 
     Log(e_Notice, "OpenGLRenderer3D", "CreateView", "Creating new view, id " + int_to_str(views.size()));
@@ -480,11 +507,21 @@ struct GLfunctions {
 
     view.target = e_ViewRenderTarget_Context;
     view.targetTexID = 0;
-    view.x = int(floor(x_percent * 0.01 * context_width));
-    view.y = int(floor(y_percent * 0.01 * context_height));
-    view.width = int(floor(width_percent * 0.01 * context_width));
-    view.height = int(floor(height_percent * 0.01 * context_height));
+    view.x_percent = x_percent;
+    view.y_percent = y_percent;
+    view.width_percent = width_percent;
+    view.height_percent = height_percent;
+    view.active = true;
+    UpdateViewDimensions(view);
 
+    CreateViewBuffers(view);
+
+    views.push_back(view);
+
+    return views.size() - 1;
+  }
+
+  void OpenGLRenderer3D::CreateViewBuffers(View &view) {
 
     // init FBO
 
@@ -563,10 +600,6 @@ struct GLfunctions {
     targets.push_back(e_TargetAttachment_Back);
     SetRenderTargets(targets);
     targets.clear();
-
-    views.push_back(view);
-
-    return views.size() - 1;
   }
 
   View &OpenGLRenderer3D::GetView(int viewID) {
@@ -577,28 +610,34 @@ struct GLfunctions {
 
     Log(e_Notice, "OpenGLRenderer3D", "DeleteView", "Deleting view, id " + int_to_str(viewID));
 
-    View *view = &views.at(viewID);
+    View &view = views.at(viewID);
+    DeleteViewBuffers(view);
+    // DeleteView does not erase the entry (view ids are vector indices), but it
+    // must not be touched again: its GL names may already belong to new textures.
+    view.active = false;
+  }
 
-    BindFrameBuffer(view->gBufferID);
+  void OpenGLRenderer3D::DeleteViewBuffers(View &view) {
+
+    BindFrameBuffer(view.gBufferID);
     SetFrameBufferTexture2D(e_TargetAttachment_Depth, 0);
     SetFrameBufferTexture2D(e_TargetAttachment_Color0, 0);
     SetFrameBufferTexture2D(e_TargetAttachment_Color1, 0);
     SetFrameBufferTexture2D(e_TargetAttachment_Color2, 0);
-    DeleteFrameBuffer(view->gBufferID);
+    DeleteFrameBuffer(view.gBufferID);
 
-    BindFrameBuffer(view->accumBufferID);
+    BindFrameBuffer(view.accumBufferID);
     SetFrameBufferTexture2D(e_TargetAttachment_Color0, 0);
     SetFrameBufferTexture2D(e_TargetAttachment_Color1, 0);
-    DeleteFrameBuffer(view->accumBufferID);
+    DeleteFrameBuffer(view.accumBufferID);
 
-    DeleteTexture(view->gBuffer_AlbedoTexID);
-    DeleteTexture(view->gBuffer_NormalTexID);
-    DeleteTexture(view->gBuffer_DepthTexID);
-    DeleteTexture(view->gBuffer_AuxTexID);
+    DeleteTexture(view.gBuffer_AlbedoTexID);
+    DeleteTexture(view.gBuffer_NormalTexID);
+    DeleteTexture(view.gBuffer_DepthTexID);
+    DeleteTexture(view.gBuffer_AuxTexID);
 
-    DeleteTexture(view->accumBuffer_AccumTexID);
-    DeleteTexture(view->accumBuffer_ModifierTexID);
-    //printf("done deleting view %i\n", viewID);
+    DeleteTexture(view.accumBuffer_AccumTexID);
+    DeleteTexture(view.accumBuffer_ModifierTexID);
   }
 
   // general

@@ -33,6 +33,8 @@ namespace blunted {
       virtual void Initialize(const Properties &config);
       virtual void Exit();
 
+      void SetContextSize(int width, int height, bool fullscreen);
+
       e_SystemType GetSystemType() const;
 
       virtual ISystemScene *CreateSystemScene(boost::shared_ptr<IScene> scene);

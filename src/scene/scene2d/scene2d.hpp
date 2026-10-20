@@ -32,6 +32,7 @@ namespace blunted {
 
       void GetContextSize(int &width, int &height, int &bpp);
       Vector3 GetContextSize();
+      void SetContextSize(int width, int height, int bpp);
 
     protected:
       vector_Objects objects;

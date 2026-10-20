@@ -65,6 +65,15 @@ namespace blunted {
     task->Run();
   }
 
+  void GraphicsSystem::SetContextSize(int width, int height, bool fullscreen) {
+    boost::intrusive_ptr<Renderer3DMessage_SetContextSize> setContextSize(new Renderer3DMessage_SetContextSize(width, height, fullscreen));
+    renderer3DTask->messageQueue.PushMessage(setContextSize);
+    setContextSize->Wait();
+
+    this->width = width;
+    this->height = height;
+  }
+
   void GraphicsSystem::Exit() {
     // shutdown system task
     boost::intrusive_ptr<Message_Shutdown> shutdown(new Message_Shutdown());

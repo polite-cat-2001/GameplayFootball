@@ -34,6 +34,8 @@ namespace blunted {
 
       void Process();
 
+      void UpdateContextSize();
+
       void GetCoordinates(float x_percent, float y_percent, float width_percent, float height_percent, int &x, int &y, int &width, int &height) const;
       int GetWidthPixels(float percentage);
       int GetHeightPixels(float percentage);
@@ -64,6 +66,8 @@ namespace blunted {
       Gui2PagePath *GetPagePath() { return pagePath; }
 
     protected:
+      void UpdateEffectiveSize();
+
       boost::shared_ptr<Scene2D> scene2D;
       float aspectRatio;
       float margin;

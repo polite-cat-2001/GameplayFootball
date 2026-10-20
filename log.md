@@ -3496,3 +3496,23 @@ Host, и только потом в главное меню. Добавлен `G
 `NetworkLobbyPage` и `PreMatchPage` при потере связи; кнопки Back сетевых меню
 теперь идут через обычный `GoBack()`, а не `CreatePage`. Вики [[сеть]] обновлена.
 
+## [2026-10-20] feat | смена разрешения применяется без перезапуска
+
+`GraphicsPage::SetResolution` больше не показывает «please restart»: размер окна меняется сразу.
+Добавлен `Renderer3DMessage_SetContextSize` (паттерн `CreateContext`): `OpenGLRenderer3D`
+переключает окно через `SDL_SetWindowFullscreen`/`SDL_SetWindowSize`, камеры хранят проценты
+вьюпорта, а их FBO пересоздаются под новый размер (`CreateViewBuffers`/`DeleteViewBuffers`).
+`GraphicsSystem` и `Scene2D` обновляют зеркала размера, `Gui2WindowManager::UpdateContextSize`
+пересчитывает `effectiveW/H` и фон, страница пересобирается новым `Gui2Page::Reload()`.
+Фуллскрин оставлен десктопным (SDL3 не меняет режим монитора); список разрешений не менялся.
+Вики [[архитектура]] обновлена.
+
+## [2026-10-20] fix | смена разрешения не портит текстуры матча
+
+После первого варианта смены разрешения на лету в матче у игроков краснели волосы, а мяч
+становился чёрным. Причина: `DeleteView` не стирает запись из `views` (id — индекс вектора),
+поэтому `SetContextSize` перебирал и «удалённые» view, повторно вызывая `glDeleteTextures`/
+`glDeleteFramebuffers` на GL-именах, которые драйвер уже переиспользовал под текстуры/буферы
+матча. У `View` появился флаг `active`: `CreateView` ставит его, `DeleteView` снимает, а
+`SetContextSize` пересоздаёт буферы только активных view. Вики [[архитектура]] уточнена.
+

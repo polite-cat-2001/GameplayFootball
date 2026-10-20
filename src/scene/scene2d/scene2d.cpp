@@ -128,4 +128,10 @@ namespace blunted {
     return size;
   }
 
+  void Scene2D::SetContextSize(int width, int height, int bpp) {
+    this->width = width;
+    this->height = height;
+    this->bpp = bpp;
+  }
+
 }

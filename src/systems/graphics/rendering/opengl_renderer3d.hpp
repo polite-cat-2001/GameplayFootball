@@ -41,6 +41,7 @@ namespace blunted {
 
       // init & exit
       virtual bool CreateContext(int width, int height, int bpp, bool fullscreen);
+      virtual void SetContextSize(int width, int height, bool fullscreen);
       virtual void Exit();
 
       virtual int CreateView(float x_percent, float y_percent, float width_percent, float height_percent);
@@ -117,6 +118,10 @@ namespace blunted {
       SDL_Window* window;
       int context_width, context_height, context_bpp;
       bool contextIsActive;
+
+      void UpdateViewDimensions(View &view);
+      void CreateViewBuffers(View &view);
+      void DeleteViewBuffers(View &view);
 
       float cameraNear;
       float cameraFar;

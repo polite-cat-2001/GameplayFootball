@@ -19,29 +19,14 @@ namespace blunted {
 
     style = new Gui2Style();
 
-    int contextW, contextH, bpp; // context
-    scene2D->GetContextSize(contextW, contextH, bpp);
-
-    contextW -= margin * 2;
-    contextH -= margin * 2;
-
-    float contextAspectRatio = (float)contextW / (float)contextH;
-
-    if (contextAspectRatio > aspectRatio) { // context width is larger than "virtual context's" width, so cap by height
-      effectiveW = contextH * aspectRatio;
-      effectiveH = contextH;
-    } else {
-      effectiveW = contextW;
-      effectiveH = contextW / aspectRatio;
-    }
-
-    effectiveW = clamp(effectiveW, 1, contextW);
-    effectiveH = clamp(effectiveH, 1, contextH);
-
+    UpdateEffectiveSize();
 
     // blackout background
 
+    int contextW, contextH, bpp;
     scene2D->GetContextSize(contextW, contextH, bpp);
+    contextW -= margin * 2;
+    contextH -= margin * 2;
     SDL_Surface *sdlSurface = CreateSDLSurface(contextW, contextH);
 
     boost::intrusive_ptr < Resource <Surface> > resource = ResourceManagerPool::GetInstance().GetManager<Surface>(e_ResourceType_Surface)->Fetch("gui2_blackoutbackground", false, true);
@@ -68,6 +53,40 @@ namespace blunted {
     blackoutBackground.reset();
 
     delete pagePath;
+  }
+
+  void Gui2WindowManager::UpdateEffectiveSize() {
+    int contextW, contextH, bpp;
+    scene2D->GetContextSize(contextW, contextH, bpp);
+    contextW -= margin * 2;
+    contextH -= margin * 2;
+
+    float contextAspectRatio = (float)contextW / (float)contextH;
+
+    if (contextAspectRatio > aspectRatio) { // context width is larger than "virtual context's" width, so cap by height
+      effectiveW = contextH * aspectRatio;
+      effectiveH = contextH;
+    } else {
+      effectiveW = contextW;
+      effectiveH = contextW / aspectRatio;
+    }
+
+    effectiveW = clamp(effectiveW, 1, contextW);
+    effectiveH = clamp(effectiveH, 1, contextH);
+  }
+
+  void Gui2WindowManager::UpdateContextSize() {
+    UpdateEffectiveSize();
+
+    int contextW, contextH, bpp;
+    scene2D->GetContextSize(contextW, contextH, bpp);
+    contextW -= margin * 2;
+    contextH -= margin * 2;
+
+    blackoutBackground->Resize(contextW, contextH);
+    blackoutBackground->DrawRectangle(0, 0, contextW, contextH, Vector3(0, 0, 0), 255);
+    blackoutBackground->SetPosition(0, 0);
+    blackoutBackground->OnChange();
   }
 
   void Gui2WindowManager::Exit() {

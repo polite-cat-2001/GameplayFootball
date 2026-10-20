@@ -60,6 +60,19 @@ namespace blunted {
     delete this;
   }
 
+  void Gui2Page::Reload() {
+    Gui2PageData data = pageData;
+
+    this->Exit();
+    windowManager->GetPagePath()->Pop(); // current page, re-added by CreatePage below
+
+    Properties emptyProperties;
+    const Properties &properties = data.properties ? *data.properties : emptyProperties;
+    windowManager->GetPageFactory()->CreatePage(data.pageID, properties, data.data);
+
+    delete this;
+  }
+
   void Gui2Page::ProcessWindowingEvent(WindowingEvent *event) {
     if (event->IsEscape()) {
       GoBack();

@@ -50,6 +50,22 @@ namespace blunted {
 
   };
 
+  class Renderer3DMessage_SetContextSize : public Command {
+
+    public:
+      Renderer3DMessage_SetContextSize(int width, int height, bool fullscreen) : Command("r3dmsg_SetContextSize"), width(width), height(height), fullscreen(fullscreen) {};
+
+    protected:
+      virtual bool Execute(void *caller = NULL) {
+        static_cast<Renderer3D*>(caller)->SetContextSize(width, height, fullscreen);
+        return true;
+      }
+
+      int width, height;
+      bool fullscreen;
+
+  };
+
   class Renderer3DMessage_SwapBuffers : public Command {
 
     public:

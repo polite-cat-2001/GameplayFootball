@@ -1225,33 +1225,14 @@ void GraphicsPage::SetResolution(int resIndex) {
   GetConfiguration()->Set("context_y", resolutions.at(resIndex).y);
   GetConfiguration()->SaveFile(GetConfigFilename());
 
-  bg = new Gui2Image(windowManager, "image_setresolution_bg", 0, 0, 100, 13);
-  bg->LoadImage("media/menu/backgrounds/black.png");
+  GetGraphicsSystem()->SetContextSize(resolutions.at(resIndex).x, resolutions.at(resIndex).y, resolutions.at(resIndex).fullscreen);
 
-  restartCaption1 = new Gui2Caption(windowManager, "caption_settings_resolution_info1", 0, 0, 100, 3, "please restart the game for the changes to become active.");
-  restartCaption2 = new Gui2Caption(windowManager, "caption_settings_resolution_info2", 0, 0, 100, 3, "if this resolution doesn't happen to work, you can always");
-  restartCaption3 = new Gui2Caption(windowManager, "caption_settings_resolution_info3", 0, 0, 100, 3, "change it manually by editing the file 'football.config'.");
-  restartCaption1->SetPosition(50 - restartCaption1->GetTextWidthPercent() * 0.5, 44);
-  restartCaption2->SetPosition(50 - restartCaption2->GetTextWidthPercent() * 0.5, 48);
-  restartCaption3->SetPosition(50 - restartCaption3->GetTextWidthPercent() * 0.5, 52);
+  int width, height, bpp;
+  GetGraphicsSystem()->GetContextSize(width, height, bpp);
+  GetScene2D()->SetContextSize(width, height, bpp);
+  GetMenuTask()->GetWindowManager()->UpdateContextSize();
 
-  bg->SetPosition(50 - restartCaption1->GetTextWidthPercent() * 0.5 - 1, 43);
-  bg->SetSize(restartCaption1->GetTextWidthPercent() + 2, 13);
-
-  captureKey = new Gui2CaptureKey(windowManager, "capturekey_settings_resolution");
-  captureKey->sig_OnKey.connect(boost::bind(&GraphicsPage::GoBack, this));
-
-  this->AddView(bg);
-  this->AddView(restartCaption1);
-  this->AddView(restartCaption2);
-  this->AddView(restartCaption3);
-  this->AddView(captureKey);
-  bg->Show();
-  restartCaption1->Show();
-  restartCaption2->Show();
-  restartCaption3->Show();
-  captureKey->Show();
-  captureKey->SetFocus();
+  Reload();
 }
 
 

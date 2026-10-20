@@ -184,10 +184,6 @@ class GraphicsPage : public Gui2Page {
     void SetResolution(int resIndex);
 
     std::vector<Resolution> resolutions;
-
-    Gui2Image *bg;
-    Gui2Caption *restartCaption1, *restartCaption2, *restartCaption3;
-    Gui2CaptureKey *captureKey;
 };
 
 class AudioPage : public Gui2Page {

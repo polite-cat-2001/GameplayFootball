@@ -72,6 +72,8 @@ namespace blunted {
     e_ViewRenderTarget target;
     int targetTexID;
     int x, y, width, height;
+    float x_percent, y_percent, width_percent, height_percent;
+    bool active;
 
     int gBufferID;
     int gBuffer_DepthTexID;
@@ -209,6 +211,7 @@ namespace blunted {
 
       // init & exit
       virtual bool CreateContext(int width, int height, int bpp, bool fullscreen) = 0;
+      virtual void SetContextSize(int width, int height, bool fullscreen) = 0;
       virtual void Exit() = 0;
 
       virtual int CreateView(float x_percent, float y_percent, float width_percent, float height_percent) = 0;
