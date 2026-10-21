@@ -3573,3 +3573,17 @@ v0.4.1; прикреплённый data-бандл остался schema v2 и �
 Quit процесс на этой машине не завершился сам и был снят KILL (в логе 2026-09-09 та же картина) —
 отдельный хвост, ассет не блокирует. Ассет приложен к релизу v0.4.1, тег не двигался. #40 не
 закрыт: открыты gameplay-тикеты #41/#44/#45/#46/#52, которые снова сдвинут хеш.
+
+## [2026-10-21] fix | data-бандл schema v3 опубликован отдельным ассетом
+
+Прикреплённый к v0.4.1 `GameplayFootball-data-2026-09-09.zip` был schema v2, а код ждёт schema v3
+(`databaseSchemaVersion = 3`, `players.strong_foot`), поэтому source-сборка по README падала на
+schema mismatch. Опубликован отдельный `GameplayFootball-data-2026-09-09-v3.zip` (553 036 918
+байт, sha256 `83fd9c909c3cb979552a78ec49c90c152b5f32b90542ca552bcdffbfa173ad28`, schema 3,
+snapshot `2026-09-09-5acb…`, 19 919 левшей). Старый v2-ассет не перезаписывался; faces-бандл не
+пересобирался. `data-versions.json` получил вторую строку; README ссылается на v3, старый v2
+помечен как для v0.4.0. `package_data.py` научился `--bundle-version` (имя ассета/реестра отдельно
+от manifest `data_version`) и больше не кладёт в архив SQLite `-shm`/`-wal`. Проверено:
+распаковка бандла в `build-mac-v041/databases/default` и `determinism_runner check
+1fd4a12de8f5585221ebabc16b56572a8cdc24cf` — exit 0. Вики [[пайплайн-данных]], [[релиз]],
+[[открытые-вопросы]] обновлены.

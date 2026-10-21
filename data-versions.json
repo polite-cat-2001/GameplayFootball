@@ -6,5 +6,13 @@
     "game_version": "v0.3.1",
     "date": "2026-09-09",
     "faces_sha256": "e46f741f8480615cd1a2e78b361f975ba6a291e5bad9eeec1b500b3cdb2db46f"
+  },
+  {
+    "version": "2026-09-09-v3",
+    "snapshot_id": "2026-09-09-5acb6580-ebc060d0-ee9ae2e6-b21af86c-8459cf03",
+    "sha256": "83fd9c909c3cb979552a78ec49c90c152b5f32b90542ca552bcdffbfa173ad28",
+    "game_version": "v0.4.1",
+    "date": "2026-10-21",
+    "faces_sha256": "e46f741f8480615cd1a2e78b361f975ba6a291e5bad9eeec1b500b3cdb2db46f"
   }
 ]

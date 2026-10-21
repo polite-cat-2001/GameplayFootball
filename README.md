@@ -146,9 +146,10 @@ page and unpack them **into** `<build-dir>/databases/default/` (`build` on Linux
 `build\Release` on Windows):
 
 ```bash
-# catalog — database.sqlite + league/club/nation images and kits (~527 MB, required)
+# catalog — database.sqlite + league/club/nation images and kits (~527 MB, required;
+# schema v3 for v0.4.1+)
 curl -L -o data.zip \
-  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.1/GameplayFootball-data-2026-09-09.zip
+  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.1/GameplayFootball-data-2026-09-09-v3.zip
 unzip -o data.zip -d build/databases/default
 
 # player faces — portrait cut-outs (~668 MB, optional; a placeholder is used otherwise)
@@ -157,9 +158,11 @@ curl -L -o faces.zip \
 unzip -o faces.zip -d build/databases/default
 ```
 
-The file names carry the data version (`2026-09-09` here); the matching `sha256` / `faces_sha256`
-checksums are listed in `data-versions.json`. Unpack **into** `databases/default/`, not into the
-build root: the game reads the database from `databases/default/database.sqlite`, images from
+The catalog file name carries the data version plus the schema bundle suffix (`2026-09-09-v3`
+here); the matching `sha256` / `faces_sha256` checksums are listed in `data-versions.json`. Use the
+`-v3` catalog for v0.4.1 and newer; the older `GameplayFootball-data-2026-09-09.zip` is schema v2
+and works only with v0.4.0 and older. Unpack **into** `databases/default/`, not into the build
+root: the game reads the database from `databases/default/database.sqlite`, images from
 `databases/default/images_*` and each face from `databases/default/faces/<tm_id>.png`. On Windows
 use `Expand-Archive` instead of `unzip`.
 

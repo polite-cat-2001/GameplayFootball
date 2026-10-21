@@ -36,8 +36,13 @@ tarballs automatically when a release is created.
    checksums in `data-versions.json`. The catalog zip is **not** byte-reproducible, so to
    attach faces to an already-published catalog use
    `python tools/release/package_data.py --faces-only` — it builds only the faces bundle and
-   never rebuilds the catalog. Both bundles unpack **into** `databases/default/`
-   (`unzip ... -d <build-dir>/databases/default`); the game's README documents this for users.
+   never rebuilds the catalog. When the same data snapshot is republished under a new schema,
+   pass `--bundle-version <data_version>-v3`: the manifest keeps its `data_version`, while the
+   asset name and registry entry get the suffix, so the published catalog is not overwritten
+   (v0.4.1 ships `GameplayFootball-data-2026-09-09-v3.zip` alongside the legacy schema-v2
+   bundle). SQLite `-shm`/`-wal` files are excluded from the archive. Both bundles unpack
+   **into** `databases/default/` (`unzip ... -d <build-dir>/databases/default`); the game's
+   README documents this for users.
 
 ## Notes
 
