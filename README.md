@@ -148,12 +148,12 @@ page and unpack them **into** `<build-dir>/databases/default/` (`build` on Linux
 ```bash
 # catalog — database.sqlite + league/club/nation images and kits (~527 MB, required)
 curl -L -o data.zip \
-  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.0/GameplayFootball-data-2026-09-09.zip
+  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.1/GameplayFootball-data-2026-09-09.zip
 unzip -o data.zip -d build/databases/default
 
 # player faces — portrait cut-outs (~668 MB, optional; a placeholder is used otherwise)
 curl -L -o faces.zip \
-  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.0/GameplayFootball-faces-2026-09-09.zip
+  https://github.com/Churikov0112/GameplayFootball/releases/download/v0.4.1/GameplayFootball-faces-2026-09-09.zip
 unzip -o faces.zip -d build/databases/default
 ```
 
