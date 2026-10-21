@@ -3556,3 +3556,20 @@ Host, и только потом в главное меню. Добавлен `G
 `data-versions.json`; файлы те же, что в v0.4.0). README ссылается на v0.4.1; релизные заметки
 объясняют, что бинарные архивы уже содержат БД и картинки, а лица — опциональный бандл,
 распаковываемый в `databases/default/`.
+
+## [2026-10-21] deploy | v0.4.1: macOS arm64 asset
+
+Собран `of_port` (dc94e42) Release на macOS arm64 (`build-mac-v041`, AppleClang 21, macOS 26.6).
+Эталон детерминизма пересверен: `determinism_runner run` дважды дал
+`1fd4a12de8f5585221ebabc16b56572a8cdc24cf`, `check` — exit 0. Старый `cffeb1df…` относился к
+data v2 и после правок стандартов устарел. Данные — 2026-09-09 schema v3 из портативного архива
+v0.4.1; прикреплённый data-бандл остался schema v2 и не пересобирался. `ctest` 3/3
+(setpiecelogictest, netsimtest, delayedhidtest).
+
+Собран `GameplayFootball-v0.4.1-macos-arm64.zip` (601 664 969 байт, sha256
+`995bd184cfbe00df0b87ea01e6ec63b0882059faf03d54e58ec4cfed3d92edad`). `otool -L` — без
+`/opt/homebrew` и `@rpath`; `codesign --verify --deep --strict` — valid ad-hoc; запуск — окно и
+меню, `log.txt` без `[ERROR]`/`FATAL`, штатное `Shutting down OpenGLRenderer3D thread`. После
+Quit процесс на этой машине не завершился сам и был снят KILL (в логе 2026-09-09 та же картина) —
+отдельный хвост, ассет не блокирует. Ассет приложен к релизу v0.4.1, тег не двигался. #40 не
+закрыт: открыты gameplay-тикеты #41/#44/#45/#46/#52, которые снова сдвинут хеш.
