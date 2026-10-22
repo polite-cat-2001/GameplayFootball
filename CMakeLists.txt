@@ -427,6 +427,27 @@ else()
 endif()
 copy_data_post_build(lanmatchtest)
 
+# Headless manager-career module: pure C++/Boost, no sqlite, no game context.
+add_library(careerlib STATIC
+        src/career/career.cpp
+        src/career/career_save.cpp
+        src/career/quick_sim.cpp)
+target_include_directories(careerlib PUBLIC ${PROJECT_SOURCE_DIR}/src ${Boost_INCLUDE_DIR})
+
+add_executable(career_runner tools/career_runner/main.cpp)
+target_link_libraries(career_runner PRIVATE careerlib)
+
+add_executable(career_tests tools/career_tests/main.cpp)
+target_link_libraries(career_tests PRIVATE careerlib)
+add_test(NAME career_tests COMMAND career_tests)
+add_test(NAME career_replay COMMAND career_runner 12345 --seasons 2 --replay)
+# Golden transcript: tools/career/reference.txt (hash in reference-hash.txt).
+# The captured hash is Windows x86 (float/exp/sin can differ elsewhere); other
+# platforms need their own reference, like tools/determinism.
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+  add_test(NAME career_golden COMMAND career_runner 12345 --seasons 2 --check dfe02bb018e5c74545548ea5de9c8b24dd186ade)
+endif()
+
 # Headless behavior tests for the pure set-piece planners.
 add_executable(setpiecelogictest
         tools/setpiecelogictest/main.cpp
