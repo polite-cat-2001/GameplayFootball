@@ -175,6 +175,7 @@ class Match {
 
     void GetCameraParams(float &zoom, float &height, float &fov, float &angleFactor);
     void SetCameraParams(float zoom, float height, float fov, float angleFactor);
+    void SetFixedPresentationCamera(const Vector3 &position, float pitch, float fov);
 
     void UpdateIngameCamera();
 
