@@ -1272,6 +1272,16 @@ void Match::SetCameraParams(float zoom, float height, float fov, float angleFact
   cameraUserAngleFactor = angleFactor;
 }
 
+void Match::SetFixedPresentationCamera(const Vector3 &position, float pitch, float fov) {
+  SetAutoUpdateIngameCamera(false);
+  cameraNodePosition = position;
+  cameraNodeOrientation = QUATERNION_IDENTITY;
+  cameraOrientation.SetAngleAxis(pitch, Vector3(1, 0, 0));
+  cameraFOV = fov;
+  cameraNearCap = 1.0f;
+  cameraFarCap = 300.0f;
+}
+
 void Match::UpdateIngameCamera() {
   // camera
 
@@ -1789,7 +1799,7 @@ void Match::Process() {
 
   if (autoUpdateIngameCamera) UpdateIngameCamera();
 
-  if (!pause) UpdateIngameCameraStartEffect();
+  if (!pause && autoUpdateIngameCamera) UpdateIngameCameraStartEffect();
 
   // end if !pause
 
