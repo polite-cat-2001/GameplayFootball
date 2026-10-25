@@ -1185,15 +1185,27 @@ void Match::Process() {
   iterations.Unlock();
 }
 
+void Match::SetPresentationClock(bool enabled, unsigned long snapshotTime_ms, unsigned long putTime_ms) {
+  externalPresentationClock = enabled;
+  externalSnapshotTime_ms = snapshotTime_ms;
+  externalPutTime_ms = putTime_ms;
+}
+
 void Match::PreparePutBuffers() {
 
-  gameSequenceInfo = GetScheduler()->GetTaskSequenceInfo("game");
-  unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
-  timeSincePreviousPreparePut_ms = time_ms - GetPreviousPreparePutTime_ms();
-  previousPreparePutTime_ms = time_ms;
-
   // snapshot time is the time that is 'represented' by the snapshot
-  unsigned long snapshotTime_ms = gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  unsigned long snapshotTime_ms;
+  if (externalPresentationClock) {
+    snapshotTime_ms = externalSnapshotTime_ms;
+    timeSincePreviousPreparePut_ms = 0;
+    previousPreparePutTime_ms = snapshotTime_ms;
+  } else {
+    gameSequenceInfo = GetScheduler()->GetTaskSequenceInfo("game");
+    unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
+    timeSincePreviousPreparePut_ms = time_ms - GetPreviousPreparePutTime_ms();
+    previousPreparePutTime_ms = time_ms;
+    snapshotTime_ms = gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  }
   //printf("%lu, %lu\n", (GetIterations() - 1) * 10, gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
   //printf("PREP time: %lu, snapshot time: %lu, actual time: %lu\n", time_ms, snapshotTime_ms, actualTime_ms);
 
@@ -1228,13 +1240,20 @@ void Match::FetchPutBuffers() {
 
   if (GetIterations() < 1) return; // no processes done yet
 
-  unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
-  timeSincePreviousPut_ms = time_ms - GetPreviousPutTime_ms();
-  previousPutTime_ms = time_ms;
-  unsigned long putTime_ms = time_ms;// - gameSequenceInfo.startTime_ms; // test: + PredictFrameTimeToGo_ms(7) - 15;
-  //printf("FETCH time: %lu - seqstarttime: %lu = put time: %lu, times ran * 10: %i\n", time_ms, gameSequenceInfo.startTime_ms, putTime_ms, (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
-  //printf("FETCH buf - snapshot time delta: %i\n", (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
-  fetchedbuf_timeDelta = (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  unsigned long putTime_ms;
+  if (externalPresentationClock) {
+    putTime_ms = externalPutTime_ms;
+    timeSincePreviousPut_ms = (int)putTime_ms - (int)previousPutTime_ms;
+    previousPutTime_ms = putTime_ms;
+    fetchedbuf_timeDelta = 0;
+  } else {
+    unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
+    timeSincePreviousPut_ms = time_ms - GetPreviousPutTime_ms();
+    previousPutTime_ms = time_ms;
+    putTime_ms = time_ms;// - gameSequenceInfo.startTime_ms; // test: + PredictFrameTimeToGo_ms(7) - 15;
+    //printf("FETCH time: %lu - seqstarttime: %lu = put time: %lu, times ran * 10: %i\n", time_ms, gameSequenceInfo.startTime_ms, putTime_ms, (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
+    fetchedbuf_timeDelta = (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  }
 
   fetchedbuf_matchTime_ms = buf_matchTime_ms;
   fetchedbuf_actualTime_ms = buf_actualTime_ms;
