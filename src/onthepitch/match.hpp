@@ -345,10 +345,15 @@ class Match {
     void UpdateIngameCamera();
 
     boost::intrusive_ptr<Camera> GetCamera() { return camera; }
+    Vector3 GetPresentationCameraPosition() { return cameraNode->GetDerivedPosition(); }
+    Quaternion GetPresentationCameraRotation() { return cameraNode->GetDerivedRotation() * camera->GetRotation(); }
+    float GetPresentationCameraFOV() { return camera->GetFOV(); }
+    void GetPresentationCameraCapping(float &nearCap, float &farCap) { camera->GetCapping(nearCap, farCap); }
     boost::shared_ptr<AnimCollection> GetAnims() { return anims; }
 
     void Get();
     void Process();
+    void SetPresentationClock(bool enabled, unsigned long snapshotTime_ms, unsigned long putTime_ms);
     void PreparePutBuffers();
     void FetchPutBuffers();
     void Put();
@@ -446,6 +451,9 @@ class Match {
     void UpdateGoalNetting();
 
     // for stuff like animation smoothing, we could need the time elapsed since last Put() and such
+    bool externalPresentationClock = false;
+    unsigned long externalSnapshotTime_ms = 0;
+    unsigned long externalPutTime_ms = 0;
     unsigned long previousProcessTime_ms;
     unsigned long previousPreparePutTime_ms;
     unsigned long previousPutTime_ms;

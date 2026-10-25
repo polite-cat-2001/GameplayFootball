@@ -1,4 +1,4 @@
-// written by bastiaan konings schuiling 2008 - 2015
+﻿// written by bastiaan konings schuiling 2008 - 2015
 // this work is public domain. the code is undocumented, scruffy, untested, and should generally not be used for anything important.
 // i do not offer support, so don't ask. to be used for inspiration :)
 
@@ -41,7 +41,7 @@ const unsigned int camPosSize = 150;//180; //130
 
 namespace {
 
-// Procedural goal-net mesh (spec §13, #38). The NetSim box is built in goal-local coordinates
+// Procedural goal-net mesh (spec В§13, #38). The NetSim box is built in goal-local coordinates
 // (back panel at z=depth, +z points away from the pitch); these map it to GF world space, where
 // goal 0 sits at x = -pitchHalfW and goal 1 at x = +pitchHalfW.
 
@@ -406,7 +406,7 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   SetRandomSunParams();
 
 
-  // set-piece presentation (spec §2): roles/HUD for the local players, owned by the match
+  // set-piece presentation (spec В§2): roles/HUD for the local players, owned by the match
   setPiecePresentation = new SetPiecePresentation(this);
 
 
@@ -1134,7 +1134,7 @@ bool Match::CancelSubstitution(int teamID, int outSlot) {
 int Match::ApplyPendingSubstitutions() {
   if (pendingSubstitutions.empty()) return 0;
 
-  // Team::Substitute creates/destroys a humanoid and GUI captions — structural
+  // Team::Substitute creates/destroys a humanoid and GUI captions вЂ” structural
   // scene changes that must not run while the graphics thread is traversing the
   // scene. getPhaseMutex is the same lock GameTask uses to create/destroy the
   // match for exactly this reason.
@@ -1470,12 +1470,12 @@ void Match::ProcessState(EnvState *state) {
 
   state->process(autoUpdateIngameCamera);
 
-  // Keeper layer state (spec §8, #31/#32): part of the deterministic simulation.
+  // Keeper layer state (spec В§8, #31/#32): part of the deterministic simulation.
   for (int t = 0; t < 2; t++) state->process(keeperStates[t]);
   for (int t = 0; t < 2; t++) state->process(keeperHandsStart_ms[t]);
   for (int t = 0; t < 2; t++) state->process(keeperDropStart_ms[t]);
 
-  // Penalty defense (spec §9, #33): host-sim gameplay state.
+  // Penalty defense (spec В§9, #33): host-sim gameplay state.
   for (int t = 0; t < 2; t++) {
     state->process(penaltyDefense[t].divePending);
     state->process(penaltyDefense[t].diveUntil_ms);
@@ -1505,7 +1505,7 @@ void Match::Process() {
     UserEventManager::GetInstance().SetKeyboardState(SDLK_F2, false);
   }
 
-  // debug set-piece activation (spec §11): P/F/Y force an attacking penalty / free kick / corner
+  // debug set-piece activation (spec В§11): P/F/Y force an attacking penalty / free kick / corner
   // for the human's team (human takes), Alt+P/F/Y force one against it (AI opponent takes, the human
   // defends). Only from a clean play state: never during a set piece or the goal celebration
   // (StopPlay is active until the kickoff).
@@ -1583,7 +1583,7 @@ void Match::Process() {
 
     referee->Process();
 
-    // refresh set-piece presentation identity from RefereeBuffer (spec §2); the local taker's
+    // refresh set-piece presentation identity from RefereeBuffer (spec В§2); the local taker's
     // controller then advances the reticle in its own Process
     setPiecePresentation->Process();
 
@@ -1633,7 +1633,7 @@ void Match::Process() {
     CalculateBestPossessionTeamID();
 
     if (IsInSetPiece() && GetRefereeBuffer().taker) {
-      // On a set piece the taker is the designated player of the taking team (spec §3, #29); the
+      // On a set piece the taker is the designated player of the taking team (spec В§3, #29); the
       // proximity block below is skipped, otherwise it can keep control off the taker and the AI
       // ends up taking the kick (and, on a penalty, ignoring the human's aim).
       Player *taker = GetRefereeBuffer().taker;
@@ -1657,7 +1657,7 @@ void Match::Process() {
       designatedPossessionPlayer = GetBallRetainer();
     }
 
-    // Keeper layer (spec §8, #31): advance the per-team keeper state from this tick's possession.
+    // Keeper layer (spec В§8, #31): advance the per-team keeper state from this tick's possession.
     UpdateKeeperState();
 
     //if (GetDebugMode() == e_DebugMode_Tactical)
@@ -1782,7 +1782,7 @@ void Match::Process() {
 
   } // end if !pause
 
-  // Set-piece camera (spec §4): a local role owner builds a display-only override while the normal
+  // Set-piece camera (spec В§4): a local role owner builds a display-only override while the normal
   // camera keeps running (and shipping). Runs after the film-referee camera, so it takes over at
   // prepareTime.
   setPiecePresentation->UpdateCamera();
@@ -1980,14 +1980,14 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   }
 
   // On a set piece, point the designated players at the snapshot taker (team+slot, v15) instead of
-  // by proximity (spec §3, #29), so the client's HUD and camera follow the actual taker.
+  // by proximity (spec В§3, #29), so the client's HUD and camera follow the actual taker.
   Player *remoteTaker = setPiecePresentation->GetTaker();
   if (setPiecePresentation->IsSetPiece() && remoteTaker) {
     designatedPossessionPlayer = remoteTaker;
     teams[remoteTaker->GetTeamID()]->SetDesignatedTeamPossessionPlayer(remoteTaker);
   }
 
-  // A local role owner builds the set-piece camera itself (spec §4); it is stored separately and fed
+  // A local role owner builds the set-piece camera itself (spec В§4); it is stored separately and fed
   // to the display in PreparePutBuffers, so the host-camera copy below still runs (non-owners keep
   // the normal host camera).
   setPiecePresentation->UpdateCamera();
@@ -2017,15 +2017,27 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   iterations.Unlock();
 }
 
+void Match::SetPresentationClock(bool enabled, unsigned long snapshotTime_ms, unsigned long putTime_ms) {
+  externalPresentationClock = enabled;
+  externalSnapshotTime_ms = snapshotTime_ms;
+  externalPutTime_ms = putTime_ms;
+}
+
 void Match::PreparePutBuffers() {
 
-  gameSequenceInfo = GetScheduler()->GetTaskSequenceInfo("game");
-  unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
-  timeSincePreviousPreparePut_ms = time_ms - GetPreviousPreparePutTime_ms();
-  previousPreparePutTime_ms = time_ms;
-
   // snapshot time is the time that is 'represented' by the snapshot
-  unsigned long snapshotTime_ms = gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  unsigned long snapshotTime_ms;
+  if (externalPresentationClock) {
+    snapshotTime_ms = externalSnapshotTime_ms;
+    timeSincePreviousPreparePut_ms = 0;
+    previousPreparePutTime_ms = snapshotTime_ms;
+  } else {
+    gameSequenceInfo = GetScheduler()->GetTaskSequenceInfo("game");
+    unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
+    timeSincePreviousPreparePut_ms = time_ms - GetPreviousPreparePutTime_ms();
+    previousPreparePutTime_ms = time_ms;
+    snapshotTime_ms = gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  }
   //printf("%lu, %lu\n", (GetIterations() - 1) * 10, gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
   //printf("PREP time: %lu, snapshot time: %lu, actual time: %lu\n", time_ms, snapshotTime_ms, actualTime_ms);
 
@@ -2067,13 +2079,20 @@ void Match::FetchPutBuffers() {
 
   if (GetIterations() < 1) return; // no processes done yet
 
-  unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
-  timeSincePreviousPut_ms = time_ms - GetPreviousPutTime_ms();
-  previousPutTime_ms = time_ms;
-  unsigned long putTime_ms = time_ms;// - gameSequenceInfo.startTime_ms; // test: + PredictFrameTimeToGo_ms(7) - 15;
-  //printf("FETCH time: %lu - seqstarttime: %lu = put time: %lu, times ran * 10: %i\n", time_ms, gameSequenceInfo.startTime_ms, putTime_ms, (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
-  //printf("FETCH buf - snapshot time delta: %i\n", (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
-  fetchedbuf_timeDelta = (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  unsigned long putTime_ms;
+  if (externalPresentationClock) {
+    putTime_ms = externalPutTime_ms;
+    timeSincePreviousPut_ms = (int)putTime_ms - (int)previousPutTime_ms;
+    previousPutTime_ms = putTime_ms;
+    fetchedbuf_timeDelta = 0;
+  } else {
+    unsigned long time_ms = EnvironmentManager::GetInstance().GetTime_ms() - gameSequenceInfo.startTime_ms;
+    timeSincePreviousPut_ms = time_ms - GetPreviousPutTime_ms();
+    previousPutTime_ms = time_ms;
+    putTime_ms = time_ms;// - gameSequenceInfo.startTime_ms; // test: + PredictFrameTimeToGo_ms(7) - 15;
+    //printf("FETCH time: %lu - seqstarttime: %lu = put time: %lu, times ran * 10: %i\n", time_ms, gameSequenceInfo.startTime_ms, putTime_ms, (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms);
+    fetchedbuf_timeDelta = (int)putTime_ms - (int)gameSequenceInfo.timesRan * gameSequenceInfo.sequenceTime_ms;
+  }
 
   fetchedbuf_matchTime_ms = buf_matchTime_ms;
   fetchedbuf_actualTime_ms = buf_actualTime_ms;
@@ -2198,7 +2217,7 @@ void Match::Put() {
 
 
     // Goal net is presentation-only and driven locally on every peer from the ball pose
-    // (interpolated on a thin client): spec §13.3/§13.4.
+    // (interpolated on a thin client): spec В§13.3/В§13.4.
     UpdateGoalNetting();
 
     // Record replay frames on every peer. A thin client records its own
@@ -2529,12 +2548,12 @@ void Match::UpdateKeeperState() {
       case e_KeeperState_Hands:
         if (GetBallRetainer() != goalie) {
           // Lost the ball (or released it): the keeper returns to goal under AI while control
-          // flows to a field player (spec §8.5, #32).
+          // flows to a field player (spec В§8.5, #32).
           keeperStates[t] = e_KeeperState_Returning;
           ReleaseKeeperControl(t);
         } else if (actualTime_ms - keeperHandsStart_ms[t] >= (unsigned long)keeperSixSecond_ms) {
           // Six seconds are up: the keeper puts the ball down at his feet and carries on as a
-          // field player (Hands -> Outfield) instead of hoofing it away (spec §8.6, #32).
+          // field player (Hands -> Outfield) instead of hoofing it away (spec В§8.6, #32).
           KeeperDropToFeet(t);
         }
         break;
@@ -2545,7 +2564,7 @@ void Match::UpdateKeeperState() {
           keeperHandsStart_ms[t] = actualTime_ms;
         } else if (!goalie->HasPossession() &&
                    actualTime_ms - keeperDropStart_ms[t] > (unsigned long)keeperDropGrace_ms) {
-          // Passed, shot, cleared or lost the ball as a field player: run back to goal (spec §8.5).
+          // Passed, shot, cleared or lost the ball as a field player: run back to goal (spec В§8.5).
           // The grace lets a just-dropped ball fall from the hands to the feet first.
           keeperStates[t] = e_KeeperState_Returning;
           ReleaseKeeperControl(t);
@@ -2553,7 +2572,7 @@ void Match::UpdateKeeperState() {
         break;
 
       case e_KeeperState_Returning:
-        // Keep the returning keeper under AI: a manual Switch must not re-grab him (spec §8.5).
+        // Keep the returning keeper under AI: a manual Switch must not re-grab him (spec В§8.5).
         ReleaseKeeperControl(t);
         {
           Vector3 clamped = keeperlogic::ClampToBox(goalie->GetPosition(), teams[t]->GetSide(),
@@ -3287,7 +3306,7 @@ void Match::PrepareGoalNetting() {
   boost::intrusive_ptr<Geometry> goalsGeom = boost::static_pointer_cast<Geometry>(goalsNode->GetObject("goals"));
   boost::intrusive_ptr < Resource<GeometryData> > geometry = goalsGeom->GetGeometryData();
 
-  // Replace the imported .ase netting with a procedural NetSim grid (spec §13): drop the netting
+  // Replace the imported .ase netting with a procedural NetSim grid (spec В§13): drop the netting
   // meshes (identified by their material), remembering the material for the new mesh.
   Material netMaterial;
   bool haveMaterial = false;
@@ -3337,7 +3356,7 @@ void Match::UpdateGoalNetting() {
   nettingHasChanged = false;
   if (!goalNetReady) return;
 
-  // Presentation-only, one-way: the ball pose drives the net; nothing feeds back (spec §13.4).
+  // Presentation-only, one-way: the ball pose drives the net; nothing feeds back (spec В§13.4).
   // The ball velocity is taken from its motion over the frame, not Ball::GetMovement() - which on
   // the tick the ball is stopped by the net is already damped, so a fast shot would not press it.
   const Vector3 ballWorld = ball->GetBallGeom()->GetPosition();
