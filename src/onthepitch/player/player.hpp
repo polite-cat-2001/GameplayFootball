@@ -50,6 +50,8 @@ class Player : public PlayerBase {
 
     // Forced free-kick wall jump (spec §10, #34); issued once by TeamAIController.
     void TriggerFreeKickWallJump() { CastHumanoid()->ForceFreeKickWallJump(); }
+// Penalty shootout: play a one-off emotion clip (1 = happy, 2 = sad; madeGoal 2 = extreme).
+void TriggerEmotion(int emotionType, int madeGoal) { CastHumanoid()->ForceEmotion(emotionType, madeGoal); }
 
     inline e_FunctionType GetCurrentFunctionType() { return CastHumanoid()->GetCurrentFunctionType(); }
     FormationEntry GetFormationEntry();

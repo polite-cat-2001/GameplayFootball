@@ -339,6 +339,42 @@ class Match {
 
     void GameOver();
 
+    // ── Penalty shootout (series) ────────────────────────────────────────────────────────────────
+    // The referee drives a sequence of penalty set pieces inside e_MatchPhase_Penalties: all kicks at
+    // one goal (chosen at series start, random), alternating teams, 5 each then sudden death. The
+    // teams' effective sides are reassigned per kick (see Team::GetSide) so the engine's
+    // side-relative penalty/keeper geometry faces the series goal. Match clock and match score are
+    // frozen; the series keeps its own score. Entry: F3 (debug_force_shootout) or the 120' draw.
+    void StartShootout(bool allowFromStoppedPlay = false);
+    void ProcessShootout();
+    bool IsShootoutActive() const { return shootoutActive; }
+    int GetShootoutPhase() const { return (int)shootoutPhase; }
+    int GetShootoutScore(int teamID) const { return (teamID >= 0 && teamID < 2) ? shootoutScore[teamID] : 0; }
+    // 0 = not taken yet, 1 = scored, 2 = missed (the HUD circles; grows with sudden death).
+    int GetShootoutKickResult(int teamID, int index) const;
+    int GetShootoutLastOutcome() const { return (int)shootoutLastOutcome; }
+    int GetShootoutLastOutcomeKickerID() const { return shootoutLastOutcomeKickerID; }
+    unsigned long GetShootoutOutcomeCounter() const { return shootoutOutcomeCounter; }
+    bool IsShootoutDecisive() const { return shootoutLastDecisive; }
+    int GetShootoutWinner() const { return shootoutWinner; }
+    bool IsShootoutCelebrating() const { return shootoutPhase == e_ShootoutPhase_DecisiveCelebration; }
+    unsigned long GetShootoutCelebrationStart_ms() const { return shootoutPhaseStart_ms; }
+    bool IsShootoutEmotionActive() const {
+      return shootoutPhase == e_ShootoutPhase_OutcomeHold && shootoutLastOutcome != e_ShootoutOutcome_Goal;
+    }
+    // The kicker playing the non-decisive save/miss sadness (null otherwise).
+    Player *GetShootoutEmotionPlayer() const { return shootoutEmotionPlayer; }
+    // Taker or defending keeper while the kick is live; everyone else waits parked for the series.
+    bool IsShootoutParticipant(Player *player) const;
+    int GetShootoutSideForTeam(int teamID) const {
+      return (teamID >= 0 && teamID < 2) ? shootoutTeamSide[teamID] : 1;
+    }
+    // The series goal in raw C++ space (X = +-pitchHalfW).
+    float GetShootoutGoalX() const { return -shootoutAttackSide * pitchHalfW; }
+    int GetShootoutTakerTeam() const { return shootoutTakerTeam; }
+    // Play a one-off emotion clip on one player (the non-decisive save/miss sadness).
+    void TriggerPlayerEmotion(Player *player, int emotionType, int madeGoal);
+
     void GetCameraParams(float &zoom, float &height, float &fov, float &angleFactor);
     void SetCameraParams(float zoom, float height, float fov, float angleFactor);
     void SetFixedPresentationCamera(const Vector3 &position, float pitch, float fov);
@@ -641,6 +677,35 @@ class Match {
     //std::vector<MissingAnim> missingAnims;
 
     float matchDifficulty;
+
+    // ── Penalty shootout state ───────────────────────────────────────────────────────────────────
+    void SetupShootoutKick();
+    void ResolveShootoutOutcome(e_ShootoutOutcome outcome);
+    int EvaluateShootoutWinner() const;
+    void ParkShootoutPlayers();
+    Player *GetShootoutDefendingKeeper() const;
+
+    bool shootoutActive;
+    e_ShootoutPhase shootoutPhase;
+    unsigned long shootoutPhaseStart_ms;
+    unsigned long shootoutOutcomeHold_ms;
+    int shootoutAttackSide;        // +-1: the attacked goal sits at -shootoutAttackSide * pitchHalfW
+    int shootoutTeamSide[2];       // effective side per team for the current kick
+    int shootoutScore[2];
+    std::vector<int> shootoutKickResults[2]; // appended 1 = scored, 2 = not scored
+    int shootoutKickCount[2];
+    std::vector<Player*> shootoutOrder[2];   // queue sorted by penalty-taking suitability
+    int shootoutNext[2];
+    int shootoutTakerTeam;
+    Player *shootoutTaker;
+    Player *shootoutEmotionPlayer;
+    e_ShootoutOutcome shootoutLastOutcome;
+    int shootoutLastOutcomeKickerID;
+    unsigned long shootoutOutcomeCounter;
+    bool shootoutLastDecisive;
+    int shootoutWinner;
+    bool shootoutKeeperTouched;
+    unsigned long shootoutStrikeTime_ms;
 
     // set-piece taker menu (#30)
     bool setPieceTakerMenuRequested;

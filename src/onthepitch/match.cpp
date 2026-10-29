@@ -29,6 +29,7 @@
 #include "menu/startmatch/loadingmatch.hpp"
 
 #include <cmath>
+#include <algorithm>
 
 #include "../net/matchsnapshot.hpp"
 #include "../net/netclient.hpp"
@@ -198,6 +199,29 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   pendingSetPieceTaker = 0;
   remoteSetPieceTakerSlot = -1;
   extendedReplayFired = false;
+  shootoutActive = false;
+  shootoutPhase = e_ShootoutPhase_None;
+  shootoutPhaseStart_ms = 0;
+  shootoutOutcomeHold_ms = 0;
+  shootoutAttackSide = 1;
+  shootoutTeamSide[0] = -1;
+  shootoutTeamSide[1] = 1;
+  shootoutScore[0] = 0;
+  shootoutScore[1] = 0;
+  shootoutKickCount[0] = 0;
+  shootoutKickCount[1] = 0;
+  shootoutNext[0] = 0;
+  shootoutNext[1] = 0;
+  shootoutTakerTeam = 0;
+  shootoutTaker = 0;
+  shootoutEmotionPlayer = 0;
+  shootoutLastOutcome = e_ShootoutOutcome_None;
+  shootoutLastOutcomeKickerID = -1;
+  shootoutOutcomeCounter = 0;
+  shootoutLastDecisive = false;
+  shootoutWinner = -1;
+  shootoutKeeperTouched = false;
+  shootoutStrikeTime_ms = 0;
   remoteCameraOverride = false;
   localPeerId = 0;
   remoteMaxRtt_ms = 0;
@@ -1258,6 +1282,343 @@ void Match::GameOver() {
   gameOver = true;
 }
 
+// ── Penalty shootout (series) ────────────────────────────────────────────────────────────────────
+
+namespace {
+// The designated penalty taker's suitability (TeamRoleSuitability for e_TeamRole_PenaltyTaker):
+// used to sort each team's kick queue, keeper included.
+float ShootoutPenaltySkill(Player *player) {
+  return player->GetStat("technical_shot") * 0.6f + player->GetStat("mental_calmness") * 0.4f;
+}
+} // namespace
+
+void Match::StartShootout(bool allowFromStoppedPlay) {
+  if (shootoutActive) return;
+  if (IsInSetPiece()) return;
+  if (!allowFromStoppedPlay && (!IsInPlay() || IsGoalScored())) return;
+
+  shootoutActive = true;
+  shootoutPhase = e_ShootoutPhase_KickSetup;
+  shootoutPhaseStart_ms = actualTime_ms;
+  shootoutOutcomeHold_ms = 0;
+  shootoutScore[0] = 0;
+  shootoutScore[1] = 0;
+  shootoutKickCount[0] = 0;
+  shootoutKickCount[1] = 0;
+  shootoutNext[0] = 0;
+  shootoutNext[1] = 0;
+  shootoutKickResults[0].clear();
+  shootoutKickResults[1].clear();
+  shootoutLastOutcome = e_ShootoutOutcome_None;
+  shootoutLastOutcomeKickerID = -1;
+  shootoutOutcomeCounter = 0;
+  shootoutLastDecisive = false;
+  shootoutWinner = -1;
+  shootoutKeeperTouched = false;
+  shootoutStrikeTime_ms = 0;
+  shootoutEmotionPlayer = 0;
+
+  // Freeze the match clock/score: the phase display reads PENALTIES, the series keeps its own score.
+  SetMatchPhase(e_MatchPhase_Penalties);
+  StopPlay();
+  referee->ResetBufferForShootout();
+
+  // One goal for the whole series; the attacking side faces it (-attackSide * pitchHalfW).
+  shootoutAttackSide = random(0.0f, 1.0f) < 0.5f ? 1 : -1;
+
+  // Queue: every active player (keeper included), best penalty takers first.
+  for (int t = 0; t < 2; t++) {
+    shootoutOrder[t].clear();
+    teams[t]->GetActivePlayers(shootoutOrder[t]);
+    std::sort(shootoutOrder[t].begin(), shootoutOrder[t].end(), [](Player *a, Player *b) {
+      return ShootoutPenaltySkill(a) > ShootoutPenaltySkill(b);
+    });
+  }
+
+  // Coin toss for the first kicker. Fade to black first: the first setup teleports the whole field.
+  shootoutTakerTeam = random(0.0f, 1.0f) < 0.5f ? 0 : 1;
+  shootoutPhase = e_ShootoutPhase_Transition;
+  shootoutPhaseStart_ms = actualTime_ms;
+}
+
+void Match::SetupShootoutKick() {
+  if (!shootoutActive) return;
+  shootoutPhase = e_ShootoutPhase_KickSetup;
+  shootoutPhaseStart_ms = actualTime_ms;
+  shootoutLastOutcome = e_ShootoutOutcome_None;
+  shootoutEmotionPlayer = 0;
+  shootoutKeeperTouched = false;
+  shootoutStrikeTime_ms = 0;
+
+  // Effective sides for this kick: the taker attacks the series goal, the defender owns it.
+  shootoutTeamSide[shootoutTakerTeam] = shootoutAttackSide;
+  shootoutTeamSide[abs(shootoutTakerTeam - 1)] = -shootoutAttackSide;
+
+  if (!shootoutOrder[shootoutTakerTeam].empty()) {
+    const int n = (int)shootoutOrder[shootoutTakerTeam].size();
+    shootoutTaker = shootoutOrder[shootoutTakerTeam][shootoutNext[shootoutTakerTeam] % n];
+  } else {
+    shootoutTaker = 0;
+  }
+
+  // Our kick: hand the taker to the human so he aims and shoots himself.
+  if (shootoutTaker && teams[shootoutTakerTeam]->GetHumanGamerCount() > 0) {
+    teams[shootoutTakerTeam]->SelectPlayer(shootoutTaker);
+  }
+
+  // The defending human holds an outfield selection for the whole kick: the keeper must stay under
+  // AI on a penalty (dive clip + the human's stick side channel live in the AI controller), so the
+  // human can never end up driving the keeper along the line.
+  const int defendingTeam = abs(shootoutTakerTeam - 1);
+  if (teams[defendingTeam]->GetHumanGamerCount() > 0) {
+    for (unsigned int i = 0; i < shootoutOrder[defendingTeam].size(); i++) {
+      Player *selection = shootoutOrder[defendingTeam][i];
+      if (selection != teams[defendingTeam]->GetGoalie()) {
+        teams[defendingTeam]->SelectPlayer(selection);
+        break;
+      }
+    }
+  }
+
+  // Let the penalty camera re-engage for this kick (the series holds one fixed view throughout).
+  if (setPiecePresentation) setPiecePresentation->ResetCameraForShootout();
+
+  // Drop what the previous kick left behind (ball in the net, ball in the keeper's hands).
+  SetBallRetainer(0);
+  SetGoalScored(false);
+  ballIsInGoal = false;
+
+  referee->SetShootoutForcedTaker(shootoutTaker);
+  referee->DebugForceSetPiece(e_SetPiece_Penalty, shootoutTakerTeam,
+                              Vector3(-shootoutAttackSide * (pitchHalfW - 11.0f), 0, 0),
+                              shootoutKickPrepareDelay_ms, shootoutKickWhistleDelay_ms, true);
+
+  // Park everyone who is not part of this kick right away (the whistle is still pending).
+  ParkShootoutPlayers();
+}
+
+void Match::ProcessShootout() {
+  if (!shootoutActive) return;
+
+  switch (shootoutPhase) {
+    case e_ShootoutPhase_KickSetup: {
+      const RefereeBuffer &buffer = referee->GetBuffer();
+      if (IsInSetPiece() && actualTime_ms >= buffer.startTime) {
+        shootoutPhase = e_ShootoutPhase_KickAim;
+        shootoutPhaseStart_ms = actualTime_ms;
+      } else if (actualTime_ms - shootoutPhaseStart_ms > 5000) {
+        // Safety net: the buffer never reached its whistle (should not happen) — rebuild the kick
+        // instead of hanging the series.
+        SetupShootoutKick();
+      }
+      break;
+    }
+
+    case e_ShootoutPhase_KickAim: {
+      // The strike is the taker's touch: the referee stops the set piece at that moment and the ball
+      // is already launched. The ball-speed fallback covers a touch the referee misses.
+      if (!IsInSetPiece() || ball->GetMovement().GetLength() > 3.0f) {
+        shootoutPhase = e_ShootoutPhase_KickOutcome;
+        shootoutPhaseStart_ms = actualTime_ms;
+        shootoutStrikeTime_ms = actualTime_ms;
+        shootoutKeeperTouched = false;
+      }
+      break;
+    }
+
+    case e_ShootoutPhase_KickOutcome: {
+      Player *keeper = GetShootoutDefendingKeeper();
+      const Vector3 ballPos = ball->Predict(0);
+      const bool inGoalMouth = fabs(ballPos.coords[1]) < goalHalfWidth && ballPos.coords[2] < goalHeight;
+      if (inGoalMouth && ballPos.coords[0] * shootoutAttackSide < -(pitchHalfW + lineHalfW + 0.11f)) {
+        ResolveShootoutOutcome(e_ShootoutOutcome_Goal);
+        break;
+      }
+      if (keeper && GetBallRetainer() == keeper) {
+        ResolveShootoutOutcome(e_ShootoutOutcome_Save);
+        break;
+      }
+      if (keeper && GetLastTouchPlayer() == keeper) shootoutKeeperTouched = true;
+      const bool outOfBounds = fabs(ballPos.coords[0]) > pitchHalfW + 1.0f ||
+                               fabs(ballPos.coords[1]) > pitchHalfH + 1.0f;
+      const bool ballDead = ball->GetMovement().GetLength() < 0.6f &&
+                            actualTime_ms - shootoutStrikeTime_ms > 800;
+      // A parried shot is already stopped: don't wait the full timeout for the loose ball.
+      const unsigned long outcomeTimeout_ms =
+          shootoutKeeperTouched ? 2000 : (unsigned long)shootoutStrikeTimeout_ms;
+      const bool timedOut = actualTime_ms - shootoutStrikeTime_ms >= outcomeTimeout_ms;
+      if (outOfBounds || ballDead || timedOut) {
+        ResolveShootoutOutcome(shootoutKeeperTouched ? e_ShootoutOutcome_Save : e_ShootoutOutcome_Miss);
+      }
+      break;
+    }
+
+    case e_ShootoutPhase_OutcomeHold: {
+      if (actualTime_ms - shootoutPhaseStart_ms >= shootoutOutcomeHold_ms) {
+        // Fade to black first; SetupShootoutKick runs once the screen is fully black.
+        shootoutTakerTeam = abs(shootoutTakerTeam - 1);
+        shootoutPhase = e_ShootoutPhase_Transition;
+        shootoutPhaseStart_ms = actualTime_ms;
+      }
+      break;
+    }
+
+    case e_ShootoutPhase_Transition: {
+      if (actualTime_ms - shootoutPhaseStart_ms >= (unsigned long)shootoutTransitionDelay_ms) {
+        SetupShootoutKick();
+      }
+      break;
+    }
+
+    case e_ShootoutPhase_DecisiveCelebration: {
+      if (actualTime_ms - shootoutPhaseStart_ms >= (unsigned long)shootoutDecisiveCelebration_ms) {
+        shootoutPhase = e_ShootoutPhase_Finished;
+        shootoutPhaseStart_ms = actualTime_ms;
+        SetGoalScored(false);
+        ballIsInGoal = false;
+        // Frame the pitch for the end-of-match menu: the scorer cam freezes wherever it is (often
+        // inside the stand wall), so hand the presentation a clean broadcast-like pose instead.
+        SetFixedPresentationCamera(Vector3(0.0f, -74.0f, 30.0f), 0.42f * pi, 30.0f);
+        // The series decides the match: the original game-over path pauses the presentation; the
+        // Godot slice shows its end-of-match menu over the paused frame.
+        GameOver();
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  ParkShootoutPlayers();
+}
+
+void Match::ResolveShootoutOutcome(e_ShootoutOutcome outcome) {
+  if (!shootoutActive || shootoutPhase != e_ShootoutPhase_KickOutcome) return;
+
+  shootoutLastOutcome = outcome;
+  shootoutLastOutcomeKickerID = shootoutTaker ? shootoutTaker->GetID() : -1;
+  shootoutOutcomeCounter++;
+
+  const bool scored = (outcome == e_ShootoutOutcome_Goal);
+  if (scored) shootoutScore[shootoutTakerTeam]++;
+  shootoutKickResults[shootoutTakerTeam].push_back(scored ? 1 : 2);
+  shootoutKickCount[shootoutTakerTeam]++;
+  shootoutNext[shootoutTakerTeam]++;
+
+  shootoutWinner = EvaluateShootoutWinner();
+  shootoutLastDecisive = (shootoutWinner >= 0);
+
+  StopPlay();
+
+  if (shootoutLastDecisive) {
+    shootoutPhase = e_ShootoutPhase_DecisiveCelebration;
+    shootoutPhaseStart_ms = actualTime_ms;
+    if (scored) {
+      // A natural goal: keep it so the original scorer cam + eliza celebration run unchanged.
+      goalScored = true;
+      ballIsInGoal = true;
+      lastGoalTeamID = shootoutTakerTeam;
+      lastGoalScorer = shootoutTaker;
+    } else {
+      // No goal on the pitch, but the winning side celebrates: reuse the original celebration
+      // machinery by flagging the win as the goal moment. eliza then plays happy for the winner and
+      // sad for the loser; the scorer cam focuses the winning keeper.
+      goalScored = true;
+      ballIsInGoal = false;
+      lastGoalTeamID = shootoutWinner;
+      lastGoalScorer = teams[shootoutWinner]->GetGoalie();
+      if (shootoutTaker) {
+        // The losing kicker stands and plays the sadness on the spot (a human still holding the
+        // aim stick must not run around while his team has just lost).
+        shootoutEmotionPlayer = shootoutTaker;
+        TriggerPlayerEmotion(shootoutTaker, shootoutEmotionSad, shootoutEmotionMadeGoalNormal);
+      }
+    }
+  } else {
+    shootoutPhase = e_ShootoutPhase_OutcomeHold;
+    shootoutPhaseStart_ms = actualTime_ms;
+    shootoutOutcomeHold_ms = scored ? shootoutOutcomeHoldGoal_ms : shootoutOutcomeHoldMiss_ms;
+    // Ordinary goals do not celebrate in a series.
+    goalScored = false;
+    ballIsInGoal = false;
+    if (!scored && shootoutTaker) {
+      shootoutEmotionPlayer = shootoutTaker;
+      TriggerPlayerEmotion(shootoutTaker, shootoutEmotionSad, shootoutEmotionMadeGoalNormal);
+    }
+  }
+}
+
+int Match::EvaluateShootoutWinner() const {
+  const int rem0 = std::max(0, shootoutRegulationKicks - shootoutKickCount[0]);
+  const int rem1 = std::max(0, shootoutRegulationKicks - shootoutKickCount[1]);
+  const bool regulationDone = shootoutKickCount[0] >= shootoutRegulationKicks &&
+                              shootoutKickCount[1] >= shootoutRegulationKicks;
+  if (!regulationDone) {
+    // Early stop: the chasing side cannot reach the current score even with all its kicks left.
+    if (shootoutScore[0] > shootoutScore[1] + rem1) return 0;
+    if (shootoutScore[1] > shootoutScore[0] + rem0) return 1;
+    return -1;
+  }
+  // Sudden death: after a completed pair, the first different score decides.
+  if (shootoutKickCount[0] == shootoutKickCount[1] && shootoutScore[0] != shootoutScore[1]) {
+    return shootoutScore[0] > shootoutScore[1] ? 0 : 1;
+  }
+  return -1;
+}
+
+void Match::ParkShootoutPlayers() {
+  if (!shootoutActive) return;
+  if (shootoutPhase == e_ShootoutPhase_DecisiveCelebration ||
+      shootoutPhase == e_ShootoutPhase_Finished ||
+      shootoutPhase == e_ShootoutPhase_Transition) return;
+
+  Player *keeper = GetShootoutDefendingKeeper();
+  for (int t = 0; t < 2; t++) {
+    std::vector<Player*> players;
+    teams[t]->GetActivePlayers(players);
+    const int n = (int)players.size();
+    for (int i = 0; i < n; i++) {
+      Player *p = players[i];
+      if (p == shootoutTaker || p == keeper) continue;
+      // Centre line, spread across the pitch; the two teams are offset so bodies do not stack.
+      const float y = ((float)i - (float)(n - 1) * 0.5f) * 3.2f;
+      const float x = (t == 0) ? -1.2f : 1.2f;
+      p->ResetPosition(Vector3(x, y, 0.0f), Vector3(0, 0, 0));
+    }
+  }
+}
+
+Player *Match::GetShootoutDefendingKeeper() const {
+  if (!shootoutActive) return 0;
+  return teams[abs(shootoutTakerTeam - 1)]->GetGoalie();
+}
+
+bool Match::IsShootoutParticipant(Player *player) const {
+  if (!shootoutActive || !player) return false;
+  if (shootoutPhase != e_ShootoutPhase_KickSetup &&
+      shootoutPhase != e_ShootoutPhase_KickAim &&
+      shootoutPhase != e_ShootoutPhase_KickOutcome) {
+    return false;
+  }
+  // There are no rebounds in a series: once the ball is struck the kicker is done and must not
+  // chase the loose ball (a parried save would otherwise look like him running off to celebrate).
+  if (player == shootoutTaker) return shootoutPhase != e_ShootoutPhase_KickOutcome;
+  return player == GetShootoutDefendingKeeper();
+}
+
+int Match::GetShootoutKickResult(int teamID, int index) const {
+  if (teamID < 0 || teamID >= 2 || index < 0) return 0;
+  const std::vector<int> &results = shootoutKickResults[teamID];
+  if (index >= (int)results.size()) return 0;
+  return results[index];
+}
+
+void Match::TriggerPlayerEmotion(Player *player, int emotionType, int madeGoal) {
+  if (!player) return;
+  player->TriggerEmotion(emotionType, madeGoal);
+}
+
 void Match::GetCameraParams(float &zoom, float &height, float &fov, float &angleFactor) {
   zoom = cameraUserZoom;
   height = cameraUserHeight;
@@ -1399,7 +1760,9 @@ void Match::UpdateIngameCamera() {
     cameraNearCap = 1;
     cameraFarCap = 220;
 
-    if (goalScoredTimer >= 6000 && !extendedReplayFired) {
+    // The penalty shootout never opens the extended replay: its celebrations are short and the
+    // series must keep flowing.
+    if (!shootoutActive && goalScoredTimer >= 6000 && !extendedReplayFired) {
       extendedReplayFired = true;
       pause = true;
       sig_OnExtendedReplayMoment(this);
@@ -1706,7 +2069,8 @@ void Match::Process() {
 
     // time
 
-    if (IsInPlay() && !IsInSetPiece()) matchTime_ms += 10 * (1.0f / matchDurationFactor);
+    // The shootout freezes the match clock (the series has no clock of its own).
+    if (IsInPlay() && !IsInSetPiece() && !shootoutActive) matchTime_ms += 10 * (1.0f / matchDurationFactor);
     actualTime_ms += 10;
     if (IsGoalScored()) goalScoredTimer += 10; else goalScoredTimer = 0;
 
@@ -1721,15 +2085,20 @@ void Match::Process() {
     if (t2goal) ballIsInGoal = true;
     if (IsInPlay()) {
       if (t1goal) {
-        matchData->SetGoalCount(teams[1]->GetID(), matchData->GetGoalCount(1) + 1);
-        scoreboard->SetGoalCount(1, matchData->GetGoalCount(1));
+        // Shootout goals never touch the match score; the series keeps its own.
+        if (!shootoutActive) {
+          matchData->SetGoalCount(teams[1]->GetID(), matchData->GetGoalCount(1) + 1);
+          scoreboard->SetGoalCount(1, matchData->GetGoalCount(1));
+        }
         goalScored = true;
         lastGoalTeamID = teams[1]->GetID();
         teams[1]->GetController()->UpdateTactics();
       }
       if (t2goal) {
-        matchData->SetGoalCount(teams[0]->GetID(), matchData->GetGoalCount(0) + 1);
-        scoreboard->SetGoalCount(0, matchData->GetGoalCount(0));
+        if (!shootoutActive) {
+          matchData->SetGoalCount(teams[0]->GetID(), matchData->GetGoalCount(0) + 1);
+          scoreboard->SetGoalCount(0, matchData->GetGoalCount(0));
+        }
         goalScored = true;
         lastGoalTeamID = teams[0]->GetID();
         teams[0]->GetController()->UpdateTactics();

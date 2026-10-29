@@ -53,6 +53,7 @@ Referee::Referee(Match *match) : match(match) {
   buffer.startTime = buffer.prepareTime + 2000;
   buffer.restartPos = Vector3(0);
   buffer.taker = 0;
+  shootoutForcedTaker = 0;
   buffer.endPhase = true;
   buffer.active = true;
 
@@ -101,7 +102,13 @@ Referee::~Referee() {
 void Referee::Process() {
   //printf("%i", match->GetMatchState());
 
-  if (match->IsInPlay() && !match->IsInSetPiece()) {
+  // Penalty shootout: the series owns the sequence (which kick is set up, the outcome and what comes
+  // after it). The normal league rules below (out-of-bounds restarts, goal kickoffs, phase ends) are
+  // skipped while it runs, but the set-piece buffer timing still drives every kick.
+  const bool shootout = match && match->IsShootoutActive();
+  if (shootout) match->ProcessShootout();
+
+  if (!shootout && match->IsInPlay() && !match->IsInSetPiece()) {
 
     Vector3 ballPos = match->GetBall()->Predict(0);
 
@@ -242,6 +249,12 @@ void Referee::Process() {
               }
             }
             if (match->GetMatchPhase() == e_MatchPhase_Penalties) {
+              // A draw after extra time goes to the shootout series instead of ending the match.
+              // A decisive result (or an already running series) keeps the original game-over.
+              if (!match->IsShootoutActive() && match->GetScore(0) == match->GetScore(1)) {
+                match->StartShootout(true);
+                return;
+              }
               match->GameOver();
               return;
             }
@@ -293,8 +306,12 @@ void Referee::PrepareSetPiece(e_SetPiece setPiece) {
 
   match->ResetSituation(buffer.restartPos);
 
-  match->GetTeam(0)->GetController()->PrepareSetPiece(setPiece, buffer.teamID);
-  match->GetTeam(1)->GetController()->PrepareSetPiece(setPiece, buffer.teamID);
+  // The shootout queues its takers: the taking team lays out around the forced taker instead of
+  // the designated role player.
+  match->GetTeam(0)->GetController()->PrepareSetPiece(
+      setPiece, buffer.teamID, buffer.teamID == 0 ? shootoutForcedTaker : 0);
+  match->GetTeam(1)->GetController()->PrepareSetPiece(
+      setPiece, buffer.teamID, buffer.teamID == 1 ? shootoutForcedTaker : 0);
 
   buffer.taker = match->GetTeam(buffer.teamID)->GetController()->GetPieceTaker();
 
@@ -373,18 +390,26 @@ void Referee::ClearFreeKickLane() {
   }
 }
 
-void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos) {
+void Referee::DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos,
+                                 unsigned long prepareDelay_ms, unsigned long whistleDelay_ms,
+                                 bool allowInShootout) {
   // Debug activation for manual testing (spec §11): force a set piece for the given team so it can
   // be tested without earning a foul. Uses the normal set-piece timing: stop play now, position the
   // teams at prepareTime and blow the whistle at startTime. This matches a real set piece (players
   // settle before the ball goes live, the taker is handed to the human by the normal flow), instead
   // of the old immediate drop-in that made players look like they slid on. Caller must ensure a
   // clean play state.
+  if (match->IsShootoutActive() && !allowInShootout) return;
+  if (match->IsInSetPiece()) return;
+  // The shootout starts each kick from stopped play; everything else needs live football.
+  if (!match->IsInPlay() && !match->IsShootoutActive()) return;
+  if (setPiece == e_SetPiece_None) return;
+
   buffer.desiredSetPiece = setPiece;
   buffer.teamID = teamID;
   buffer.stopTime = match->GetActualTime_ms();
-  buffer.prepareTime = buffer.stopTime + 2000;
-  buffer.startTime = buffer.prepareTime + 2000;
+  buffer.prepareTime = buffer.stopTime + prepareDelay_ms;
+  buffer.startTime = buffer.prepareTime + whistleDelay_ms;
   buffer.restartPos = restartPos;
   buffer.active = true;
   buffer.endPhase = false;

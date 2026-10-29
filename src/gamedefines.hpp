@@ -294,6 +294,45 @@ enum e_MatchPhase {
   e_MatchPhase_Penalties,
 };
 
+// Penalty shootout (series). The referee drives a sequence of penalty set pieces inside
+// e_MatchPhase_Penalties: all kicks at one goal (chosen at series start), the teams' effective sides
+// reassigned per kick so the engine's side-relative penalty/keeper geometry faces that goal. The
+// match clock and the match score are frozen; the series keeps its own score. Values are mirrored in
+// scripts/match/gpf_slice.gd (SHOOTOUT_PHASE_*).
+enum e_ShootoutPhase {
+  e_ShootoutPhase_None = 0,
+  e_ShootoutPhase_KickSetup,           // next kick assembling: players parked, whistle pending
+  e_ShootoutPhase_KickAim,             // set piece live, taker aiming
+  e_ShootoutPhase_KickOutcome,         // ball struck, outcome pending
+  e_ShootoutPhase_OutcomeHold,         // short hold after a non-decisive outcome (banner/emotion)
+  e_ShootoutPhase_DecisiveCelebration, // winning team celebrates
+  e_ShootoutPhase_Finished,            // winner decided; the presentation may quit
+  // Black-fade transition: the presentation is fully black here, and only then are the players
+  // repositioned for the next kick (never visible on screen).
+  e_ShootoutPhase_Transition
+};
+
+enum e_ShootoutOutcome {
+  e_ShootoutOutcome_None = 0,
+  e_ShootoutOutcome_Goal = 1,
+  e_ShootoutOutcome_Save = 2,
+  e_ShootoutOutcome_Miss = 3
+};
+
+// Shootout tuning (ms / counts). Mirrored (doc-only) in scripts/match/gpf_slice.gd.
+const int shootoutTransitionDelay_ms = 400;    // black fade -> reposition (fade is 300 ms)
+const int shootoutKickPrepareDelay_ms = 300;   // stop -> players positioned
+const int shootoutKickWhistleDelay_ms = 600;   // prepare -> whistle (ball live)
+const int shootoutOutcomeHoldGoal_ms = 1200;   // non-decisive goal: banner window
+const int shootoutOutcomeHoldMiss_ms = 2000;   // non-decisive save/miss: sadness window
+const int shootoutDecisiveCelebration_ms = 5000;
+const int shootoutStrikeTimeout_ms = 3000;     // no clean outcome -> resolved as miss/save
+const int shootoutRegulationKicks = 5;
+const int shootoutEmotionHappy = 1;            // e_FunctionType_Special specialvar1 values
+const int shootoutEmotionSad = 2;
+const int shootoutEmotionMadeGoalNormal = 1;   // specialvar2: 2 == the scorer (extreme)
+const int shootoutEmotionMadeGoalExtreme = 2;
+
 enum e_PlayerCommandModifier {
   e_PlayerCommandModifier_None = 0,
   e_PlayerCommandModifier_KnockOn = 1

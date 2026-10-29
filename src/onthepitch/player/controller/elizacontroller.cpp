@@ -68,6 +68,22 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   _Preprocess(); // calculate some variables
 
 
+  // Penalty shootout: only the taker and the defending keeper act. Everyone else waits frozen where
+  // the series parked them (centre line) — not during the winner celebration.
+  if (match->IsShootoutActive() && !match->IsShootoutCelebrating() &&
+      !match->IsShootoutParticipant(CastPlayer())) {
+    PlayerCommand waitCommand;
+    waitCommand.desiredFunctionType = e_FunctionType_Movement;
+    waitCommand.useDesiredMovement = true;
+    waitCommand.desiredDirection = player->GetDirectionVec();
+    waitCommand.desiredVelocityFloat = idleVelocity;
+    waitCommand.useDesiredLookAt = true;
+    waitCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+    commandQueue.push_back(waitCommand);
+    return;
+  }
+
+
   FormationEntry entry = CastPlayer()->GetDynamicFormationEntry();
   float mindSet = AI_GetMindSet(entry.role);
 
@@ -83,9 +99,23 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
   bool extraHaste = false;
 
 
-  // celebrate good times come on!
+  // celebrate good times come on! (a penalty shootout only celebrates the decisive outcome)
 
-  if (!match->IsInPlay() && match->IsGoalScored()) {
+  if (!match->IsInPlay() && match->IsGoalScored() &&
+      (!match->IsShootoutActive() || match->IsShootoutCelebrating())) {
+    if (match->IsShootoutActive() && match->GetLastGoalTeamID() != team->GetID()) {
+      // Series: the losing side stands still during the winner's celebration (the kicker plays his
+      // forced sadness on the spot). The original conceding-team walk would read as celebrating.
+      PlayerCommand standCommand;
+      standCommand.desiredFunctionType = e_FunctionType_Movement;
+      standCommand.useDesiredMovement = true;
+      standCommand.desiredDirection = player->GetDirectionVec();
+      standCommand.desiredVelocityFloat = idleVelocity;
+      standCommand.useDesiredLookAt = true;
+      standCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+      commandQueue.push_back(standCommand);
+      return;
+    }
     _AddCelebration(commandQueue);
     return;
   }
@@ -341,6 +371,20 @@ void ElizaController::RequestCommand(PlayerCommandQueue &commandQueue) {
     Vector3 penaltyDiveTarget, diveClipTarget;
     if (match->GetPenaltyDiveClipTarget(team->GetID(), diveClipTarget)) {
       _KeeperDeflectCommand(commandQueue, false, true, diveClipTarget);
+      return;
+    }
+
+    // Penalty shootout: no rebounds — once the dive has run its course the keeper holds his spot
+    // instead of chasing the parried ball (which read as him running off to celebrate).
+    if (match->IsShootoutActive() && match->GetShootoutPhase() >= 1) {
+      PlayerCommand holdCommand;
+      holdCommand.desiredFunctionType = e_FunctionType_Movement;
+      holdCommand.useDesiredMovement = true;
+      holdCommand.desiredDirection = player->GetDirectionVec();
+      holdCommand.desiredVelocityFloat = idleVelocity;
+      holdCommand.useDesiredLookAt = true;
+      holdCommand.desiredLookAt = match->GetBall()->Predict(0).Get2D();
+      commandQueue.push_back(holdCommand);
       return;
     }
 
@@ -1185,7 +1229,18 @@ void ElizaController::_AddCelebration(std::vector<PlayerCommand> &commandQueue) 
 
   // celebration
 
-  if (match->GetActualTime_ms() - match->GetReferee()->GetBuffer().stopTime > 2000 && match->GetActualTime_ms() - match->GetReferee()->GetBuffer().stopTime < 4000) {
+  bool celebrationWindow;
+  if (match->IsShootoutActive()) {
+    // The series has no kickoff buffer to anchor the window on: celebrate the first 4 seconds of
+    // the 5-second decisive hold.
+    celebrationWindow = match->IsShootoutCelebrating() &&
+        (match->GetActualTime_ms() - match->GetShootoutCelebrationStart_ms() < 4000);
+  } else {
+    celebrationWindow = match->GetActualTime_ms() - match->GetReferee()->GetBuffer().stopTime > 2000 &&
+                        match->GetActualTime_ms() - match->GetReferee()->GetBuffer().stopTime < 4000;
+  }
+
+  if (celebrationWindow) {
     PlayerCommand command;
     command.desiredFunctionType = e_FunctionType_Special;
     command.useSpecialVar1 = true;

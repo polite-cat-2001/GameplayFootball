@@ -52,7 +52,17 @@ class Referee {
     // the normal timing (stop play, prepareTime, then the whistle at startTime); the taker, and the
     // human's control of it, come from the normal set-piece flow (TeamAIController::PrepareSetPiece
     // + Team::UpdateSwitch). Caller must ensure a clean play state.
-    void DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos);
+    // The shootout passes its own (shorter) delays and allowInShootout=true; the series also forces
+    // the queue taker through SetShootoutForcedTaker().
+    void DebugForceSetPiece(e_SetPiece setPiece, int teamID, const Vector3 &restartPos,
+                            unsigned long prepareDelay_ms = 2000, unsigned long whistleDelay_ms = 2000,
+                            bool allowInShootout = false);
+
+    // Shootout support: the taker the series wants for the next kick (handed to the team controller
+    // as a forced taker at prepare time), and a way to drop a pending phase-end kickoff buffer when
+    // the series takes over at the 120' draw.
+    void SetShootoutForcedTaker(Player *taker) { shootoutForcedTaker = taker; }
+    void ResetBufferForShootout() { buffer.active = false; buffer.endPhase = false; buffer.taker = 0; }
 
     const RefereeBuffer &GetBuffer() { return buffer; };
 
@@ -75,6 +85,9 @@ class Referee {
     boost::shared_ptr<Scene3D> scene3D;
 
     RefereeBuffer buffer;
+
+    // Penalty shootout: the taker forced into the next set-piece layout (see Match::StartShootout).
+    Player *shootoutForcedTaker;
 
     int afterSetPieceRelaxTime_ms; // throw-ins cause immediate new throw-ins, because ball is still outside the lines at the moment of throwing ;)
 

@@ -101,6 +101,10 @@ class SetPiecePresentation {
     // schedules the release.
     void UpdateCamera();
     void NotifyKickerCommitted(bool isShot);
+    // Penalty shootout: release the frozen view so the penalty camera can re-engage for the next
+    // kick. The series keeps one fixed view across all kicks instead of dropping to the broadcast
+    // camera after each strike.
+    void ResetCameraForShootout();
 
     // Thin client: the local HID device, so the penalty reticle can be driven here. On a thin client
     // HumanController never ticks (Match::Process early-returns), so nothing else feeds the aim.

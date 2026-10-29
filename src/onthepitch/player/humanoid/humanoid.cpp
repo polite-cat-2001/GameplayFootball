@@ -70,6 +70,9 @@ Humanoid::Humanoid(Player *player, boost::intrusive_ptr<Node> humanoidSourceNode
   team = CastPlayer()->GetTeam();
 
   freeKickWallJumpPending = false;
+  forcedEmotionPending = false;
+  forcedEmotionType = 0;
+  forcedEmotionMadeGoal = 0;
 
   stat_GetBodyBallDistanceAdvantage_RadiusDeny = 0;
   stat_GetBodyBallDistanceAdvantage_DistanceDeny = 0;
@@ -242,6 +245,21 @@ void Humanoid::Process() {
       jumpCommand.useDesiredLookAt = false;
       jumpCommand.forceIncomingVelocityIdle = true;
       commandQueue.insert(commandQueue.begin(), jumpCommand);
+    }
+
+    // Forced emotion clip (penalty shootout). Prepended for the same reason as the wall jump.
+    if (forcedEmotionPending) {
+      forcedEmotionPending = false;
+      PlayerCommand emotionCommand;
+      emotionCommand.desiredFunctionType = e_FunctionType_Special;
+      emotionCommand.useSpecialVar1 = true;
+      emotionCommand.specialVar1 = forcedEmotionType;
+      emotionCommand.useSpecialVar2 = true;
+      emotionCommand.specialVar2 = forcedEmotionMadeGoal;
+      emotionCommand.useDesiredMovement = false;
+      emotionCommand.useDesiredLookAt = false;
+      emotionCommand.forceIncomingVelocityIdle = true;
+      commandQueue.insert(commandQueue.begin(), emotionCommand);
     }
 
 
@@ -1178,6 +1196,14 @@ void Humanoid::SelectRetainAnim() {
 
 void Humanoid::ForceFreeKickWallJump() {
   freeKickWallJumpPending = true;
+  if (interruptAnim == e_InterruptAnim_None) interruptAnim = e_InterruptAnim_Switch;
+}
+
+void Humanoid::ForceEmotion(int emotionType, int madeGoal) {
+  forcedEmotionPending = true;
+  forcedEmotionType = emotionType;
+  forcedEmotionMadeGoal = madeGoal;
+  // Play it now rather than waiting for the current clip to end (the shootout holds are short).
   if (interruptAnim == e_InterruptAnim_None) interruptAnim = e_InterruptAnim_Switch;
 }
 

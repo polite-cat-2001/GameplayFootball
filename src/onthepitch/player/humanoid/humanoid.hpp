@@ -38,6 +38,12 @@ class Humanoid : public HumanoidBase {
     // TeamAIController calls this once per wall; the next Process picks it up as a command.
     void ForceFreeKickWallJump();
 
+    // Forced one-off emotion clip (penalty shootout): a Special command prepended to the next
+    // controller batch, same path as the wall jump, so it also plays for a human-controlled player.
+    // type maps to e_FunctionType_Special specialvar1 (1 = happy, 2 = sad/inverse), madeGoal to
+    // specialvar2 (2 = the scorer's extreme celebration).
+    void ForceEmotion(int emotionType, int madeGoal);
+
     virtual void ResetSituation(const Vector3 &focusPos);
 
   protected:
@@ -56,6 +62,9 @@ class Humanoid : public HumanoidBase {
     Team *team;
 
     bool freeKickWallJumpPending; // a forced wall-jump Special command waits to be picked up in Process
+    bool forcedEmotionPending;    // a forced emotion Special command waits to be picked up in Process
+    int forcedEmotionType;        // specialvar1: 1 = happy, 2 = sad/inverse
+    int forcedEmotionMadeGoal;    // specialvar2: 2 = the scorer's extreme celebration
 
     mutable int stat_GetBodyBallDistanceAdvantage_RadiusDeny;
     mutable int stat_GetBodyBallDistanceAdvantage_DistanceDeny;

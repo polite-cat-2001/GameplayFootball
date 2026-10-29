@@ -41,6 +41,27 @@ void HumanController::RequestCommand(PlayerCommandQueue &commandQueue) {
     return;
   }
 
+  // Penalty shootout: the human's player holds position whenever the series says he is not part of
+  // the live kick — the follow-through (no rebound chasing), the emotion hold and the celebration.
+  // Leftover stick input (the player was aiming) would otherwise make him run off the spot, which
+  // reads as celebrating a miss.
+  if (match->IsShootoutActive() &&
+      (match->GetShootoutEmotionPlayer() == CastPlayer() ||
+       !match->IsShootoutParticipant(CastPlayer()))) {
+    actionMode = 0;
+    gauge_ms = 0;
+    actionBufferTime_ms = 0;
+    PlayerCommand command;
+    command.desiredFunctionType = e_FunctionType_Movement;
+    command.useDesiredMovement = true;
+    command.desiredDirection = CastPlayer()->GetDirectionVec();
+    command.desiredVelocityFloat = idleVelocity;
+    command.useDesiredLookAt = true;
+    command.desiredLookAt = CastPlayer()->GetPosition() + CastPlayer()->GetDirectionVec() * 10.0f;
+    commandQueue.push_back(command);
+    return;
+  }
+
   _Preprocess(); // calculate some variables
 
 

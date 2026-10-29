@@ -114,6 +114,12 @@ void Team::ActivatePlayer(Player *player) {
 }
 
 signed int Team::GetSide() {
+  // Penalty shootout: all kicks are taken at one goal, so the series reassigns each team a side
+  // whose defended goal is the series goal (the defending keeper must stand there). Everything
+  // side-relative — penalty aim/target, set-piece camera, keeper AI/box clamp, dive zones, goal
+  // detection — then lines up with that goal without any local mirroring.
+  if (match != 0 && match->IsShootoutActive()) return match->GetShootoutSideForTeam(id);
+
   signed int side;
   if (id == 0) side = -1;
   if (id == 1) side = 1;
@@ -394,8 +400,14 @@ void Team::HumanGamersSelectAnyone() {
   if (match->IsInPlay()) {
     for (unsigned int i = 0; i < humanGamers.size(); i++) {
       if (humanGamers.at(i)->GetSelectedPlayerID() == -1) {
-        int playerID = AI_GetClosestPlayer(this, match->GetBall()->Predict(0).Get2D(), true)->GetID();
-        humanGamers.at(i)->SetSelectedPlayerID(playerID);
+        // Penalty shootout: never auto-select the keeper. On a defended penalty he is the closest
+        // body to the ball, but his dive clip and the human's stick side channel live in the AI
+        // controller, so the human gets the closest outfielder instead.
+        Player *except = match->IsShootoutActive() ? GetGoalie() : 0;
+        Player *closest = AI_GetClosestPlayer(this, match->GetBall()->Predict(0).Get2D(), true, except);
+        if (closest != 0) {
+          humanGamers.at(i)->SetSelectedPlayerID(closest->GetID());
+        }
       }
     }
   }
@@ -680,7 +692,9 @@ void Team::UpdateSwitch() {
     // Normally the keeper is skipped here (he stays under AI), but on a catch (Hands) or a backpass
     // (Outfield) he becomes selectable for the local human team (spec §8.3, #31). Outside those two
     // cases the skip stands, so the keeper is not pulled into open play.
-    bool keeperControllable = match->IsKeeperControllable(GetID());
+    // Penalty shootout: the defending keeper must stay under AI for the whole series (the dive clip
+    // and the human's stick side channel live in the AI controller), so he is never auto-selected.
+    bool keeperControllable = match->IsKeeperControllable(GetID()) && !match->IsShootoutActive();
     bool keeperIsDesignated = designatedTeamPossessionPlayer == GetGoalie();
     if (!IsHumanControlled(designatedTeamPossessionPlayer->GetID()) &&
         (designatedTeamPossessionPlayer->HasUniquePossession() || match->IsInSetPiece() ||

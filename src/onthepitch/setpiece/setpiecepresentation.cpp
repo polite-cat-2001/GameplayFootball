@@ -406,13 +406,27 @@ void SetPiecePresentation::UpdateRemoteSetPieceAim() {
   UpdateSetPieceAim(rawX, hasInput, charging, match->GetActualTime_ms());
 }
 
+void SetPiecePresentation::ResetCameraForShootout() {
+  // Drop the frozen post-strike view; the activation block below re-engages the penalty camera at
+  // the next kick's prepareTime.
+  camActive = false;
+  camFrozen = false;
+  camSuppressed = false;
+  camReleaseTime_ms = 0;
+}
+
 void SetPiecePresentation::UpdateCamera() {
   UpdateRemotePenaltyAim();
   UpdateRemoteSetPieceAim();
 
   // Scorer cam wins unconditionally (spec §4); kickoff, which shares the scorer moment, has no
-  // set-piece camera anyway.
-  if (camActive && match->IsGoalScored()) { ReleaseCamera(); return; }
+  // set-piece camera anyway. A shootout keeps the penalty view for ordinary outcomes and only hands
+  // over to the scorer cam for the decisive celebration.
+  if (camActive && match->IsGoalScored() &&
+      (!match->IsShootoutActive() || match->IsShootoutCelebrating())) {
+    ReleaseCamera();
+    return;
+  }
 
   const RefereeBuffer &buffer = match->GetRefereeBuffer();
   e_SetPiece camTypeNow;
@@ -427,7 +441,13 @@ void SetPiecePresentation::UpdateCamera() {
   if (camActive) {
     unsigned long now = match->GetActualTime_ms();
     if (camFrozen) {
-      if (now >= camReleaseTime_ms) { ReleaseCamera(); return; }
+      // The shootout holds the penalty view through the outcome hold; only the decisive celebration
+      // (which releases above) and the next kick's ResetCameraForShootout change it.
+      if (now >= camReleaseTime_ms &&
+          (!match->IsShootoutActive() || match->IsShootoutCelebrating())) {
+        ReleaseCamera();
+        return;
+      }
     } else if (!HasSetPieceCamera(camTypeNow) || !LocalRoleOwnsCamera(camTypeNow, camTaker)) {
       // The set piece ended without a local commit: the local peer is the defending keeper on a
       // penalty and the taker is the opponent. Watch the flight as if the strike had been committed.
