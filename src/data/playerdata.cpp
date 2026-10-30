@@ -66,18 +66,31 @@ void PlayerData::Init() {
 
   // get average stat for current age
 
+  // A shell-supplied package already carries the final stats: use them and only
+  // fill any missing profile stat (defensive fallback, keeps GetStat safe).
+  for (std::map<std::string, float>::const_iterator iter = raw.stats.begin();
+       iter != raw.stats.end(); ++iter) {
+    stats.Set(iter->first.c_str(), (real)iter->second);
+  }
+
   XMLLoader loader;
   XMLTree tree = loader.Load(raw.profileXml);
 
   //printf("player: %s, %s (age %i)\n", lastName.c_str(), firstName.c_str(), age);
   map_XMLTree::const_iterator iter = tree.children.begin();
   while (iter != tree.children.end()) {
+    const char *statName = (*iter).first.c_str();
+    if (stats.Exists(statName)) {
+      iter++;
+      continue;
+    }
+
     float profileStat = atof((*iter).second.value.c_str()); // profile value
 
     float value = CalculateStat(raw.baseStat, profileStat, raw.age, e_DevelopmentCurveType_Normal);
     //printf("base: %f; profile: %f; result: %f\n", baseStat, profileStat, value);
 
-    stats.Set((*iter).first.c_str(), value);
+    stats.Set(statName, value);
     iter++;
   }
 

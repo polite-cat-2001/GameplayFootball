@@ -178,12 +178,24 @@ void TeamData::InitFromRaw() {
 
   // team formation
 
+  // A shell-supplied package already holds the final roles/positions (the Godot
+  // side ports TeamData::InitFromRaw's blend + spread). Use them verbatim; only
+  // the database path parses the raw XML and normalizes it here.
   XMLLoader loader;
-  XMLTree tree = loader.Load(raw.formationXml);
+  XMLTree tree;
+  map_XMLTree::const_iterator iter;
+
+  if ((int)raw.formation.size() == playerNum) {
+    for (int num = 0; num < playerNum; num++) {
+      formation[num] = raw.formation.at(num);
+    }
+  } else {
+
+  tree = loader.Load(raw.formationXml);
 
   //loader.PrintTree(tree);
 
-  map_XMLTree::const_iterator iter = tree.children.begin();
+  iter = tree.children.begin();
   while (iter != tree.children.end()) {
     for (int num = 0; num < playerNum; num++) {
       if ((*iter).first == "p" + int_to_str(num + 1)) {
@@ -245,6 +257,7 @@ void TeamData::InitFromRaw() {
     iterations++;
   }
 
+  } // raw formation absent
 
   // team tactics
 

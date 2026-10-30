@@ -48,6 +48,9 @@ struct TeamDataRaw {
   Vector3 color1;
   Vector3 color2;
   std::vector<PlayerDataRaw> players;
+  // Final formation (role + normalized positions) as computed by the shell.
+  // Empty = derive from formationXml (database path).
+  std::vector<FormationEntry> formation;
 };
 
 class TeamData {

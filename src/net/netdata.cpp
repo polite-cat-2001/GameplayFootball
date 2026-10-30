@@ -14,6 +14,12 @@ void SerializePlayerDataRaw(NetBuffer &buffer, const PlayerDataRaw &player) {
   buffer.PutString(player.hairColor);
   buffer.PutFloat(player.height);
   buffer.PutU32((uint32_t)player.strongFoot);
+  buffer.PutU32((uint32_t)player.stats.size());
+  for (std::map<std::string, float>::const_iterator iter = player.stats.begin();
+       iter != player.stats.end(); ++iter) {
+    buffer.PutString(iter->first);
+    buffer.PutFloat(iter->second);
+  }
 }
 
 PlayerDataRaw DeserializePlayerDataRaw(NetBuffer &buffer) {
@@ -31,6 +37,11 @@ PlayerDataRaw DeserializePlayerDataRaw(NetBuffer &buffer) {
   player.hairColor = buffer.GetString();
   player.height = buffer.GetFloat();
   player.strongFoot = (int)buffer.GetU32();
+  uint32_t statCount = buffer.GetU32();
+  for (uint32_t i = 0; i < statCount; i++) {
+    std::string statName = buffer.GetString();
+    player.stats[statName] = buffer.GetFloat();
+  }
   return player;
 }
 
@@ -46,6 +57,13 @@ void SerializeTeamDataRaw(NetBuffer &buffer, const TeamDataRaw &team) {
   buffer.PutString(team.tacticsFactoryXml);
   buffer.PutVector3(team.color1);
   buffer.PutVector3(team.color2);
+  buffer.PutU32((uint32_t)team.formation.size());
+  for (unsigned int i = 0; i < team.formation.size(); i++) {
+    const FormationEntry &entry = team.formation.at(i);
+    buffer.PutU32((uint32_t)entry.role);
+    buffer.PutVector3(entry.databasePosition);
+    buffer.PutVector3(entry.position);
+  }
   buffer.PutU32((uint32_t)team.players.size());
   for (unsigned int i = 0; i < team.players.size(); i++) {
     SerializePlayerDataRaw(buffer, team.players.at(i));
@@ -65,6 +83,13 @@ TeamDataRaw DeserializeTeamDataRaw(NetBuffer &buffer) {
   team.tacticsFactoryXml = buffer.GetString();
   team.color1 = buffer.GetVector3();
   team.color2 = buffer.GetVector3();
+  uint32_t formationCount = buffer.GetU32();
+  team.formation.resize(formationCount);
+  for (unsigned int i = 0; i < formationCount; i++) {
+    team.formation.at(i).role = (e_PlayerRole)buffer.GetU32();
+    team.formation.at(i).databasePosition = buffer.GetVector3();
+    team.formation.at(i).position = buffer.GetVector3();
+  }
   uint32_t playerCount = buffer.GetU32();
   team.players.resize(playerCount);
   for (unsigned int i = 0; i < playerCount; i++) {

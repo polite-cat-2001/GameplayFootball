@@ -15,6 +15,8 @@ class MatchData {
 
   public:
     MatchData(int team1DatabaseID, int team2DatabaseID);
+    // Build from a fully materialised match package (no database access).
+    MatchData(const TeamDataRaw &team1, const TeamDataRaw &team2);
     virtual ~MatchData();
 
     TeamData *GetTeamData(int id) { return teamData[id]; }
@@ -36,6 +38,8 @@ class MatchData {
     int GetShots(int teamID) { return shots[teamID]; }
 
   protected:
+    void Init();
+
     TeamData *teamData[2];
 
     int rolePlayers[2][e_TeamRole_SIZE];

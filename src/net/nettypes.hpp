@@ -31,7 +31,9 @@
 // v17: referee card state (type + mirror) in snapshots.
 // v18: PauseState carries whether the pause is a between-periods break, so the
 //      thin client shows the same break screen as the host.
-const int net_protocolVersion = 18;
+// v19: TeamDataRaw carries the shell-computed formation and final player stats,
+//      so a match can be built from the package without recalculation.
+const int net_protocolVersion = 19;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

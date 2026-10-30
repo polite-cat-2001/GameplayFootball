@@ -8,6 +8,17 @@ MatchData::MatchData(int team1DatabaseID, int team2DatabaseID) {
   teamData[0] = new TeamData(team1DatabaseID);
   teamData[1] = new TeamData(team2DatabaseID);
 
+  Init();
+}
+
+MatchData::MatchData(const TeamDataRaw &team1, const TeamDataRaw &team2) {
+  teamData[0] = new TeamData(team1);
+  teamData[1] = new TeamData(team2);
+
+  Init();
+}
+
+void MatchData::Init() {
   goalCount[0] = 0;
   goalCount[1] = 0;
 

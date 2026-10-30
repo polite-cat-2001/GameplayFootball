@@ -12,6 +12,8 @@
 
 #include "base/properties.hpp"
 
+#include <map>
+
 // Raw database fields of a player. This is the serializable representation used
 // to stream a match setup from the host to clients (no database needed client-side).
 struct PlayerDataRaw {
@@ -29,6 +31,11 @@ struct PlayerDataRaw {
   float height = 1.8f;
   // Preferred kicking foot: 0 = right (default when the DB has no data), 1 = left.
   int strongFoot = 0;
+  // Final (age-adjusted) stats computed by the shell. When non-empty the
+  // receiving side uses them instead of recalculating from profileXml/baseStat/
+  // age, so the match package is authoritative. Empty = derive from the profile
+  // (database path).
+  std::map<std::string, float> stats;
 };
 
 class PlayerData {
