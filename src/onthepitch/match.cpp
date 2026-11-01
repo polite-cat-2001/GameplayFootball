@@ -2320,6 +2320,18 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
       if (team->Substitute(outPlayer->GetID(), inPlayer->GetID())) {
         messages.push_back(outPlayer->GetPlayerData()->GetLastName() + " off, " +
                            inPlayer->GetPlayerData()->GetLastName() + " on");
+        // Mirror the host's applied-substitution bookkeeping: the shell HUD
+        // reads GetSubstitutionNotices/Counter on a thin client too, and the
+        // actor layer syncs its roster when the counter changes.
+        SubstitutionNotice notice;
+        notice.teamID = sub.team;
+        notice.outPlayerID = outPlayer->GetID();
+        notice.inPlayerID = inPlayer->GetID();
+        notice.outSlot = sub.outSlot;
+        notice.inSlot = sub.inSlot;
+        notice.time_ms = actualTime_ms;
+        substitutionNotices.push_back(notice);
+        substitutionNoticeCounter++;
       }
     }
     if (!messages.empty()) ShowSubstitutionNotices(messages);
