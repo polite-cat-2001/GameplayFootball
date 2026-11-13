@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Хук на редактирование файла (Claude Code: PreToolUse Edit|Write; opencode:
+# Хук на редактирование файла (агент Code: PreToolUse Edit|Write; opencode:
 # tool.execute.before). По пути правимого файла подсказывает страницу вики.
 # Вход: JSON на stdin. Выход: JSON с additionalContext (или ничего).
-# Обвязка на stdout — формат Claude Code; при переносе в другой инструмент
+# Обвязка на stdout — формат агент Code; при переносе в другой инструмент
 # оберни ту же логику в его протокол (см. opencode.wiki.plugin.js).
 set -uo pipefail
 
