@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Старт сессии (Claude Code: SessionStart; opencode: session.created — см.
+# Старт сессии (opencode: session.created — см.
 # opencode.wiki.plugin.js): впрыскивает компактное оглавление вики и запоминает
 # HEAD сессии. Оглавление генерируется из docs/wiki/index.md, поэтому не устаревает.
 set -uo pipefail
