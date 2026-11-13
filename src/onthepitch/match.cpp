@@ -2270,6 +2270,34 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   inPlay = snapshot.inPlay;
   // `inSetPiece` is derived from the relayed type; the bool itself is not on the wire.
   setPieceType = (e_SetPiece)snapshot.setPieceType;
+  // The host's referee ends the match (Process never runs here), so the result
+  // comes from the wire.
+  gameOver = snapshot.gameOver;
+
+  // The penalty shootout series lives in the host's Match (ProcessShootout never
+  // runs here), but Team::GetSide() and everything side-relative — the set-piece
+  // camera in particular — read it. Without this the client's penalty camera
+  // points at the opposite goal (the kicker's face instead of his back).
+  shootoutActive = snapshot.shootoutActive;
+  if (shootoutActive) {
+    shootoutPhase = (e_ShootoutPhase)snapshot.shootoutPhase;
+    shootoutAttackSide = snapshot.shootoutAttackSide;
+    shootoutTeamSide[0] = snapshot.shootoutTeamSide[0];
+    shootoutTeamSide[1] = snapshot.shootoutTeamSide[1];
+    shootoutTakerTeam = snapshot.shootoutTakerTeam;
+    shootoutScore[0] = snapshot.shootoutScore[0];
+    shootoutScore[1] = snapshot.shootoutScore[1];
+    shootoutLastOutcome = (e_ShootoutOutcome)snapshot.shootoutLastOutcome;
+    shootoutOutcomeCounter = snapshot.shootoutOutcomeCounter;
+    shootoutLastOutcomeKickerID = snapshot.shootoutLastOutcomeKickerID;
+    shootoutLastDecisive = snapshot.shootoutLastDecisive;
+    shootoutWinner = snapshot.shootoutWinner;
+    for (int t = 0; t < 2; t++) {
+      shootoutKickResults[t].clear();
+      shootoutKickResults[t].assign(snapshot.shootoutKickResults[t].begin(),
+                                    snapshot.shootoutKickResults[t].end());
+    }
+  }
   // Thin client: build the presentation identity from the snapshot (type + actual taker team/slot).
   setPiecePresentation->SetRemoteIdentity(setPieceType, snapshot.setPieceTakerTeam, snapshot.setPieceTakerSlot);
   // Possession drives the camera's attacking-direction shift; Process() (which
@@ -2326,6 +2354,25 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     GetGraphicsSystem()->getPhaseMutex.unlock();
     remoteAppliedSubstitutions = (int)snapshot.substitutions.size();
     remoteSubstitutionCounter = snapshot.substitutionCounter;
+  }
+
+  // Queued substitutions live only in the host's Match; relay them so the
+  // client's game plan shows the same pending pair (and its + / - suffixes).
+  pendingSubstitutions.clear();
+  for (unsigned int i = 0; i < snapshot.pendingSubstitutions.size(); i++) {
+    const SnapshotSubstitution &sub = snapshot.pendingSubstitutions.at(i);
+    if (sub.team < 0 || sub.team > 1) continue;
+    Team *team = teams[sub.team];
+    if (!team) continue;
+    const std::vector<Player*> &all = team->GetAllPlayers();
+    if (sub.outSlot < 0 || sub.outSlot >= (int)all.size() || sub.inSlot < 0 || sub.inSlot >= (int)all.size()) continue;
+    Substitution pending;
+    pending.teamID = sub.team;
+    pending.outPlayerID = all.at(sub.outSlot)->GetID();
+    pending.inPlayerID = all.at(sub.inSlot)->GetID();
+    pending.outSlot = sub.outSlot;
+    pending.inSlot = sub.inSlot;
+    pendingSubstitutions.push_back(pending);
   }
 
   ApplySnapshot(this, snapshot, remoteAnimTable);

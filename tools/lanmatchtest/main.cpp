@@ -231,6 +231,51 @@ int main(int argc, char **argv) {
           "position must snap (not blend) across a noPos change");
   }
 
+  // Wire round-trip of the penalty shootout state (protocol v21). The client's
+  // side-relative presentation (set-piece camera, aim) reads it from here.
+  {
+    Snapshot s;
+    s.shootoutActive = true;
+    s.shootoutPhase = (int)e_ShootoutPhase_KickAim;
+    s.shootoutAttackSide = -1;
+    s.shootoutTeamSide[0] = -1;
+    s.shootoutTeamSide[1] = 1;
+    s.shootoutTakerTeam = 1;
+    s.shootoutScore[0] = 4;
+    s.shootoutScore[1] = 3;
+    s.shootoutLastOutcome = 2;
+    s.shootoutOutcomeCounter = 7;
+    s.shootoutLastOutcomeKickerID = 42;
+    s.shootoutLastDecisive = true;
+    s.shootoutWinner = 0;
+    s.shootoutKickResults[0].push_back(1);
+    s.shootoutKickResults[0].push_back(2);
+    s.shootoutKickResults[1].push_back(1);
+    s.gameOver = true;
+
+    NetBuffer buffer;
+    WriteSnapshot(buffer, s);
+    buffer.ResetRead();
+    Snapshot restored = ReadSnapshot(buffer);
+    CHECK(!buffer.Failed(), "snapshot shootout buffer failed");
+    CHECK(restored.shootoutActive && restored.shootoutPhase == (int)e_ShootoutPhase_KickAim &&
+          restored.shootoutAttackSide == -1 && restored.shootoutTakerTeam == 1,
+          "snapshot shootout header round-trip mismatch");
+    CHECK(restored.shootoutTeamSide[0] == -1 && restored.shootoutTeamSide[1] == 1,
+          "snapshot shootout sides round-trip mismatch");
+    CHECK(restored.shootoutScore[0] == 4 && restored.shootoutScore[1] == 3 &&
+          restored.shootoutLastOutcome == 2 && restored.shootoutOutcomeCounter == 7 &&
+          restored.shootoutLastOutcomeKickerID == 42 && restored.shootoutLastDecisive &&
+          restored.shootoutWinner == 0,
+          "snapshot shootout result round-trip mismatch");
+    CHECK(restored.shootoutKickResults[0].size() == 2 &&
+          restored.shootoutKickResults[0].at(1) == 2 &&
+          restored.shootoutKickResults[1].size() == 1 &&
+          restored.shootoutKickResults[1].at(0) == 1,
+          "snapshot shootout kick log round-trip mismatch");
+    CHECK(restored.gameOver, "snapshot end-of-match round-trip mismatch");
+  }
+
   // --- network setup: host server + one raw client peer ---------------------
   boost::shared_ptr<NetServer> server = boost::make_shared<NetServer>(port);
   if (!server->Start()) { std::printf("FAIL: server could not bind %u\n", (unsigned int)port); ::exit(1); }
@@ -396,6 +441,51 @@ int main(int argc, char **argv) {
     match->Put();
     CHECK(match->GetOfficials()->GetYellowCardGeom()->GetPosition().GetDistance(Vector3(0, 0, -10)) > 0.1f,
           "remote yellow card should be placed");
+  }
+
+  // --- 7. thin-client shootout presentation ---------------------------------
+  // The series lives in the host's Match (ProcessShootout never runs on a thin
+  // client), yet Team::GetSide() — which the set-piece camera and the penalty aim
+  // build on — reads it. A client that ignored the relayed state pointed its
+  // penalty camera at the wrong goal (the kicker's face instead of his back).
+  {
+    Snapshot shootoutSnapshot;
+    shootoutSnapshot.matchPhase = (int)e_MatchPhase_Penalties;
+    shootoutSnapshot.shootoutActive = true;
+    shootoutSnapshot.shootoutPhase = (int)e_ShootoutPhase_KickSetup;
+    shootoutSnapshot.shootoutAttackSide = 1;
+    shootoutSnapshot.shootoutTeamSide[0] = 1;
+    shootoutSnapshot.shootoutTeamSide[1] = -1;
+    shootoutSnapshot.shootoutTakerTeam = 0;
+    shootoutSnapshot.shootoutScore[0] = 3;
+    shootoutSnapshot.shootoutScore[1] = 2;
+    shootoutSnapshot.shootoutKickResults[0].push_back(1);
+    shootoutSnapshot.shootoutKickResults[0].push_back(2);
+    shootoutSnapshot.shootoutKickResults[1].push_back(1);
+    match->ApplyRemoteSnapshot(shootoutSnapshot);
+
+    CHECK(match->IsShootoutActive(), "remote shootout should mark the series active");
+    CHECK(match->GetShootoutSideForTeam(0) == 1 && match->GetShootoutSideForTeam(1) == -1,
+          "remote shootout should adopt the relayed sides");
+    CHECK(match->GetTeam(0)->GetSide() == 1 && match->GetTeam(1)->GetSide() == -1,
+          "team sides should follow the relayed shootout state");
+    CHECK(match->GetShootoutScore(0) == 3 && match->GetShootoutScore(1) == 2,
+          "remote shootout score mismatch");
+    CHECK(match->GetShootoutKickResult(0, 1) == 2 && match->GetShootoutKickResult(1, 0) == 1,
+          "remote shootout kick log mismatch");
+    CHECK(match->GetShootoutGoalX() < 0.0f,
+          "remote shootout should attack the goal on the attack side");
+  }
+
+  // --- 8. thin-client end of match -----------------------------------------
+  // A client never runs the referee that ends the match, so the result has to
+  // arrive in the snapshot.
+  {
+    Snapshot overSnapshot;
+    overSnapshot.matchPhase = (int)e_MatchPhase_Penalties;
+    overSnapshot.gameOver = true;
+    match->ApplyRemoteSnapshot(overSnapshot);
+    CHECK(match->IsGameOver(), "a remote game-over should end the match on the client");
   }
 
   if (g_failures == 0) {

@@ -36,6 +36,7 @@ class NetClient {
     void SetPlayerName(const std::string &name) { playerName = name; }
 
     void SendLobbyAction(const NetLobbyAction &action);
+    void SendPlanCommit(const NetPlanCommit &commit);
     void SendInputFrame(const NetInputFrame &frame);
     void SendPauseRequest(bool paused);
     void SendReplayStop();

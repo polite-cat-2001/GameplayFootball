@@ -5,6 +5,8 @@
 #include "menutask.hpp"
 
 #include "../onthepitch/match.hpp"
+#include "../onthepitch/team.hpp"
+#include "../onthepitch/player/player.hpp"
 
 #include "../data/matchdata.hpp"
 #include "../data/teamdata.hpp"
@@ -333,8 +335,32 @@ bool MenuTask::PlayerOwnsSide(uint32_t playerId, int side) {
 }
 
 void MenuTask::ApplyPlanSwap(int side, int dbA, int dbB) {
+  if (side < 0 || side > 1 || dbA < 0 || dbB < 0 || dbA == dbB) return;
+  Match *match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
+  if (match) {
+    // In-match: swap the live runtime formation entries. Editing TeamData here
+    // would be ignored by substituted-in players and would desync the match.
+    Team *team = match->GetTeam(side);
+    if (!team) return;
+    Player *first = 0;
+    Player *second = 0;
+    const std::vector<Player*> &all = team->GetAllPlayers();
+    for (unsigned int i = 0; i < all.size(); i++) {
+      Player *player = all.at(i);
+      if (!player) continue;
+      if (player->GetPlayerData()->GetDatabaseID() == dbA) first = player;
+      if (player->GetPlayerData()->GetDatabaseID() == dbB) second = player;
+    }
+    if (!first || !second || !first->IsActive() || !second->IsActive()) return;
+    const FormationEntry firstEntry = team->GetFormationEntry(first->GetID());
+    const FormationEntry secondEntry = team->GetFormationEntry(second->GetID());
+    team->SetRuntimeFormationEntry(first->GetID(), secondEntry);
+    team->SetRuntimeFormationEntry(second->GetID(), firstEntry);
+    BumpPlanRevision(side);
+    return;
+  }
   MatchData *matchData = GetMatchData();
-  if (!matchData || side < 0 || side > 1 || dbA < 0 || dbB < 0 || dbA == dbB) return;
+  if (!matchData) return;
   TeamData *teamData = matchData->GetTeamData(side);
   if (!teamData) return;
   teamData->SwitchPlayers(dbA, dbB);
@@ -376,6 +402,61 @@ void MenuTask::ApplyPlanRole(int side, int role, int slot) {
   BumpPlanRevision(side);
 }
 
+void MenuTask::ApplyPlanCommit(int side, const std::vector<NetPlanOp> &ops, bool broadcast) {
+  if (side < 0 || side > 1) return;
+  Match *match = GetGameTask() ? GetGameTask()->GetMatch() : 0;
+  for (unsigned int i = 0; i < ops.size(); i++) {
+    const NetPlanOp &op = ops.at(i);
+    if (op.type == e_NetPlanOp_Swap) {
+      ApplyPlanSwap(side, op.a, op.b);
+      if (broadcast && netServer) {
+        NetPlanSwap swap;
+        swap.side = side;
+        swap.dbA = op.a;
+        swap.dbB = op.b;
+        netServer->BroadcastPlanSwap(swap);
+      }
+    } else if (op.type == e_NetPlanOp_Scheme) {
+      ApplyPlanScheme(side, op.a);
+      if (broadcast && netServer) {
+        NetPlanScheme scheme;
+        scheme.side = side;
+        scheme.scheme = op.a;
+        netServer->BroadcastPlanScheme(scheme);
+      }
+    } else if (op.type == e_NetPlanOp_Role) {
+      ApplyPlanRole(side, op.a, op.b);
+      if (broadcast && netServer) {
+        NetPlanRole role;
+        role.side = side;
+        role.role = op.a;
+        role.slot = op.b;
+        netServer->BroadcastPlanRole(role);
+      }
+    } else if (op.type == e_NetPlanOp_Sub) {
+      if (!match) continue;
+      Team *team = match->GetTeam(side);
+      if (!team) continue;
+      const std::vector<Player*> &all = team->GetAllPlayers();
+      if (op.a < 0 || op.a >= (int)all.size() || op.b < 0 || op.b >= (int)all.size()) continue;
+      match->QueueSubstitution(side, all.at(op.a)->GetID(), all.at(op.b)->GetID());
+    } else if (op.type == e_NetPlanOp_CancelSub) {
+      if (match) match->CancelSubstitution(side, op.a);
+    }
+  }
+}
+
+void MenuTask::CommitPlanFromHost(int side, const std::vector<NetPlanOp> &ops) {
+  if (!PlayerOwnsSide(0, side)) return;
+  ApplyPlanCommit(side, ops, true);
+}
+
+void MenuTask::CommitPlanLocal(int side, const std::vector<NetPlanOp> &ops) {
+  // Offline local/2P: both sides are edited on this machine, so only the
+  // side range matters; no peers to relay to.
+  ApplyPlanCommit(side, ops, false);
+}
+
 void MenuTask::ProcessNetworkPlanEdits() {
   if (netServer) {
     // Host: apply client edits under ownership check, then relay to everyone.
@@ -407,6 +488,11 @@ void MenuTask::ProcessNetworkPlanEdits() {
       role.role = roleRequest.role;
       role.slot = roleRequest.slot;
       netServer->BroadcastPlanRole(role);
+    }
+    NetPlanCommitRequest commitRequest;
+    while (netServer->ConsumePlanCommit(commitRequest)) {
+      if (!PlayerOwnsSide(commitRequest.playerId, commitRequest.commit.side)) continue;
+      ApplyPlanCommit(commitRequest.commit.side, commitRequest.commit.ops, true);
     }
   } else if (netClient) {
     NetPlanSwap swap;

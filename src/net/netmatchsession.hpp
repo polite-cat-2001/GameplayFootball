@@ -73,6 +73,9 @@ class NetMatchSession {
     unsigned long lastRenderClock_ms;
     bool renderClockInit;
     unsigned long lastSnapshotTime_ms;
+  // Host: pending unpause after every peer's resume vote, so the clients'
+  // READY screens can finish animating before the match restarts.
+  unsigned long resumeReadyAt_ms;
 };
 
 #endif

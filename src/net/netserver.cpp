@@ -142,6 +142,9 @@ class NetServerConnection : public boost::enable_shared_from_this<NetServerConne
       } else if (type == e_NetMessage_LobbyAction) {
         NetLobbyAction action = ReadLobbyAction(buffer);
         server->HandleLobbyAction(shared_from_this(), action);
+      } else if (type == e_NetMessage_PlanCommit) {
+        NetPlanCommit commit = ReadPlanCommit(buffer);
+        server->HandlePlanCommit(shared_from_this(), commit);
       } else if (type == e_NetMessage_InputFrame) {
         NetInputFrame frame = ReadInputFrame(buffer);
         server->HandleInputFrame(shared_from_this(), frame);
@@ -556,6 +559,14 @@ void NetServer::BroadcastPlanRole(const NetPlanRole &role) {
   BroadcastMessage(e_NetMessage_PlanRole, buffer);
 }
 
+bool NetServer::ConsumePlanCommit(NetPlanCommitRequest &request) {
+  boost::mutex::scoped_lock lock(planCommitMutex);
+  if (planCommitRequests.empty()) return false;
+  request = planCommitRequests.front();
+  planCommitRequests.erase(planCommitRequests.begin());
+  return true;
+}
+
 bool NetServer::ConsumeHubVoteResult(int &vote) {
   boost::mutex::scoped_lock lock(hubVoteMutex);
   if (!hubVoteResultPending) return false;
@@ -670,6 +681,14 @@ void NetServer::HandleLobbyAction(boost::shared_ptr<NetServerConnection> connect
   ApplyLobbyAction(attributed);
 }
 
+void NetServer::HandlePlanCommit(boost::shared_ptr<NetServerConnection> connection, const NetPlanCommit &commit) {
+  NetPlanCommitRequest request;
+  request.playerId = connection->GetSessionId();
+  request.commit = commit;
+  boost::mutex::scoped_lock lock(planCommitMutex);
+  planCommitRequests.push_back(request);
+}
+
 void NetServer::HandleInputFrame(boost::shared_ptr<NetServerConnection> connection, const NetInputFrame &frame) {
   boost::shared_ptr<NetHIDDevice> device = connection->GetHIDevice();
   if (device) device->SetInput(frame);
@@ -746,6 +765,15 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
     }
 
     if (player) {
+      // Votes are shared by the pre-match screens (sides, teams, kits, hub);
+      // clear them whenever a phase actually moves so a stale Back request
+      // cannot fire again on the next screen.
+      auto clearHubVotes = [&]() {
+        lobbyState.hubVote = e_NetHubVote_None;
+        for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+          lobbyState.players.at(i).hubVote = e_NetHubVote_None;
+        }
+      };
       if (action.type == e_NetLobbyAction_RequestSubstitution || action.type == e_NetLobbyAction_CancelSubstitution) {
         // Not a lobby-state change: queue it for the host's game task, which
         // validates team ownership and resolves slots before touching the Match.
@@ -811,6 +839,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).ready = false;
         lobbyState.teamReady[0] = false;
         lobbyState.teamReady[1] = false;
+        clearHubVotes();
         RecomputeChoppers();
         changed = true;
       } else if (action.type == e_NetLobbyAction_SetResumeReady) {
@@ -833,6 +862,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
           lobbyState.phase = e_NetLobbyPhase_Teams;
           lobbyState.teamReady[0] = false;
           lobbyState.teamReady[1] = false;
+          clearHubVotes();
           changed = true;
         }
       } else if (action.type == e_NetLobbyAction_RequestSideSelect) {
@@ -848,6 +878,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
             }
             lobbyState.teamReady[0] = false;
             lobbyState.teamReady[1] = false;
+            clearHubVotes();
             RecomputeChoppers();
             changed = true;
           }
@@ -861,6 +892,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
             }
             lobbyState.teamReady[0] = false;
             lobbyState.teamReady[1] = false;
+            clearHubVotes();
             RecomputeChoppers();
             changed = true;
             boost::mutex::scoped_lock lock(resumeMutex);
@@ -908,7 +940,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
       } else if (action.type == e_NetLobbyAction_HubVote) {
         // Every peer must agree on the same action before the host executes it.
         int vote = action.value;
-        if (vote < e_NetHubVote_None || vote > e_NetHubVote_StartMatch) vote = e_NetHubVote_None;
+        if (vote < e_NetHubVote_None || vote > e_NetHubVote_LeaveSession) vote = e_NetHubVote_None;
         player->hubVote = vote;
         int agreed = e_NetHubVote_None;
         bool all = !lobbyState.players.empty();
@@ -920,9 +952,23 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         }
         lobbyState.hubVote = all ? agreed : e_NetHubVote_None;
         if (all) {
-          boost::mutex::scoped_lock lock(hubVoteMutex);
-          hubVoteResultPending = true;
-          hubVoteResult = agreed;
+          if (agreed == e_NetHubVote_BackToSides && lobbyState.phase == e_NetLobbyPhase_Teams) {
+            // Team select -> side select: reset the confirmations and move the
+            // canonical phase back; both peers route from the mirrored phase.
+            lobbyState.phase = e_NetLobbyPhase_Sides;
+            for (unsigned int i = 0; i < lobbyState.players.size(); i++) {
+              lobbyState.players.at(i).ready = false;
+              lobbyState.players.at(i).resumeReady = false;
+            }
+            lobbyState.teamReady[0] = false;
+            lobbyState.teamReady[1] = false;
+            RecomputeChoppers();
+            clearHubVotes();
+          } else {
+            boost::mutex::scoped_lock lock(hubVoteMutex);
+            hubVoteResultPending = true;
+            hubVoteResult = agreed;
+          }
         }
         changed = true;
       }
@@ -934,6 +980,7 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         }
         if (allReady && !lobbyState.sideSelect) {
           lobbyState.phase = e_NetLobbyPhase_Teams;
+          clearHubVotes();
           RecomputeChoppers();
           changed = true;
         }
@@ -945,15 +992,9 @@ void NetServer::ApplyLobbyAction(const NetLobbyAction &action) {
         if (lobbyState.teamReady[0] && lobbyState.teamReady[1] &&
             lobbyState.teamId[0] > 0 && lobbyState.teamId[1] > 0) {
           lobbyState.phase = e_NetLobbyPhase_Options;
+          clearHubVotes();
           changed = true;
         }
-      }
-
-      // Hub state only exists in the kickoff-options phase; a fall back to sides
-      // or teams (roster change, back) clears pending votes.
-      if (lobbyState.phase != e_NetLobbyPhase_Options) {
-        lobbyState.hubVote = e_NetHubVote_None;
-        for (unsigned int i = 0; i < lobbyState.players.size(); i++) lobbyState.players.at(i).hubVote = e_NetHubVote_None;
       }
     }
 

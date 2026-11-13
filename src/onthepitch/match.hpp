@@ -331,6 +331,10 @@ class Match {
     int GetSpamMessageTime_ms() const { return lastSpamMessageTime_ms; }
     unsigned long GetSpamMessageCounter() const { return spamMessageCounter; }
     unsigned long GetMatchTime_ms() const { return matchTime_ms; }
+    // Debug time skip: the bridge pushes the clock to a period boundary so the
+    // referee blows the end-of-period whistle on the next processed tick.
+    void SetMatchTime_ms(unsigned long time) { matchTime_ms = time; }
+    bool IsGameOver() const { return gameOver; }
     unsigned long GetActualTime_ms() const { return actualTime_ms; }
 
     void BumpActualTime_ms(unsigned long time);
@@ -352,6 +356,9 @@ class Match {
     int GetShootoutScore(int teamID) const { return (teamID >= 0 && teamID < 2) ? shootoutScore[teamID] : 0; }
     // 0 = not taken yet, 1 = scored, 2 = missed (the HUD circles; grows with sudden death).
     int GetShootoutKickResult(int teamID, int index) const;
+    int GetShootoutKickCount(int teamID) const {
+      return (teamID >= 0 && teamID < 2) ? (int)shootoutKickResults[teamID].size() : 0;
+    }
     int GetShootoutLastOutcome() const { return (int)shootoutLastOutcome; }
     int GetShootoutLastOutcomeKickerID() const { return shootoutLastOutcomeKickerID; }
     unsigned long GetShootoutOutcomeCounter() const { return shootoutOutcomeCounter; }

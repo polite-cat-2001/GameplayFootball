@@ -33,7 +33,13 @@
 //      thin client shows the same break screen as the host.
 // v19: TeamDataRaw carries the shell-computed formation and final player stats,
 //      so a match can be built from the package without recalculation.
-const int net_protocolVersion = 19;
+// v20: in-match game-plan commit (ordered edit list applied on READY) and
+//      queued substitutions relayed in the snapshot.
+// v21: penalty shootout state (sides, phase, score, kick log) in snapshots, so a
+//      thin client's side-relative presentation (set-piece camera, aim) matches;
+//      plus Snapshot.gameOver (the client never runs the ending referee) and
+//      Snapshot.choiceCursor (the host's 90:00 draw-choice tile, mirrored).
+const int net_protocolVersion = 21;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
@@ -75,7 +81,8 @@ enum e_NetMessageType {
   e_NetMessage_ReplayStop,
   e_NetMessage_Keepalive,
   e_NetMessage_PlanScheme,
-  e_NetMessage_PlanRole
+  e_NetMessage_PlanRole,
+  e_NetMessage_PlanCommit
 };
 
 enum e_NetConnectionState {

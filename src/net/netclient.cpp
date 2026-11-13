@@ -259,6 +259,12 @@ void NetClient::SendLobbyAction(const NetLobbyAction &action) {
   SendMessage(e_NetMessage_LobbyAction, body);
 }
 
+void NetClient::SendPlanCommit(const NetPlanCommit &commit) {
+  NetBuffer body;
+  WritePlanCommit(body, commit);
+  SendMessage(e_NetMessage_PlanCommit, body);
+}
+
 void NetClient::SendInputFrame(const NetInputFrame &frame) {
   NetBuffer body;
   WriteInputFrame(body, frame);

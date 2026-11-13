@@ -79,7 +79,7 @@ enum e_NetLobbyActionType {
   // of the two players to swap; the host validates side ownership and applies it.
   e_NetLobbyAction_PlanSwap,
   // Hub vote: value = e_NetHubVote (0 withdraws). All peers must agree before the
-  // host executes the action (leave the hub, start the match).
+  // host executes the action (back through the lobby, leave the session, start).
   e_NetLobbyAction_HubVote,
   // Tactical scheme pick from the game plan's Tactics section: side = teamID,
   // value = scheme index. The host validates side ownership, applies the
@@ -91,11 +91,14 @@ enum e_NetLobbyActionType {
   e_NetLobbyAction_PlanRole
 };
 
-// Shared pre-match hub action requiring confirmation from every peer.
+// Shared pre-match action requiring confirmation from every peer. The Godot
+// shell uses these for the lobby's Back chain as well as the kickoff hub.
 enum e_NetHubVote {
   e_NetHubVote_None = 0,
   e_NetHubVote_BackToTeams,
-  e_NetHubVote_StartMatch
+  e_NetHubVote_StartMatch,
+  e_NetHubVote_BackToSides,
+  e_NetHubVote_LeaveSession
 };
 
 struct NetLobbyPlayer {
@@ -230,6 +233,35 @@ struct NetPlanRole {
 
 void WritePlanRole(NetBuffer &buffer, const NetPlanRole &role);
 NetPlanRole ReadPlanRole(NetBuffer &buffer);
+
+// In-match game-plan commit: the ordered list of edits the peer made in its
+// local plan while the match was paused, applied by the host on READY. Ints are
+// peer-stable (database ids / squad slots / scheme and role indices).
+enum e_NetPlanOpType {
+  e_NetPlanOp_Swap = 0,   // a,b = database ids of two active players
+  e_NetPlanOp_Scheme = 1, // a = tactical scheme index
+  e_NetPlanOp_Role = 2,   // a = e_TeamRole, b = squad slot
+  e_NetPlanOp_Sub = 3,    // a = out slot, b = in slot
+  e_NetPlanOp_CancelSub = 4 // a = out slot
+};
+
+struct NetPlanOp {
+  NetPlanOp() : type(e_NetPlanOp_Swap), a(-1), b(-1) {}
+
+  int type;
+  int a;
+  int b;
+};
+
+struct NetPlanCommit {
+  NetPlanCommit() : side(0) {}
+
+  int side;
+  std::vector<NetPlanOp> ops;
+};
+
+void WritePlanCommit(NetBuffer &buffer, const NetPlanCommit &commit);
+NetPlanCommit ReadPlanCommit(NetBuffer &buffer);
 
 // Host animation collection listing, in host index order. The client resolves
 // each name to its own Animation* so snapshots can carry a compact animID.

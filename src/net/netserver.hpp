@@ -61,6 +61,15 @@ struct NetPlanRoleRequest {
   int slot;
 };
 
+// A client in-match game-plan commit, attributed to the requesting peer. The
+// host menu layer validates side ownership and applies the ordered edit list.
+struct NetPlanCommitRequest {
+  NetPlanCommitRequest() : playerId(0) {}
+
+  uint32_t playerId;
+  NetPlanCommit commit;
+};
+
 class NetServer {
 
   public:
@@ -152,6 +161,9 @@ class NetServer {
     bool ConsumePlanRoleRequest(NetPlanRoleRequest &request);
     void BroadcastPlanRole(const NetPlanRole &role);
 
+    // In-match plan commits, consumed by the host menu layer on the game thread.
+    bool ConsumePlanCommit(NetPlanCommitRequest &request);
+
     // All peers agreed on a hub action (e_NetHubVote); consumed once by the host.
     bool ConsumeHubVoteResult(int &vote);
 
@@ -173,6 +185,7 @@ class NetServer {
     void HandleAccept(boost::shared_ptr<NetServerConnection> connection, const boost::system::error_code &error);
     void HandleClientHello(boost::shared_ptr<NetServerConnection> connection, const NetClientHello &hello);
     void HandleLobbyAction(boost::shared_ptr<NetServerConnection> connection, const NetLobbyAction &action);
+    void HandlePlanCommit(boost::shared_ptr<NetServerConnection> connection, const NetPlanCommit &commit);
     void HandleInputFrame(boost::shared_ptr<NetServerConnection> connection, const NetInputFrame &frame);
     void HandlePauseRequest(bool paused);
     void HandleReplayStop();
@@ -228,6 +241,9 @@ class NetServer {
 
     boost::mutex planRoleMutex;
     std::vector<NetPlanRoleRequest> planRoleRequests;
+
+    boost::mutex planCommitMutex;
+    std::vector<NetPlanCommitRequest> planCommitRequests;
 
     boost::mutex hubVoteMutex;
     bool hubVoteResultPending;

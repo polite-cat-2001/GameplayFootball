@@ -194,6 +194,30 @@ NetPlanRole ReadPlanRole(NetBuffer &buffer) {
   return role;
 }
 
+void WritePlanCommit(NetBuffer &buffer, const NetPlanCommit &commit) {
+  buffer.PutU32((uint32_t)commit.side);
+  buffer.PutU32((uint32_t)commit.ops.size());
+  for (unsigned int i = 0; i < commit.ops.size(); i++) {
+    buffer.PutU32((uint32_t)commit.ops.at(i).type);
+    buffer.PutU32((uint32_t)commit.ops.at(i).a);
+    buffer.PutU32((uint32_t)commit.ops.at(i).b);
+  }
+}
+
+NetPlanCommit ReadPlanCommit(NetBuffer &buffer) {
+  NetPlanCommit commit;
+  commit.side = (int)buffer.GetU32();
+  uint32_t count = buffer.GetU32();
+  if (count > 256) count = 256;
+  commit.ops.resize(count);
+  for (unsigned int i = 0; i < count; i++) {
+    commit.ops.at(i).type = (int)buffer.GetU32();
+    commit.ops.at(i).a = (int)buffer.GetU32();
+    commit.ops.at(i).b = (int)buffer.GetU32();
+  }
+  return commit;
+}
+
 void WriteAnimationTable(NetBuffer &buffer, const std::vector<std::string> &names) {
   buffer.PutU32((uint32_t)names.size());
   for (unsigned int i = 0; i < names.size(); i++) {

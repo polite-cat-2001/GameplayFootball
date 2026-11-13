@@ -14,6 +14,9 @@
 #include "scene/scene3d/scene3d.hpp"
 
 #include "../gamedefines.hpp"
+#include "../net/netmessages.hpp"
+
+#include <vector>
 
 class Match;
 class MatchData;
@@ -86,6 +89,9 @@ class MenuTask : public Gui2Task {
     void SetLocalResumeReady(bool ready);
 
     void SetMatchData(MatchData *matchData) { queuedFixture.Lock(); queuedFixture->matchData = matchData; queuedFixture.Unlock(); }
+    // The Godot shell drives the lobby without ticking the menu task; let it
+    // drain queued plan edits (host requests / relayed client swaps).
+    void ProcessNetworkPlanEditsNow() { ProcessNetworkPlanEdits(); }
     MatchData *GetMatchData() { return queuedFixture.GetData().matchData; } // hint: this lock is useless, since we are returning the pointer and not a copy
 
     void SetMenuAction(e_MenuAction menuAction) { this->menuAction = menuAction; }
@@ -108,6 +114,12 @@ class MenuTask : public Gui2Task {
     // side; the local editable panel keeps its cursor and held player.
     unsigned int GetPlanRevision(int side) const { return (side == 0 || side == 1) ? planRevision[side] : 0; }
     void BumpPlanRevision(int side) { if (side == 0 || side == 1) planRevision[side]++; }
+
+    // In-match: the host's own game-plan commit, applied synchronously and
+    // relayed to the peers.
+    void CommitPlanFromHost(int side, const std::vector<NetPlanOp> &ops);
+    // Offline match: the same net plan, applied locally with no relay.
+    void CommitPlanLocal(int side, const std::vector<NetPlanOp> &ops);
 
     // Host only: set once all peers agreed to start the match; PreMatchPage
     // consumes it and performs the actual kickoff.
@@ -132,6 +144,9 @@ class MenuTask : public Gui2Task {
     void ApplyPlanSwap(int side, int dbA, int dbB);
     void ApplyPlanScheme(int side, int scheme);
     void ApplyPlanRole(int side, int role, int slot);
+    // In-match: apply an ordered plan commit; `broadcast` relays each effect to
+    // the peers (host applying a client's or its own commit).
+    void ApplyPlanCommit(int side, const std::vector<NetPlanOp> &ops, bool broadcast);
     bool PlayerOwnsSide(uint32_t playerId, int side);
 
     // Pre-match: host consumes the agreed hub action (leave hub / start).

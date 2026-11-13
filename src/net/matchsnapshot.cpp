@@ -62,6 +62,30 @@ Snapshot CaptureSnapshot(Match *match) {
   if (!match->IsRemotePresentation() && match->GetOfficials()) {
     match->GetOfficials()->GetCurrentCardState(snapshot.refereeCardType, snapshot.refereeCardMirror);
   }
+  snapshot.gameOver = match->IsGameOver();
+
+  // Penalty shootout: the host owns the series, the client replays it from here.
+  // Only the taken kicks ride the wire (the HUD grows its circle rows from that),
+  // because the snapshot has to stay inside one UDP datagram.
+  snapshot.shootoutActive = match->IsShootoutActive();
+  snapshot.shootoutPhase = match->GetShootoutPhase();
+  snapshot.shootoutAttackSide = match->GetShootoutGoalX() > 0.0f ? -1 : 1;
+  snapshot.shootoutTeamSide[0] = match->GetShootoutSideForTeam(0);
+  snapshot.shootoutTeamSide[1] = match->GetShootoutSideForTeam(1);
+  snapshot.shootoutTakerTeam = match->GetShootoutTakerTeam();
+  snapshot.shootoutScore[0] = match->GetShootoutScore(0);
+  snapshot.shootoutScore[1] = match->GetShootoutScore(1);
+  snapshot.shootoutLastOutcome = match->GetShootoutLastOutcome();
+  snapshot.shootoutOutcomeCounter = match->GetShootoutOutcomeCounter();
+  snapshot.shootoutLastOutcomeKickerID = match->GetShootoutLastOutcomeKickerID();
+  snapshot.shootoutLastDecisive = match->IsShootoutDecisive();
+  snapshot.shootoutWinner = match->GetShootoutWinner();
+  for (int t = 0; t < 2; t++) {
+    int kickCount = match->GetShootoutKickCount(t);
+    for (int i = 0; i < kickCount; i++) {
+      snapshot.shootoutKickResults[t].push_back(match->GetShootoutKickResult(t, i));
+    }
+  }
 
   snapshot.substitutionCounter = match->GetSubstitutionNoticeCounter();
   const std::vector<SubstitutionNotice> &notices = match->GetSubstitutionNotices();
@@ -71,6 +95,15 @@ Snapshot CaptureSnapshot(Match *match) {
     sub.outSlot = notices.at(i).outSlot;
     sub.inSlot = notices.at(i).inSlot;
     snapshot.substitutions.push_back(sub);
+  }
+
+  const std::vector<Substitution> &pending = match->GetPendingSubstitutions();
+  for (unsigned int i = 0; i < pending.size(); i++) {
+    SnapshotSubstitution sub;
+    sub.team = pending.at(i).teamID;
+    sub.outSlot = pending.at(i).outSlot;
+    sub.inSlot = pending.at(i).inSlot;
+    snapshot.pendingSubstitutions.push_back(sub);
   }
 
   for (int t = 0; t < 2; t++) {
@@ -144,6 +177,15 @@ SnapshotPlayer ReadSnapshotPlayer(NetBuffer &buffer) {
   return player;
 }
 
+// The realtime snapshot has to fit one UDP datagram, so the shootout state uses
+// a signed byte for its small values (0..7 phases, +-1 sides, small scores).
+void PutCompactInt(NetBuffer &buffer, int value) { buffer.PutU8((uint8_t)(value & 0xFF)); }
+
+int GetCompactInt(NetBuffer &buffer) {
+  uint8_t raw = buffer.GetU8();
+  return raw > 127 ? (int)raw - 256 : (int)raw;
+}
+
 void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
   buffer.PutU32((uint32_t)snapshot.matchTime_ms);
   buffer.PutU32((uint32_t)snapshot.actualTime_ms);
@@ -165,6 +207,7 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
 
   buffer.PutU32((uint32_t)snapshot.refereeCardType);
   buffer.PutBool(snapshot.refereeCardMirror);
+  buffer.PutBool(snapshot.gameOver);
 
   buffer.PutU32((uint32_t)snapshot.substitutionCounter);
   buffer.PutU32((uint32_t)snapshot.substitutions.size());
@@ -174,8 +217,35 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
     buffer.PutU32((uint32_t)snapshot.substitutions.at(i).inSlot);
   }
 
+  buffer.PutU32((uint32_t)snapshot.pendingSubstitutions.size());
+  for (unsigned int i = 0; i < snapshot.pendingSubstitutions.size(); i++) {
+    buffer.PutU32((uint32_t)snapshot.pendingSubstitutions.at(i).team);
+    buffer.PutU32((uint32_t)snapshot.pendingSubstitutions.at(i).outSlot);
+    buffer.PutU32((uint32_t)snapshot.pendingSubstitutions.at(i).inSlot);
+  }
+
   for (int t = 0; t < 2; t++) {
     for (int r = 0; r < e_TeamRole_SIZE; r++) buffer.PutU32((uint32_t)snapshot.roles[t][r]);
+  }
+
+  buffer.PutBool(snapshot.shootoutActive);
+  PutCompactInt(buffer, snapshot.shootoutPhase);
+  PutCompactInt(buffer, snapshot.shootoutAttackSide);
+  PutCompactInt(buffer, snapshot.shootoutTeamSide[0]);
+  PutCompactInt(buffer, snapshot.shootoutTeamSide[1]);
+  PutCompactInt(buffer, snapshot.shootoutTakerTeam);
+  PutCompactInt(buffer, snapshot.shootoutScore[0]);
+  PutCompactInt(buffer, snapshot.shootoutScore[1]);
+  PutCompactInt(buffer, snapshot.shootoutLastOutcome);
+  buffer.PutU32((uint32_t)snapshot.shootoutOutcomeCounter);
+  buffer.PutU32((uint32_t)snapshot.shootoutLastOutcomeKickerID);
+  buffer.PutBool(snapshot.shootoutLastDecisive);
+  PutCompactInt(buffer, snapshot.shootoutWinner);
+  for (int t = 0; t < 2; t++) {
+    buffer.PutU8((uint8_t)snapshot.shootoutKickResults[t].size());
+    for (unsigned int i = 0; i < snapshot.shootoutKickResults[t].size(); i++) {
+      buffer.PutU8((uint8_t)snapshot.shootoutKickResults[t].at(i));
+    }
   }
 
   buffer.PutU32((uint32_t)snapshot.players.size());
@@ -221,6 +291,7 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
 
   snapshot.refereeCardType = (int)buffer.GetU32();
   snapshot.refereeCardMirror = buffer.GetBool();
+  snapshot.gameOver = buffer.GetBool();
 
   snapshot.substitutionCounter = buffer.GetU32();
   uint32_t substitutionCount = buffer.GetU32();
@@ -231,8 +302,37 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
     snapshot.substitutions.at(i).inSlot = (int)buffer.GetU32();
   }
 
+  uint32_t pendingCount = buffer.GetU32();
+  snapshot.pendingSubstitutions.resize(pendingCount);
+  for (unsigned int i = 0; i < pendingCount; i++) {
+    snapshot.pendingSubstitutions.at(i).team = (int)buffer.GetU32();
+    snapshot.pendingSubstitutions.at(i).outSlot = (int)buffer.GetU32();
+    snapshot.pendingSubstitutions.at(i).inSlot = (int)buffer.GetU32();
+  }
+
   for (int t = 0; t < 2; t++) {
     for (int r = 0; r < e_TeamRole_SIZE; r++) snapshot.roles[t][r] = (int)buffer.GetU32();
+  }
+
+  snapshot.shootoutActive = buffer.GetBool();
+  snapshot.shootoutPhase = GetCompactInt(buffer);
+  snapshot.shootoutAttackSide = GetCompactInt(buffer);
+  snapshot.shootoutTeamSide[0] = GetCompactInt(buffer);
+  snapshot.shootoutTeamSide[1] = GetCompactInt(buffer);
+  snapshot.shootoutTakerTeam = GetCompactInt(buffer);
+  snapshot.shootoutScore[0] = GetCompactInt(buffer);
+  snapshot.shootoutScore[1] = GetCompactInt(buffer);
+  snapshot.shootoutLastOutcome = GetCompactInt(buffer);
+  snapshot.shootoutOutcomeCounter = buffer.GetU32();
+  snapshot.shootoutLastOutcomeKickerID = (int)buffer.GetU32();
+  snapshot.shootoutLastDecisive = buffer.GetBool();
+  snapshot.shootoutWinner = GetCompactInt(buffer);
+  for (int t = 0; t < 2; t++) {
+    uint8_t kickCount = buffer.GetU8();
+    snapshot.shootoutKickResults[t].resize(kickCount);
+    for (unsigned int i = 0; i < kickCount; i++) {
+      snapshot.shootoutKickResults[t].at(i) = (int)buffer.GetU8();
+    }
   }
 
   uint32_t playerCount = buffer.GetU32();

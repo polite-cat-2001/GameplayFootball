@@ -75,6 +75,20 @@ struct Snapshot {
     substitutionCounter = 0;
     refereeCardType = 0;
     refereeCardMirror = false;
+    gameOver = false;
+    shootoutActive = false;
+    shootoutPhase = 0;
+    shootoutAttackSide = 1;
+    shootoutTeamSide[0] = -1;
+    shootoutTeamSide[1] = 1;
+    shootoutTakerTeam = 0;
+    shootoutScore[0] = 0;
+    shootoutScore[1] = 0;
+    shootoutLastOutcome = 0;
+    shootoutOutcomeCounter = 0;
+    shootoutLastOutcomeKickerID = -1;
+    shootoutLastDecisive = false;
+    shootoutWinner = -1;
     cameraFOV = 0.0f;
     cameraNearCap = 0.0f;
     cameraFarCap = 0.0f;
@@ -112,6 +126,10 @@ struct Snapshot {
   unsigned long substitutionCounter;
   std::vector<SnapshotSubstitution> substitutions;
 
+  // Queued substitutions (not applied yet). The queue only exists in the host's
+  // Match, so without this the client's game plan cannot show the pending pair.
+  std::vector<SnapshotSubstitution> pendingSubstitutions;
+
   // Designated roles (captain / set-piece takers) per squad slot, so a client
   // joining or reconnecting mid-match reconciles the host's assignments instead
   // of showing the auto-suggested fallback. -1 = unassigned.
@@ -122,6 +140,26 @@ struct Snapshot {
   // runs, so relay the decision (including the mirrored arm choice).
   int refereeCardType;
   bool refereeCardMirror;
+
+  // Host-determined end of match: the referee runs on the host only.
+  bool gameOver;
+
+  // Penalty shootout series. The series lives in the host's Match (ProcessShootout
+  // never runs on a thin client), yet everything side-relative — Team::GetSide(),
+  // the set-piece camera, the penalty aim — depends on it, so relay the state and
+  // apply it in ApplyRemoteSnapshot.
+  bool shootoutActive;
+  int shootoutPhase;
+  int shootoutAttackSide; // +-1: the attacked goal sits at -shootoutAttackSide * pitchHalfW
+  int shootoutTeamSide[2]; // effective side per team for the current kick
+  int shootoutTakerTeam;
+  int shootoutScore[2];
+  int shootoutLastOutcome;
+  unsigned long shootoutOutcomeCounter;
+  int shootoutLastOutcomeKickerID;
+  bool shootoutLastDecisive;
+  int shootoutWinner;
+  std::vector<int> shootoutKickResults[2]; // 1 = scored, 2 = not scored
 
   std::vector<SnapshotPlayer> players;
   std::vector<SnapshotPlayer> officials;

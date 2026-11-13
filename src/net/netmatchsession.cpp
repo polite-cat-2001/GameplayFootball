@@ -29,6 +29,10 @@ unsigned long SteadyNow_ms() {
       std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+// Delay after the last resume vote so both peers' READY screens can animate
+// in and back out before the host unpauses (see NetMatchSession::ProcessHost).
+const unsigned long resumeReadyDelay_ms = 1200;
+
 // Lobby 'device' field: 0 = keyboard, 1 = gamepad. Returns the local HID device
 // to bind (host) or to sample for InputFrame (client).
 IHIDevice *FindLocalDevice(int deviceType) {
@@ -55,7 +59,7 @@ int GetLocalDeviceType(boost::shared_ptr<NetClient> client) {
 }
 }
 
-NetMatchSession::NetMatchSession() : match(0), renderHostTime(0), lastRenderClock_ms(0), renderClockInit(false), lastSnapshotTime_ms(0) {
+NetMatchSession::NetMatchSession() : match(0), renderHostTime(0), lastRenderClock_ms(0), renderClockInit(false), lastSnapshotTime_ms(0), resumeReadyAt_ms(0) {
 }
 
 NetMatchSession::~NetMatchSession() {
@@ -82,6 +86,7 @@ void NetMatchSession::StartMatch(Match *match) {
   lastRenderClock_ms = 0;
   renderClockInit = false;
   hostInputDelay.reset();
+  resumeReadyAt_ms = 0;
 
   if (IsClient()) return; // the caller already put the Match in remote mode
 
@@ -111,6 +116,7 @@ void NetMatchSession::StopMatch() {
   snapshotQueue.clear();
   renderClockInit = false;
   hostInputDelay.reset();
+  resumeReadyAt_ms = 0;
 }
 
 e_NetMatchPhaseState NetMatchSession::GetState() const {
@@ -288,10 +294,22 @@ void NetMatchSession::ProcessHost(Match *match) {
 
   // Pause is peer-equal: apply any client request and rebroadcast.
   bool requestPaused = false;
-  if (server->ConsumePauseRequest(requestPaused)) match->Pause(requestPaused);
+  if (server->ConsumePauseRequest(requestPaused)) {
+    if (requestPaused) resumeReadyAt_ms = 0;
+    match->Pause(requestPaused);
+  }
 
-  // Resume is a vote: unpause only once every peer has agreed.
-  if (match->GetPause() && server->ConsumeAllResumeReady()) match->Pause(false);
+  // Resume is a vote: unpause only once every peer has agreed. Hold briefly so
+  // both peers' READY screens can animate in and back out first.
+  if (match->GetPause()) {
+    if (server->ConsumeAllResumeReady()) resumeReadyAt_ms = SteadyNow_ms() + resumeReadyDelay_ms;
+    if (resumeReadyAt_ms && SteadyNow_ms() >= resumeReadyAt_ms) {
+      resumeReadyAt_ms = 0;
+      match->Pause(false);
+    }
+  } else {
+    resumeReadyAt_ms = 0;
+  }
 
   // A peer left side selection: apply the chosen sides but stay paused (back to
   // the pause menu). Resuming is a separate action (Continue vote).
@@ -441,6 +459,16 @@ void NetMatchSession::ApplyInterpolatedSnapshot(Match *match) {
     snapshotQueue.pop_front();
   }
 
+  // A paused host freezes actualTime_ms, so every snapshot in the queue then
+  // carries the same time and the pop above can never run: the client would hold
+  // the oldest pair and only see discrete changes (the end-of-match result, the
+  // series state) once the queue overflowed — seconds late. With duplicate times
+  // keep just the newest pair.
+  while (snapshotQueue.size() > 2 &&
+         snapshotQueue.at(1).hostTime_ms == snapshotQueue.back().hostTime_ms) {
+    snapshotQueue.pop_front();
+  }
+
   const double frontHost = (double)snapshotQueue.front().hostTime_ms;
   const double backHost = (double)snapshotQueue.back().hostTime_ms;
 
@@ -464,8 +492,11 @@ void NetMatchSession::ApplyInterpolatedSnapshot(Match *match) {
     return;
   }
 
-  if (backHost <= renderHostTime) {
-    // Behind all buffered data (gap / match start): hold the newest.
+  if (backHost <= renderHostTime || backHost <= frontHost) {
+    // Behind all buffered data (gap / match start) or a paused host whose clock
+    // is frozen: hold the NEWEST. A frozen clock otherwise left the client on an
+    // old snapshot, so discrete changes (the end-of-match result, messages)
+    // arrived seconds late.
     NetBuffer bufferB;
     bufferB.Data() = snapshotQueue.back().bytes;
     bufferB.ResetRead();
