@@ -39,7 +39,9 @@
 //      thin client's side-relative presentation (set-piece camera, aim) matches;
 //      plus Snapshot.gameOver (the client never runs the ending referee) and
 //      Snapshot.choiceCursor (the host's 90:00 draw-choice tile, mirrored).
-const int net_protocolVersion = 21;
+// v22: red cards (team + database id) in snapshots for the client scoreboard and
+//      kickoff banner.
+const int net_protocolVersion = 22;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;

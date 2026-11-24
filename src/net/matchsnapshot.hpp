@@ -52,6 +52,15 @@ struct SnapshotSubstitution {
   int inSlot;
 };
 
+// A sent-off player, identified by the process-stable database id (the same id
+// both peers carry in the match package).
+struct SnapshotRedCard {
+  SnapshotRedCard() : team(-1), databaseId(0) {}
+
+  int team;
+  int databaseId;
+};
+
 // Host -> client snapshot: everything the thin client needs to present a frame
 // without running the simulation. Scores/time/phase form a small header.
 struct Snapshot {
@@ -125,6 +134,10 @@ struct Snapshot {
   // client can reconcile without a delta protocol.
   unsigned long substitutionCounter;
   std::vector<SnapshotSubstitution> substitutions;
+
+  // Sent-off players (team + database id), so the client's scoreboard and
+  // kickoff banner can show red cards.
+  std::vector<SnapshotRedCard> redCards;
 
   // Queued substitutions (not applied yet). The queue only exists in the host's
   // Match, so without this the client's game plan cannot show the pending pair.

@@ -112,6 +112,20 @@ Snapshot CaptureSnapshot(Match *match) {
     }
   }
 
+  // Red cards by database id (the host's snapshot); the client rebuilds its
+  // scoreboard and kickoff banner from this list.
+  for (int team = 0; team < 2; team++) {
+    std::vector<Player*> all;
+    match->GetAllTeamPlayers(team, all);
+    for (unsigned int i = 0; i < all.size(); i++) {
+      if (all.at(i)->GetCards() < 3) continue;
+      SnapshotRedCard card;
+      card.team = team;
+      card.databaseId = all.at(i)->GetPlayerData()->GetDatabaseID();
+      snapshot.redCards.push_back(card);
+    }
+  }
+
   const std::vector<Animation*> &animations = match->GetAnims()->GetAnimations();
   std::map<Animation*, int> animIDs;
   for (unsigned int i = 0; i < animations.size(); i++) {
@@ -224,6 +238,12 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
     buffer.PutU32((uint32_t)snapshot.pendingSubstitutions.at(i).inSlot);
   }
 
+  buffer.PutU32((uint32_t)snapshot.redCards.size());
+  for (unsigned int i = 0; i < snapshot.redCards.size(); i++) {
+    buffer.PutU32((uint32_t)snapshot.redCards.at(i).team);
+    buffer.PutU32((uint32_t)snapshot.redCards.at(i).databaseId);
+  }
+
   for (int t = 0; t < 2; t++) {
     for (int r = 0; r < e_TeamRole_SIZE; r++) buffer.PutU32((uint32_t)snapshot.roles[t][r]);
   }
@@ -308,6 +328,13 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
     snapshot.pendingSubstitutions.at(i).team = (int)buffer.GetU32();
     snapshot.pendingSubstitutions.at(i).outSlot = (int)buffer.GetU32();
     snapshot.pendingSubstitutions.at(i).inSlot = (int)buffer.GetU32();
+  }
+
+  uint32_t redCardCount = buffer.GetU32();
+  snapshot.redCards.resize(redCardCount);
+  for (unsigned int i = 0; i < redCardCount; i++) {
+    snapshot.redCards.at(i).team = (int)buffer.GetU32();
+    snapshot.redCards.at(i).databaseId = (int)buffer.GetU32();
   }
 
   for (int t = 0; t < 2; t++) {

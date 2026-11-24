@@ -2300,6 +2300,15 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
   }
   // Thin client: build the presentation identity from the snapshot (type + actual taker team/slot).
   setPiecePresentation->SetRemoteIdentity(setPieceType, snapshot.setPieceTakerTeam, snapshot.setPieceTakerSlot);
+  // Sent-off players: the client's scoreboard and kickoff banner read this list.
+  std::vector<std::pair<int, int>> remoteRedCards;
+  for (unsigned int i = 0; i < snapshot.redCards.size(); i++) {
+    const SnapshotRedCard &card = snapshot.redCards.at(i);
+    if (card.team >= 0 && card.team <= 1) {
+      remoteRedCards.push_back(std::make_pair(card.team, card.databaseId));
+    }
+  }
+  SetRemoteRedCards(remoteRedCards);
   // Possession drives the camera's attacking-direction shift; Process() (which
   // normally maintains it) doesn't run on the client.
   bestPossessionTeamID = snapshot.bestPossessionTeamID;

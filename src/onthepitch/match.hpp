@@ -37,6 +37,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <utility>
 
 struct ReplaySpatialFrame {
   unsigned long frameTime_ms;
@@ -199,6 +200,13 @@ class Match {
     // Host's max client RTT, mirrored in snapshots. The client uses it to delay
     // its input by the same amount the host delays its own.
     int GetRemoteMaxRtt_ms() const { return remoteMaxRtt_ms; }
+    // The host's sent-off players (team, database id), relayed in snapshots.
+    void SetRemoteRedCards(const std::vector<std::pair<int, int>> &cards) {
+        remoteRedCards = cards;
+    }
+    const std::vector<std::pair<int, int>> &GetRemoteRedCards() const {
+        return remoteRedCards;
+    }
 
     const MentalImage *GetMentalImage(int history_ms);
     void UpdateLatestMentalImageBallPredictions();
@@ -281,6 +289,7 @@ class Match {
     void SetGoalScored(bool onOff) { if (onOff == false) ballIsInGoal = false; goalScored = onOff; }
     bool IsGoalScored() const { return goalScored; }
     int GetLastGoalTeamID() const { return lastGoalTeamID; }
+    Player *GetLastGoalScorer() const { return lastGoalScorer; }
     void SetLastTouchTeamID(int id, e_TouchType touchType = e_TouchType_Intentional_Kicked) { lastTouchTeamIDs[touchType] = id; lastTouchTeamID = id; referee->BallTouched(); }
     int GetLastTouchTeamID(e_TouchType touchType) const { return lastTouchTeamIDs[touchType]; }
     int GetLastTouchTeamID() const { return lastTouchTeamID; }
@@ -729,6 +738,7 @@ class Match {
     bool remoteCameraOverride;
     int localPeerId;
     int remoteMaxRtt_ms;
+    std::vector<std::pair<int, int>> remoteRedCards;
     std::vector<Animation*> remoteAnimTable;
 };
 
