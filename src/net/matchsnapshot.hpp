@@ -84,6 +84,10 @@ struct Snapshot {
     substitutionCounter = 0;
     refereeCardType = 0;
     refereeCardMirror = false;
+    refereeActive = false;
+    refereeSetPiece = 0;
+    refereeTeam = -1;
+    refereePrepareTime_ms = 0;
     gameOver = false;
     shootoutActive = false;
     shootoutPhase = 0;
@@ -153,6 +157,13 @@ struct Snapshot {
   // runs, so relay the decision (including the mirrored arm choice).
   int refereeCardType;
   bool refereeCardMirror;
+
+  // Host referee prepare state: the client never runs the referee, but the HUD
+  // opens the pre-kickoff board at the prepare phase (before the whistle).
+  bool refereeActive;
+  int refereeSetPiece;
+  int refereeTeam;
+  unsigned long refereePrepareTime_ms;
 
   // Host-determined end of match: the referee runs on the host only.
   bool gameOver;

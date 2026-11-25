@@ -207,6 +207,19 @@ class Match {
     const std::vector<std::pair<int, int>> &GetRemoteRedCards() const {
         return remoteRedCards;
     }
+    // The host's referee prepare state (client never runs the referee).
+    void SetRemoteRefereeState(bool active, int setPiece, int team, unsigned long prepareTime_ms) {
+        remoteRefereeActive = active;
+        remoteRefereeSetPiece = setPiece;
+        remoteRefereeTeam = team;
+        remoteRefereePrepareTime_ms = prepareTime_ms;
+        remoteRefereeStateReady = true;
+    }
+    bool HasRemoteRefereeState() const { return remoteRefereeStateReady; }
+    bool GetRemoteRefereeActive() const { return remoteRefereeActive; }
+    int GetRemoteRefereeSetPiece() const { return remoteRefereeSetPiece; }
+    int GetRemoteRefereeTeam() const { return remoteRefereeTeam; }
+    unsigned long GetRemoteRefereePrepareTime_ms() const { return remoteRefereePrepareTime_ms; }
 
     const MentalImage *GetMentalImage(int history_ms);
     void UpdateLatestMentalImageBallPredictions();
@@ -739,6 +752,11 @@ class Match {
     int localPeerId;
     int remoteMaxRtt_ms;
     std::vector<std::pair<int, int>> remoteRedCards;
+    bool remoteRefereeStateReady;
+    bool remoteRefereeActive;
+    int remoteRefereeSetPiece;
+    int remoteRefereeTeam;
+    unsigned long remoteRefereePrepareTime_ms;
     std::vector<Animation*> remoteAnimTable;
 };
 

@@ -548,6 +548,9 @@ void Player::SendOff() {
     assert(activePlayers.size() > 0);
     int newGoalieID = (*activePlayers.begin())->GetID();
     team->SetFormationEntry(newGoalieID, entry);
+    // Substituted/swapped players carry a runtime formation; without this the
+    // new keeper would keep its old role there and Team::GetGoalie() finds none.
+    team->SetRuntimeFormationEntry(newGoalieID, entry);
   }
 
   std::vector<Player*> activePlayers;

@@ -62,6 +62,13 @@ Snapshot CaptureSnapshot(Match *match) {
   if (!match->IsRemotePresentation() && match->GetOfficials()) {
     match->GetOfficials()->GetCurrentCardState(snapshot.refereeCardType, snapshot.refereeCardMirror);
   }
+  // The client never runs the referee; relay its prepare window so the HUD can
+  // open the pre-kickoff board before the whistle.
+  const RefereeBuffer &refereeBuffer = match->GetRefereeBuffer();
+  snapshot.refereeActive = refereeBuffer.active;
+  snapshot.refereeSetPiece = (int)refereeBuffer.desiredSetPiece;
+  snapshot.refereeTeam = refereeBuffer.teamID;
+  snapshot.refereePrepareTime_ms = refereeBuffer.prepareTime;
   snapshot.gameOver = match->IsGameOver();
 
   // Penalty shootout: the host owns the series, the client replays it from here.
@@ -118,7 +125,7 @@ Snapshot CaptureSnapshot(Match *match) {
     std::vector<Player*> all;
     match->GetAllTeamPlayers(team, all);
     for (unsigned int i = 0; i < all.size(); i++) {
-      if (all.at(i)->GetCards() < 3) continue;
+      if (all.at(i)->GetCards() < 2) continue;
       SnapshotRedCard card;
       card.team = team;
       card.databaseId = all.at(i)->GetPlayerData()->GetDatabaseID();
@@ -221,6 +228,10 @@ void WriteSnapshot(NetBuffer &buffer, const Snapshot &snapshot) {
 
   buffer.PutU32((uint32_t)snapshot.refereeCardType);
   buffer.PutBool(snapshot.refereeCardMirror);
+  buffer.PutBool(snapshot.refereeActive);
+  buffer.PutU32((uint32_t)snapshot.refereeSetPiece);
+  buffer.PutU32((uint32_t)snapshot.refereeTeam);
+  buffer.PutU32((uint32_t)snapshot.refereePrepareTime_ms);
   buffer.PutBool(snapshot.gameOver);
 
   buffer.PutU32((uint32_t)snapshot.substitutionCounter);
@@ -311,6 +322,10 @@ Snapshot ReadSnapshot(NetBuffer &buffer) {
 
   snapshot.refereeCardType = (int)buffer.GetU32();
   snapshot.refereeCardMirror = buffer.GetBool();
+  snapshot.refereeActive = buffer.GetBool();
+  snapshot.refereeSetPiece = (int)buffer.GetU32();
+  snapshot.refereeTeam = (int)buffer.GetU32();
+  snapshot.refereePrepareTime_ms = buffer.GetU32();
   snapshot.gameOver = buffer.GetBool();
 
   snapshot.substitutionCounter = buffer.GetU32();

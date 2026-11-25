@@ -225,6 +225,11 @@ Match::Match(MatchData *matchData, const std::vector<IHIDevice*> &controllers) :
   remoteCameraOverride = false;
   localPeerId = 0;
   remoteMaxRtt_ms = 0;
+  remoteRefereeStateReady = false;
+  remoteRefereeActive = false;
+  remoteRefereeSetPiece = 0;
+  remoteRefereeTeam = -1;
+  remoteRefereePrepareTime_ms = 0;
   substitutionNoticeCounter = 0;
   remoteSubstitutionCounter = 0;
   remoteAppliedSubstitutions = 0;
@@ -2309,6 +2314,9 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     }
   }
   SetRemoteRedCards(remoteRedCards);
+  // The client never runs the referee; keep the host's prepare window for the HUD.
+  SetRemoteRefereeState(snapshot.refereeActive, snapshot.refereeSetPiece,
+                        snapshot.refereeTeam, snapshot.refereePrepareTime_ms);
   // Possession drives the camera's attacking-direction shift; Process() (which
   // normally maintains it) doesn't run on the client.
   bestPossessionTeamID = snapshot.bestPossessionTeamID;
@@ -2363,6 +2371,43 @@ void Match::ApplyRemoteSnapshot(const Snapshot &snapshot) {
     GetGraphicsSystem()->getPhaseMutex.unlock();
     remoteAppliedSubstitutions = (int)snapshot.substitutions.size();
     remoteSubstitutionCounter = snapshot.substitutionCounter;
+  }
+
+  // The host removes a sent-off player from the active roster; the client never
+  // runs Player::Process, so mirror the dismissal here (the host relays the
+  // caption). Substitutions were applied above, so only dismissals remain.
+  for (int t = 0; t < 2; t++) {
+    Team *team = teams[t];
+    if (!team) continue;
+    std::vector<Player *> active;
+    team->GetActivePlayers(active);
+    for (unsigned int i = 0; i < active.size(); i++) {
+      Player *player = active.at(i);
+      if (!player) continue;
+      const int slot = team->GetPlayerSlot(player->GetID());
+      bool listed = false;
+      for (unsigned int j = 0; j < snapshot.players.size(); j++) {
+        const SnapshotPlayer &pose = snapshot.players.at(j);
+        if (pose.team == t && pose.slot == slot) {
+          listed = true;
+          break;
+        }
+      }
+      if (listed) continue;
+      const bool wasGoalie = team->GetGoalie() == player;
+      FormationEntry goalieEntry;
+      if (wasGoalie) goalieEntry = player->GetFormationEntry();
+      player->Deactivate();
+      team->MarkPlayerLeftPitch(player->GetID());
+      if (wasGoalie) {
+        std::vector<Player *> remaining;
+        team->GetActivePlayers(remaining);
+        if (!remaining.empty()) {
+          team->SetFormationEntry(remaining.at(0)->GetID(), goalieEntry);
+          team->SetRuntimeFormationEntry(remaining.at(0)->GetID(), goalieEntry);
+        }
+      }
+    }
   }
 
   // Queued substitutions live only in the host's Match; relay them so the

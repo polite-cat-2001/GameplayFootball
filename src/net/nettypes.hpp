@@ -41,7 +41,10 @@
 //      Snapshot.choiceCursor (the host's 90:00 draw-choice tile, mirrored).
 // v22: red cards (team + database id) in snapshots for the client scoreboard and
 //      kickoff banner.
-const int net_protocolVersion = 22;
+// v23: referee prepare state (active, desired set piece, team, prepare time) in
+//      snapshots, so a thin client opens the pre-kickoff board before the whistle
+//      and knows which side defends a penalty.
+const int net_protocolVersion = 23;
 const uint16_t net_defaultPort = 27015;
 const int net_maxPlayers = 4;
 const int net_maxHumansPerTeam = 2;
